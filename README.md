@@ -49,8 +49,6 @@ pnpm build
 2. 部署 Cloudflare Worker 用于 token 交换
 3. 配置环境变量
 
-详见 `worker/github-oauth.js`
-
 ## 📄 License
 
 MIT
