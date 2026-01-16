@@ -36,6 +36,13 @@
               </div>
             </div>
           </div>
+
+          <!-- 诗意标题 -->
+          <div v-if="result.display_title" class="title-section">
+            <div class="section-label">诗意标题</div>
+            <div class="display-title">{{ result.display_title }}</div>
+          </div>
+
           <div class="detail-row">
             <div class="description">
               <span class="label">描述</span>
@@ -47,6 +54,40 @@
               }}</el-tag>
             </div>
           </div>
+
+          <!-- 分类匹配度 -->
+          <div v-if="result.is_perfect_match !== undefined" class="match-section">
+            <el-tag :type="result.is_perfect_match ? 'success' : 'warning'" size="small">
+              {{ result.is_perfect_match ? '✓ 完美匹配' : '⚠ 近似匹配' }}
+            </el-tag>
+          </div>
+
+          <!-- 新分类提案 -->
+          <div
+            v-if="result.new_category_proposal && result.new_category_proposal.suggested_third"
+            class="proposal-section"
+          >
+            <div class="section-label">💡 新分类建议</div>
+            <div class="proposal-content">
+              <div class="proposal-path">
+                <el-tag type="info" size="small">{{
+                  result.new_category_proposal.suggested_secondary || result.secondary
+                }}</el-tag>
+                <span class="arrow">›</span>
+                <el-tag type="info" size="small">{{
+                  result.new_category_proposal.suggested_third
+                }}</el-tag>
+              </div>
+              <div class="proposal-reason">{{ result.new_category_proposal.reason }}</div>
+            </div>
+          </div>
+
+          <!-- 分类逻辑 -->
+          <div v-if="result.reasoning" class="reasoning-section">
+            <div class="section-label">🧠 分类逻辑</div>
+            <div class="reasoning-content">{{ result.reasoning }}</div>
+          </div>
+
           <div class="footer-section">
             <div class="meta-row">
               <div class="meta-item">
@@ -124,6 +165,13 @@
               </div>
             </div>
           </div>
+
+          <!-- 诗意标题 -->
+          <div v-if="result.display_title" class="title-section">
+            <div class="section-label">诗意标题</div>
+            <div class="display-title">{{ result.display_title }}</div>
+          </div>
+
           <div class="description-row">
             <span class="label">描述：</span>
             <span class="value">{{ result.description }}</span>
@@ -136,6 +184,40 @@
               }}</el-tag>
             </div>
           </div>
+
+          <!-- 分类匹配度 -->
+          <div v-if="result.is_perfect_match !== undefined" class="match-section">
+            <el-tag :type="result.is_perfect_match ? 'success' : 'warning'" size="small">
+              {{ result.is_perfect_match ? '✓ 完美匹配' : '⚠ 近似匹配' }}
+            </el-tag>
+          </div>
+
+          <!-- 新分类提案 -->
+          <div
+            v-if="result.new_category_proposal && result.new_category_proposal.suggested_third"
+            class="proposal-section"
+          >
+            <div class="section-label">💡 新分类建议</div>
+            <div class="proposal-content">
+              <div class="proposal-path">
+                <el-tag type="info" size="small">{{
+                  result.new_category_proposal.suggested_secondary || result.secondary
+                }}</el-tag>
+                <span class="arrow">›</span>
+                <el-tag type="info" size="small">{{
+                  result.new_category_proposal.suggested_third
+                }}</el-tag>
+              </div>
+              <div class="proposal-reason">{{ result.new_category_proposal.reason }}</div>
+            </div>
+          </div>
+
+          <!-- 分类逻辑 -->
+          <div v-if="result.reasoning" class="reasoning-section">
+            <div class="section-label">🧠 分类逻辑</div>
+            <div class="reasoning-content">{{ result.reasoning }}</div>
+          </div>
+
           <div class="footer-section">
             <div class="meta-row">
               <div class="meta-item">
@@ -195,6 +277,13 @@
               </div>
             </div>
           </div>
+
+          <!-- 诗意标题 -->
+          <div v-if="result.display_title" class="title-section centered">
+            <div class="section-label">诗意标题</div>
+            <div class="display-title">{{ result.display_title }}</div>
+          </div>
+
           <div class="description-row centered">
             <span class="label">描述：</span>
             <span class="value">{{ result.description }}</span>
@@ -207,6 +296,40 @@
               }}</el-tag>
             </div>
           </div>
+
+          <!-- 分类匹配度 -->
+          <div v-if="result.is_perfect_match !== undefined" class="match-section centered">
+            <el-tag :type="result.is_perfect_match ? 'success' : 'warning'" size="small">
+              {{ result.is_perfect_match ? '✓ 完美匹配' : '⚠ 近似匹配' }}
+            </el-tag>
+          </div>
+
+          <!-- 新分类提案 -->
+          <div
+            v-if="result.new_category_proposal && result.new_category_proposal.suggested_third"
+            class="proposal-section centered"
+          >
+            <div class="section-label">💡 新分类建议</div>
+            <div class="proposal-content">
+              <div class="proposal-path">
+                <el-tag type="info" size="small">{{
+                  result.new_category_proposal.suggested_secondary || result.secondary
+                }}</el-tag>
+                <span class="arrow">›</span>
+                <el-tag type="info" size="small">{{
+                  result.new_category_proposal.suggested_third
+                }}</el-tag>
+              </div>
+              <div class="proposal-reason">{{ result.new_category_proposal.reason }}</div>
+            </div>
+          </div>
+
+          <!-- 分类逻辑 -->
+          <div v-if="result.reasoning" class="reasoning-section centered">
+            <div class="section-label">🧠 分类逻辑</div>
+            <div class="reasoning-content">{{ result.reasoning }}</div>
+          </div>
+
           <div class="footer-section centered">
             <div class="meta-row">
               <div class="meta-item">
@@ -232,7 +355,7 @@
       </div>
     </template>
 
-    <el-dialog v-model="showRaw" title="原始 AI 响应" width="70%">
+    <el-dialog v-model="showRaw" title="原始 AI 响应" width="70%" top="5vh">
       <pre class="raw-data">{{ JSON.stringify(result.raw, null, 2) }}</pre>
     </el-dialog>
   </div>
@@ -291,11 +414,29 @@ function copyPath() {
 }
 
 function copyFullInfo() {
-  const info = `分类: ${props.result.primary}/${props.result.secondary}/${props.result.third}
+  let info = `分类: ${props.result.primary}/${props.result.secondary}/${props.result.third}
 文件名: ${selectedFilename.value}
 描述: ${props.result.description}
 关键词: ${props.result.keywords.join(', ')}
 置信度: ${(props.result.confidence * 100).toFixed(0)}%`
+
+  if (props.result.display_title) {
+    info += `\n诗意标题: ${props.result.display_title}`
+  }
+
+  if (props.result.is_perfect_match !== undefined) {
+    info += `\n匹配度: ${props.result.is_perfect_match ? '完美匹配' : '近似匹配'}`
+  }
+
+  if (props.result.new_category_proposal?.suggested_third) {
+    info += `\n新分类建议: ${props.result.new_category_proposal.suggested_secondary || props.result.secondary}/${props.result.new_category_proposal.suggested_third}`
+    info += `\n建议理由: ${props.result.new_category_proposal.reason}`
+  }
+
+  if (props.result.reasoning) {
+    info += `\n分类逻辑: ${props.result.reasoning}`
+  }
+
   navigator.clipboard.writeText(info)
   ElMessage.success('全部信息已复制')
 }
@@ -629,5 +770,78 @@ function copyFullInfo() {
   max-height: 500px;
   margin: 0;
   color: #e0e0e0;
+}
+
+.title-section {
+  .display-title {
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.9);
+    font-weight: 500;
+    line-height: 1.5;
+  }
+  &.centered {
+    text-align: center;
+  }
+}
+
+.match-section {
+  display: flex;
+  align-items: center;
+  &.centered {
+    justify-content: center;
+  }
+}
+
+.proposal-section {
+  padding: 10px;
+  background: rgba(102, 126, 234, 0.1);
+  border: 1px solid rgba(102, 126, 234, 0.3);
+  border-radius: 8px;
+
+  .proposal-content {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .proposal-path {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    .arrow {
+      color: rgba(255, 255, 255, 0.4);
+      font-size: 14px;
+    }
+  }
+
+  .proposal-reason {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.7);
+    line-height: 1.5;
+  }
+
+  &.centered {
+    .proposal-content {
+      align-items: center;
+    }
+  }
+}
+
+.reasoning-section {
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+
+  .reasoning-content {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.7);
+    line-height: 1.6;
+  }
+
+  &.centered {
+    text-align: center;
+  }
 }
 </style>

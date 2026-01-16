@@ -1,57 +1,41 @@
 <template>
-  <div class="ai-test-view">
+  <div class="doubao-test-view">
     <div class="test-container">
-      <h1 class="title">🤖 AI 图片分类测试（简化版）</h1>
-      <p class="subtitle">你选择主分类，AI 识别二级和三级分类</p>
+      <h1 class="title">🤖 AI 图片分类测试</h1>
 
-      <!-- 配置 -->
-      <el-card class="config-card" shadow="hover">
-        <template #header>⚙️ Cloudflare AI 配置</template>
-
-        <!-- Worker 部署提示 -->
-        <el-alert
-          title="📌 首次使用请先部署 Worker"
-          type="warning"
-          :closable="false"
-          style="margin-bottom: 20px"
-        >
-          <template #default>
-            <div style="line-height: 1.8">
-              <p style="margin: 0 0 8px 0">
-                1. 运行命令：<code style="background: #f5f5f5; padding: 2px 8px; border-radius: 4px"
-                  >wrangler deploy</code
-                >
-              </p>
-              <p style="margin: 0 0 8px 0">2. 获取 Worker URL 并在代码中替换</p>
-              <p style="margin: 0">3. 详细步骤请查看 <strong>WORKER-DEPLOY.md</strong></p>
-            </div>
-          </template>
-        </el-alert>
-
-        <el-form label-width="140px">
-          <el-form-item label="Account ID">
-            <el-input v-model="config.accountId" placeholder="输入 Account ID" clearable />
-          </el-form-item>
-          <el-form-item label="AI Token">
+      <!-- AI 服务商和模型选择 -->
+      <el-card class="compact-card" shadow="hover">
+        <template #header>⚙️ AI 配置</template>
+        <el-form label-width="100px" size="small">
+          <!-- 生产环境才显示 API Key 配置 -->
+          <el-form-item v-if="isProduction" label="API Key">
             <el-input
-              v-model="config.aiToken"
+              v-model="config.apiKey"
               type="password"
-              placeholder="输入 AI Token"
+              placeholder="输入豆包 API Key"
               show-password
               clearable
             />
           </el-form-item>
-          <el-form-item>
-            <el-button type="primary" @click="saveConfig">保存配置</el-button>
-            <el-button @click="loadConfig">加载配置</el-button>
+          <el-form-item label="AI 服务商">
+            <el-select v-model="config.provider" placeholder="选择服务商" style="width: 100%">
+              <el-option label="豆包 AI" value="doubao" />
+              <el-option label="Cloudflare AI" value="cloudflare" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="AI 模型">
+            <el-select v-model="config.endpointId" placeholder="选择模型" style="width: 100%">
+              <el-option label="Doubao-Seed-1.6-vision" value="doubao-seed-1-6-vision-250815" />
+              <el-option label="Doubao-Seed-1.8" value="doubao-seed-1-8-251228" />
+            </el-select>
           </el-form-item>
         </el-form>
       </el-card>
 
       <!-- 主分类选择 -->
-      <el-card class="category-card" shadow="hover">
-        <template #header>1️⃣ 选择壁纸类型（你自己知道）</template>
-        <el-radio-group v-model="primaryCategory" size="large">
+      <el-card class="compact-card" shadow="hover">
+        <template #header>📂 壁纸类型</template>
+        <el-radio-group v-model="primaryCategory" size="default">
           <el-radio-button value="desktop">🖥️ Desktop</el-radio-button>
           <el-radio-button value="mobile">📱 Mobile</el-radio-button>
           <el-radio-button value="avatar">👤 Avatar</el-radio-button>
@@ -59,16 +43,8 @@
       </el-card>
 
       <!-- 上传图片 -->
-      <el-card class="upload-card" shadow="hover">
-        <template #header>2️⃣ 上传图片让 AI 分析</template>
-
-        <el-alert title="💡 图片要求" type="info" :closable="false" style="margin-bottom: 16px">
-          <div style="font-size: 14px; line-height: 1.6">
-            • 支持格式：JPG、PNG、WEBP<br />
-            • 建议大小：&lt; 5MB（会自动压缩到 1024px）<br />
-            • 图片会自动转换为 JPEG 格式以提高兼容性
-          </div>
-        </el-alert>
+      <el-card class="compact-card" shadow="hover">
+        <template #header>📤 上传图片</template>
 
         <el-upload
           drag
@@ -78,17 +54,16 @@
           :on-change="handleFileChange"
         >
           <el-icon class="upload-icon"><UploadFilled /></el-icon>
-          <div class="upload-text">拖拽图片到这里，或点击选择</div>
+          <div class="upload-text">拖拽图片或点击选择</div>
         </el-upload>
 
         <div v-if="selectedFile" class="file-info">
-          <el-tag type="success" size="large">{{ selectedFile.name }}</el-tag>
-          <el-tag type="primary" size="large">{{ primaryCategory }}</el-tag>
+          <el-tag type="success">{{ selectedFile.name }}</el-tag>
+          <el-tag type="primary">{{ primaryCategory }}</el-tag>
           <el-button
             type="primary"
-            size="large"
             :loading="analyzing"
-            :disabled="!config.accountId || !config.aiToken"
+            :disabled="!hasValidConfig"
             @click="startAnalysis"
           >
             {{ analyzing ? '分析中...' : '🚀 开始分析' }}
@@ -97,349 +72,242 @@
       </el-card>
 
       <!-- 分析进度 -->
-      <el-card v-if="analyzing" class="progress-card" shadow="hover">
-        <div class="analyzing-content">
-          <el-progress type="circle" :percentage="progress" :width="120" />
-          <p class="analyzing-text">AI 正在分析...</p>
+      <el-card v-if="analyzing" class="compact-card" shadow="hover">
+        <div class="progress-content">
+          <el-progress type="circle" :percentage="progress" :width="80" />
+          <span class="progress-text">分析中...</span>
         </div>
       </el-card>
 
       <!-- 分析结果 -->
-      <el-card v-if="result && !analyzing" class="result-card" shadow="hover">
+      <el-card v-if="result" class="compact-card" shadow="hover">
         <template #header>
-          <div class="card-header">
+          <div class="result-header">
             <span>✨ 分析结果</span>
-            <el-tag :type="result.confidence >= 0.8 ? 'success' : 'warning'" size="small">
-              置信度: {{ (result.confidence * 100).toFixed(0) }}%
+            <el-tag :type="result.success ? 'success' : 'danger'" size="small">
+              {{ result.success ? '成功' : '失败' }}
             </el-tag>
           </div>
         </template>
 
-        <div class="result-content">
-          <!-- 图片预览 -->
-          <div class="preview-section">
-            <img :src="imagePreview" alt="预览" />
-          </div>
-
-          <!-- 分析详情 -->
-          <div class="details-section">
-            <!-- 完整路径 -->
-            <div class="detail-item">
-              <h3>📁 完整分类路径</h3>
-              <div class="category-path">
-                <el-tag type="primary" size="large" effect="dark">{{ primaryCategory }}</el-tag>
-                <el-icon><ArrowRight /></el-icon>
-                <el-tag type="success" size="large" effect="dark">{{ result.secondary }}</el-tag>
-                <el-icon><ArrowRight /></el-icon>
-                <el-tag type="warning" size="large" effect="dark">{{ result.third }}</el-tag>
-              </div>
-              <el-text type="info" size="small" style="margin-top: 12px; display: block">
-                完整路径: {{ primaryCategory }}/{{ result.secondary }}/{{ result.third }}
-              </el-text>
-            </div>
-
-            <!-- 文件名建议 -->
-            <div class="detail-item">
-              <h3>📝 文件名建议</h3>
-              <div class="filename-list">
-                <el-tag
-                  v-for="(name, index) in result.filenameSuggestions"
-                  :key="index"
-                  size="large"
-                  :type="index === 0 ? 'primary' : ''"
-                  class="filename-tag"
-                >
-                  {{ name }}
-                </el-tag>
-              </div>
-            </div>
-
-            <!-- 图片描述 -->
-            <div class="detail-item">
-              <h3>🎨 图片描述</h3>
-              <div class="description-box">{{ result.description }}</div>
-            </div>
-
-            <!-- 关键词 -->
-            <div class="detail-item">
-              <h3>🏷️ 关键词</h3>
-              <div class="tags-list">
-                <el-tag
-                  v-for="tag in result.keywords"
-                  :key="tag"
-                  type="info"
-                  effect="plain"
-                  class="tag-item"
-                >
-                  {{ tag }}
-                </el-tag>
-              </div>
-            </div>
-
-            <!-- 原始响应 -->
-            <div class="detail-item">
-              <h3>🔍 原始 AI 响应</h3>
-              <el-collapse>
-                <el-collapse-item title="查看详细数据" name="1">
-                  <pre class="raw-response">{{ JSON.stringify(result.raw, null, 2) }}</pre>
-                </el-collapse-item>
-              </el-collapse>
+        <div v-if="result.success" class="result-content">
+          <!-- 分类结果 -->
+          <div class="result-section">
+            <h3>📁 分类</h3>
+            <div class="category-tags">
+              <el-tag type="primary" size="small">{{ result.data.primary }}</el-tag>
+              <span class="arrow">›</span>
+              <el-tag type="success" size="small">{{ result.data.secondary }}</el-tag>
+              <span class="arrow">›</span>
+              <el-tag type="warning" size="small">{{ result.data.third }}</el-tag>
             </div>
           </div>
+
+          <!-- 文件名建议 -->
+          <div class="result-section">
+            <h3>📝 文件名</h3>
+            <div class="filename-list">
+              <el-tag
+                v-for="(name, index) in result.data.filenameSuggestions"
+                :key="index"
+                size="small"
+                class="filename-tag"
+              >
+                {{ name }}
+              </el-tag>
+            </div>
+          </div>
+
+          <!-- 描述和关键词 -->
+          <div class="result-section">
+            <h3>💬 描述</h3>
+            <p class="description">{{ result.data.description }}</p>
+          </div>
+
+          <div class="result-section">
+            <h3>🏷️ 关键词</h3>
+            <div class="keywords">
+              <el-tag v-for="kw in result.data.keywords" :key="kw" type="info" size="small">{{
+                kw
+              }}</el-tag>
+            </div>
+          </div>
+
+          <!-- 原始响应 -->
+          <el-collapse style="margin-top: 16px">
+            <el-collapse-item title="查看原始 JSON" name="raw">
+              <pre class="raw-json">{{ JSON.stringify(result.raw, null, 2) }}</pre>
+            </el-collapse-item>
+          </el-collapse>
         </div>
-      </el-card>
 
-      <!-- 错误提示 -->
-      <el-card v-if="error" class="error-card" shadow="hover">
-        <el-result icon="error" title="分析失败" :sub-title="error">
-          <template #extra>
-            <el-button type="primary" @click="startAnalysis">重新分析</el-button>
-          </template>
-        </el-result>
+        <el-alert v-else type="error" :title="result.error" :closable="false" show-icon />
       </el-card>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { ElMessage } from 'element-plus'
-import { UploadFilled, ArrowRight } from '@element-plus/icons-vue'
-import { CATEGORIES } from '@/config/categories'
-import { getThirdLevelCategories } from '@/config/subcategories'
+import { UploadFilled } from '@element-plus/icons-vue'
 
-// 配置
+// 检测是否为生产环境
+const isProduction = computed(() => import.meta.env.PROD)
+
 const config = ref({
-  accountId: '',
-  aiToken: ''
+  provider: 'doubao',
+  apiKey: import.meta.env.VITE_DOUBAO_API_KEY || '',
+  endpointId: 'doubao-seed-1-6-vision-250815'
 })
 
-// 状态
 const primaryCategory = ref('desktop')
 const selectedFile = ref(null)
 const analyzing = ref(false)
 const progress = ref(0)
 const result = ref(null)
-const error = ref(null)
-const imagePreview = ref('')
 
-// 保存/加载配置
+// 检查是否有有效配置
+const hasValidConfig = computed(() => {
+  // 本地环境从 .env.local 读取
+  if (!isProduction.value) {
+    return !!import.meta.env.VITE_DOUBAO_API_KEY
+  }
+  // 生产环境需要手动输入
+  return !!(config.value.apiKey && config.value.endpointId)
+})
+
+const CATEGORIES = {
+  desktop: {
+    subcategories: ['插画', '动漫', '风景', '萌宠', '人像', '影视', '游戏', '政治', 'IP形象'],
+    thirdLevel: {
+      插画: ['场景', '创意', '国风', '卡通', '通用', '文字'],
+      动漫: [
+        '二次元',
+        '仙逆',
+        '刀剑神域',
+        '初音未来',
+        '剑来',
+        '名侦探柯南',
+        '哆啦A梦',
+        '喜洋洋与灰太狼',
+        '完美世界',
+        '小埋',
+        '斗破苍穹',
+        '新世纪福音战士',
+        '春物雪乃',
+        '猫和老鼠',
+        '百炼成神',
+        '神奇宝贝',
+        '紫罗兰永恒花园',
+        '罪恶王冠',
+        '蕾姆',
+        '蜡笔小新',
+        '进击的巨人',
+        '间谍过家家',
+        '鬼灭之刃'
+      ],
+      风景: ['城市', '天空', '建筑', '日落', '星空', '海滨', '湖泊', '花卉', '雪山'],
+      萌宠: ['狗狗', '猫咪', '兔兔'],
+      人像: ['氛围感', '国风', '魅力', '明星', '清新', '张凌赫'],
+      影视: ['海绵宝宝', '疯狂动物城'],
+      游戏: ['原神', '崩坏', '艾尔登法环', '英雄联盟', '通用'],
+      政治: ['通用'],
+      IP形象: ['乌萨奇', '凯蒂猫', '水豚噜噜', '粉红兔', '线条小狗', '通用']
+    }
+  },
+  mobile: {
+    subcategories: ['插画', '创意', '动漫', '风景', '萌宠', '人像', '影视', 'IP形象'],
+    thirdLevel: {
+      插画: ['创意', '国风', '少女与猫', '风景'],
+      创意: ['抽象', '文字', '爱国主题'],
+      动漫: [
+        '二次元',
+        '你的名字',
+        '初音未来',
+        '名侦探柯南',
+        '夏目友人帐',
+        '海贼王',
+        '蜡笔小新',
+        '通用'
+      ],
+      风景: ['冬日雪景', '建筑', '星空', '森林', '海滨', '花卉', '雪山'],
+      萌宠: ['狗狗', '猫咪'],
+      人像: [
+        '古装',
+        '张凌赫',
+        '日系',
+        '明星',
+        '易烊千玺',
+        '氛围感',
+        '清新',
+        '王楚然',
+        '迪丽热巴',
+        '魅力'
+      ],
+      影视: ['柯南', '海绵宝宝', '漫威', '猫和老鼠', '疯狂动物城'],
+      IP形象: ['乌萨奇', '卡通角色', '小八', '水豚噜噜', '粉红兔']
+    }
+  },
+  avatar: {
+    subcategories: ['表情包', '插画', '动漫', '萌宠', '人像', 'IP形象'],
+    thirdLevel: {
+      表情包: ['搞怪'],
+      插画: ['二次元', '创意'],
+      动漫: [
+        '哆啦A梦',
+        '喜羊羊与灰太狼',
+        '天线宝宝',
+        '日漫',
+        '樱桃小丸子',
+        '海绵宝宝',
+        '海贼王',
+        '猫和老鼠',
+        '神奇宝贝',
+        '蜡笔小新',
+        '通用'
+      ],
+      萌宠: ['狗狗', '猫咪'],
+      人像: ['卡通简笔画', '氛围感', '甜妹', '背影'],
+      IP形象: ['Hello Kitty', '乌萨奇', '小八', '小熊', '库洛米', '水豚噜噜', '牛牛黎深&噜噜']
+    }
+  }
+}
+
 function saveConfig() {
-  localStorage.setItem('ai_test_config', JSON.stringify(config.value))
+  localStorage.setItem('doubao_config', JSON.stringify(config.value))
   ElMessage.success('配置已保存')
 }
 
 function loadConfig() {
-  const saved = localStorage.getItem('ai_test_config')
+  const saved = localStorage.getItem('doubao_config')
   if (saved) {
-    config.value = JSON.parse(saved)
+    const savedConfig = JSON.parse(saved)
+    // 本地环境优先使用环境变量
+    if (!isProduction.value && import.meta.env.VITE_DOUBAO_API_KEY) {
+      config.value.apiKey = import.meta.env.VITE_DOUBAO_API_KEY
+    } else {
+      config.value = savedConfig
+    }
     ElMessage.success('配置已加载')
+  } else if (!isProduction.value && import.meta.env.VITE_DOUBAO_API_KEY) {
+    config.value.apiKey = import.meta.env.VITE_DOUBAO_API_KEY
+    ElMessage.success('已从环境变量加载配置')
+  } else {
+    ElMessage.warning('没有保存的配置')
   }
 }
 
-// 自动加载
-loadConfig()
-
-// 文件选择
 function handleFileChange(file) {
-  selectedFile.value = file.raw
-  imagePreview.value = URL.createObjectURL(file.raw)
+  selectedFile.value = file
   result.value = null
-  error.value = null
 }
 
-// 开始分析
-async function startAnalysis() {
-  if (!selectedFile.value) {
-    ElMessage.warning('请先选择图片')
-    return
-  }
-
-  analyzing.value = true
-  progress.value = 0
-  error.value = null
-  result.value = null
-
-  const progressInterval = setInterval(() => {
-    if (progress.value < 90) progress.value += 10
-  }, 300)
-
-  try {
-    const base64 = await fileToBase64(selectedFile.value)
-    const aiResult = await callAI(base64)
-
-    clearInterval(progressInterval)
-    progress.value = 100
-
-    result.value = aiResult
-
-    setTimeout(() => {
-      analyzing.value = false
-      ElMessage.success('分析完成！')
-    }, 500)
-  } catch (err) {
-    clearInterval(progressInterval)
-    analyzing.value = false
-    error.value = err.message
-    ElMessage.error(error.value)
-  }
-}
-
-// 调用 AI（通过 Worker 代理）
-async function callAI(imageBase64) {
-  // 🚀 使用 Cloudflare Worker 代理
-  const workerUrl = 'https://ai-proxy.han1569250882.workers.dev'
-
-  // 获取二级分类列表
-  const secondaryCategories = CATEGORIES[primaryCategory.value]?.subcategories || []
-  const secondaryList = secondaryCategories.map(cat => cat.value).join('、')
-
-  // 生成三级分类提示
-  let thirdHints = ''
-  secondaryCategories.forEach(cat => {
-    const thirdList = getThirdLevelCategories(primaryCategory.value, cat.value)
-    thirdHints += `\n如果选择"${cat.value}"，则从这些子分类中选择：${thirdList.join('、')}`
-  })
-
-  const prompt = `分析这张图片，返回JSON格式的分类结果。
-
-主分类：${primaryCategory.value}
-
-可选的二级分类：${secondaryList}
-
-三级分类选项：
-${thirdHints}
-
-规则：
-1. 二级分类：从上面列表中选择最匹配的
-2. 三级分类：优先选择具体风格，避免选"通用"
-   - 人像：根据风格选"氛围感"、"清新"、"魅力"等
-   - 动漫：能识别作品选作品名，否则选"二次元"
-   - 风景：选"城市"、"天空"、"海滨"等具体场景
-3. 文件名：中文，10-20字，描述图片主要特征
-4. 关键词：3-5个中文词
-5. 描述：一句话描述图片
-
-返回JSON（不要其他内容）：
-{
-  "secondary": "二级分类名称",
-  "third": "三级分类名称",
-  "keywords": ["关键词1", "关键词2", "关键词3"],
-  "filename": "具体的中文文件名",
-  "description": "图片描述"
-}`
-
-  const response = await fetch(workerUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      accountId: config.value.accountId,
-      aiToken: config.value.aiToken,
-      image: imageBase64.split(',')[1],
-      prompt: prompt
-    })
-  })
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}))
-
-    // 处理特定错误
-    if (errorData.errors && errorData.errors[0]) {
-      const error = errorData.errors[0]
-      if (error.code === 3016) {
-        throw new Error(
-          '图片解码失败，请尝试：1) 使用 JPG/PNG 格式 2) 确保图片未损坏 3) 尝试其他图片'
-        )
-      }
-      throw new Error(`AI 错误 (${error.code}): ${error.message}`)
-    }
-
-    throw new Error(errorData.error || `Worker 请求失败: ${response.status}`)
-  }
-
-  const data = await response.json()
-
-  // 检查是否有错误
-  if (data.error) {
-    throw new Error(data.message || data.error)
-  }
-
-  if (data.errors && data.errors.length > 0) {
-    const error = data.errors[0]
-    if (error.code === 3016) {
-      throw new Error(
-        '图片解码失败，请尝试：1) 使用 JPG/PNG 格式 2) 确保图片未损坏 3) 尝试其他图片'
-      )
-    }
-    throw new Error(`AI 错误: ${error.message}`)
-  }
-
-  return parseResult(data)
-}
-
-// 解析结果
-function parseResult(apiResponse) {
-  try {
-    // Llama Vision 返回格式：result.response (可能是字符串或对象)
-    let responseData = apiResponse.result?.response
-
-    // 如果 response 已经是对象，直接使用
-    if (typeof responseData === 'object' && responseData !== null) {
-      const parsed = responseData
-      const baseFilename = parsed.filename || '壁纸'
-      const timestamp = Date.now().toString().slice(-6)
-
-      return {
-        secondary: parsed.secondary || '通用',
-        third: parsed.third || '通用',
-        filenameSuggestions: [
-          `${baseFilename}.jpg`,
-          `${baseFilename}-${timestamp}.jpg`,
-          `${parsed.secondary}-${parsed.keywords?.[0] || '图片'}.jpg`
-        ],
-        description: parsed.description || '无描述',
-        keywords: parsed.keywords || [],
-        confidence: 0.9, // Llama Vision 更准确
-        raw: apiResponse
-      }
-    }
-
-    // 如果是字符串，尝试提取 JSON
-    const responseText = String(responseData || apiResponse.result?.description || '')
-    const jsonMatch = responseText.match(/\{[\s\S]*\}/)
-    if (!jsonMatch) {
-      throw new Error('AI 返回格式不正确，未找到 JSON 数据')
-    }
-
-    const parsed = JSON.parse(jsonMatch[0])
-    const baseFilename = parsed.filename || '壁纸'
-    const timestamp = Date.now().toString().slice(-6)
-
-    return {
-      secondary: parsed.secondary || '通用',
-      third: parsed.third || '通用',
-      filenameSuggestions: [
-        `${baseFilename}.jpg`,
-        `${baseFilename}-${timestamp}.jpg`,
-        `${parsed.secondary}-${parsed.keywords?.[0] || '图片'}.jpg`
-      ],
-      description: parsed.description || '无描述',
-      keywords: parsed.keywords || [],
-      confidence: 0.9,
-      raw: apiResponse
-    }
-  } catch (err) {
-    throw new Error(`解析失败: ${err.message}`)
-  }
-}
-
-// 文件转 base64（带图片压缩）
-function fileToBase64(file) {
+async function compressImage(file) {
   return new Promise((resolve, reject) => {
-    // 检查文件类型
-    if (!file.type.startsWith('image/')) {
+    // 检查文件对象
+    const fileObj = file.raw || file
+    if (!fileObj || !fileObj.type || !fileObj.type.startsWith('image/')) {
       reject(new Error('请上传图片文件'))
       return
     }
@@ -449,11 +317,9 @@ function fileToBase64(file) {
       // eslint-disable-next-line no-undef
       const img = new Image()
       img.onload = () => {
-        // 创建 canvas 进行压缩
         const canvas = document.createElement('canvas')
         const ctx = canvas.getContext('2d')
 
-        // 限制最大尺寸为 1024px
         let width = img.width
         let height = img.height
         const maxSize = 1024
@@ -470,182 +336,375 @@ function fileToBase64(file) {
 
         canvas.width = width
         canvas.height = height
-
-        // 绘制图片
         ctx.drawImage(img, 0, 0, width, height)
 
-        // 转换为 JPEG 格式，质量 0.8
-        const base64 = canvas.toDataURL('image/jpeg', 0.8)
-        resolve(base64)
+        resolve(canvas.toDataURL('image/jpeg', 0.9))
       }
-
       img.onerror = () => reject(new Error('图片加载失败'))
       img.src = e.target.result
     }
-
     reader.onerror = () => reject(new Error('文件读取失败'))
-    reader.readAsDataURL(file)
+    reader.readAsDataURL(fileObj)
   })
 }
+
+function buildPrompt() {
+  const category = CATEGORIES[primaryCategory.value]
+  const secondaryList = category.subcategories.join('、')
+
+  let thirdHints = ''
+  category.subcategories.forEach(sub => {
+    const thirdList = category.thirdLevel[sub] || ['通用']
+    thirdHints += `  • ${sub}：${thirdList.join('、')}\n`
+  })
+
+  return `你是一位专业的壁纸分类专家和文案大师。请仔细分析这张图片，并返回结构化的分类结果。
+
+## 分类体系
+
+**主分类**：${primaryCategory.value}
+
+**二级分类（必须从以下选项中选择）**：
+${secondaryList}
+
+**三级分类（根据二级分类选择对应的子类）**：
+${thirdHints}
+
+## 🔴 分类规则（最重要，必须严格遵守）
+
+### 二级分类选择
+- **必须**从上述列表中选择最匹配的一个
+- 不得自创分类名称
+- 根据图片的主要内容和主题进行判断
+
+### 三级分类选择（重点）
+**"通用"是最后的选择，不是默认选项！**
+
+分类决策流程：
+1. **首先**：仔细观察图片的具体特征（场景、人物、风格、主题等）
+2. **然后**：在三级分类列表中寻找最匹配的具体标签
+3. **最后**：只有在以下情况才选择"通用"：
+   - 图片包含多个三级分类的混合元素
+   - 图片风格非常独特，无法归入任何具体标签
+   - 图片内容模糊不清，无法判断具体类型
+
+### 分类示例（重要参考）
+
+**Desktop 正确示例**：
+- 图片：雪山风景 → 二级：风景，三级：雪山 ✅
+- 图片：城市夜景 → 二级：风景，三级：城市 ✅
+- 图片：海边日落 → 二级：风景，三级：海滨 ✅
+- 图片：星空银河 → 二级：风景，三级：星空 ✅
+- 图片：湖泊倒影 → 二级：风景，三级：湖泊 ✅
+- 图片：猫咪特写 → 二级：萌宠，三级：猫咪 ✅
+- 图片：柴犬玩耍 → 二级：萌宠，三级：狗狗 ✅
+- 图片：初音未来 → 二级：动漫，三级：初音未来 ✅
+- 图片：哆啦A梦 → 二级：动漫，三级：哆啦A梦 ✅
+- 图片：凯蒂猫 → 二级：IP形象，三级：凯蒂猫 ✅
+- 图片：水豚噜噜 → 二级：IP形象，三级：水豚噜噜 ✅
+- 图片：古风美女 → 二级：插画，三级：国风 ✅
+- 图片：卡通场景 → 二级：插画，三级：卡通 ✅
+- 图片：励志文字 → 二级：插画，三级：文字 ✅
+
+**Mobile/Avatar 示例**：
+- 图片：初音未来手机壁纸 → 二级：动漫，三级：初音未来 ✅
+- 图片：海贼王角色 → 二级：动漫，三级：海贼王 ✅
+- 图片：蜡笔小新 → 二级：动漫，三级：蜡笔小新 ✅
+- 图片：夏目友人帐 → 二级：动漫，三级：夏目友人帐 ✅
+
+**错误示例**：
+- 图片：雪山风景 → 二级：风景，三级：通用 ❌（应该选"雪山"）
+- 图片：城市建筑 → 二级：风景，三级：通用 ❌（应该选"城市"或"建筑"）
+- 图片：猫咪 → 二级：萌宠，三级：通用 ❌（应该选"猫咪"）
+- 图片：初音未来 → 二级：动漫，三级：二次元 ❌（应该选"初音未来"）
+
+## 文件名要求
+
+创作一个**有内涵、高雅、富有诗意**的中文文件名：
+- 长度：8-15个汉字
+- 风格：优雅、精炼、有意境
+- 内容：提炼图片的核心美感和情感氛围
+- 避免：平铺直叙、过于直白、堆砌关键词
+
+示例：
+- "晨曦微光下的静谧森林"（而非"森林早晨阳光树木"）
+- "星河璀璨夜空梦境"（而非"夜晚星空银河系"）
+- "雪山云海间的孤寂之美"（而非"雪山云雾风景"）
+
+## 关键词要求
+
+提取3-5个精准的中文关键词：
+- 涵盖：主题、风格、色调、情感
+- 要求：简洁、准确、有辨识度
+- 避免：过于宽泛的词汇
+
+## 描述要求
+
+用一句话（20-40字）描述图片：
+- 突出视觉特点和艺术风格
+- 传达图片的情感氛围
+- 语言优美、富有感染力
+
+## 输出格式
+
+请严格按照以下JSON格式返回（不要包含任何其他文字说明）：
+
+{
+  "secondary": "二级分类名称",
+  "third": "三级分类名称",
+  "keywords": ["关键词1", "关键词2", "关键词3"],
+  "filename": "优雅精炼的中文文件名",
+  "description": "富有美感的图片描述"
+}
+
+⚠️ 再次强调：三级分类优先选择具体标签，"通用"是最后的选择！`
+}
+
+async function startAnalysis() {
+  if (!selectedFile.value) {
+    ElMessage.warning('请先选择图片')
+    return
+  }
+
+  // 获取实际使用的 API Key
+  const apiKey = isProduction.value ? config.value.apiKey : import.meta.env.VITE_DOUBAO_API_KEY
+
+  if (!apiKey) {
+    ElMessage.error('未配置 API Key')
+    return
+  }
+
+  analyzing.value = true
+  progress.value = 0
+  result.value = null
+
+  const progressInterval = setInterval(() => {
+    if (progress.value < 90) {
+      progress.value += 10
+    }
+  }, 300)
+
+  try {
+    const imageBase64 = await compressImage(selectedFile.value)
+    const prompt = buildPrompt()
+
+    const response = await fetch('https://ark.cn-beijing.volces.com/api/v3/responses', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: config.value.endpointId,
+        input: [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'input_image',
+                image_url: imageBase64
+              },
+              {
+                type: 'input_text',
+                text: prompt
+              }
+            ]
+          }
+        ]
+      })
+    })
+
+    clearInterval(progressInterval)
+    progress.value = 100
+
+    if (!response.ok) {
+      throw new Error(`API 请求失败: ${response.status}`)
+    }
+
+    const data = await response.json()
+
+    const outputMessage = data.output?.find(item => item.type === 'message')
+    const textContent = outputMessage?.content?.find(c => c.type === 'output_text')
+    const aiText = textContent?.text || ''
+
+    const jsonMatch = aiText.match(/\{[\s\S]*\}/)
+    if (!jsonMatch) {
+      throw new Error('AI 返回的内容中没有找到 JSON')
+    }
+
+    const parsed = JSON.parse(jsonMatch[0])
+
+    result.value = {
+      success: true,
+      data: {
+        primary: primaryCategory.value,
+        secondary: parsed.secondary || '通用',
+        third: parsed.third || '通用',
+        filenameSuggestions: [
+          parsed.filename,
+          `${parsed.filename}-${Date.now().toString().slice(-6)}`,
+          `${parsed.secondary}-${parsed.keywords?.[0] || '图片'}`
+        ],
+        keywords: parsed.keywords || [],
+        description: parsed.description || '无描述'
+      },
+      raw: data
+    }
+
+    ElMessage.success('分析完成！')
+  } catch (error) {
+    clearInterval(progressInterval)
+    result.value = {
+      success: false,
+      error: error.message
+    }
+    ElMessage.error(`分析失败: ${error.message}`)
+  } finally {
+    analyzing.value = false
+  }
+}
+
+// 页面加载时自动加载配置
+loadConfig()
 </script>
 
 <style lang="scss" scoped>
-.ai-test-view {
+.doubao-test-view {
   min-height: 100vh;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  padding: 40px 20px;
+  padding: 20px;
 }
 
 .test-container {
-  max-width: 1200px;
+  max-width: 900px;
   margin: 0 auto;
 }
 
 .title {
-  font-size: 48px;
+  text-align: center;
+  font-size: 28px;
   font-weight: bold;
   color: white;
-  text-align: center;
+  margin-bottom: 20px;
+  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.compact-card {
   margin-bottom: 12px;
-}
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(10px);
+  border: none;
+  border-radius: 12px;
 
-.subtitle {
-  font-size: 18px;
-  color: rgba(255, 255, 255, 0.9);
-  text-align: center;
-  margin-bottom: 40px;
-}
+  :deep(.el-card__header) {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    font-size: 15px;
+    font-weight: 600;
+    border-radius: 12px 12px 0 0;
+    padding: 12px 16px;
+  }
 
-.config-card,
-.category-card,
-.upload-card,
-.progress-card,
-.result-card,
-.error-card {
-  margin-bottom: 24px;
-}
-
-.card-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 18px;
-  font-weight: 600;
+  :deep(.el-card__body) {
+    padding: 16px;
+  }
 }
 
 .upload-icon {
-  font-size: 80px;
-  color: var(--el-color-primary);
-  margin-bottom: 16px;
+  font-size: 60px;
+  color: #667eea;
+  margin-bottom: 12px;
 }
 
 .upload-text {
-  font-size: 16px;
-  color: var(--el-text-color-regular);
+  font-size: 14px;
+  color: #666;
 }
 
 .file-info {
+  margin-top: 16px;
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-top: 24px;
-  padding: 20px;
-  background: var(--el-fill-color-light);
-  border-radius: 8px;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
-.analyzing-content {
+.progress-content {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  padding: 40px;
+  justify-content: center;
+  gap: 16px;
+  padding: 12px;
 
-  .analyzing-text {
-    margin-top: 24px;
-    font-size: 18px;
-    font-weight: 500;
+  .progress-text {
+    font-size: 14px;
+    color: #666;
   }
+}
+
+.result-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 
 .result-content {
-  display: grid;
-  grid-template-columns: 350px 1fr;
-  gap: 32px;
+  .result-section {
+    margin-bottom: 16px;
 
-  .preview-section img {
-    width: 100%;
-    border-radius: 12px;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
-  }
-
-  .details-section {
-    .detail-item {
-      margin-bottom: 32px;
-
-      h3 {
-        font-size: 16px;
-        font-weight: 600;
-        margin-bottom: 16px;
-      }
-    }
-
-    .category-path {
-      display: flex;
-      align-items: center;
-      gap: 16px;
-
-      .el-icon {
-        font-size: 20px;
-        color: var(--el-text-color-secondary);
-      }
-    }
-
-    .filename-list {
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-
-      .filename-tag {
-        padding: 12px 16px;
-        font-size: 14px;
-        font-family: 'Monaco', 'Courier New', monospace;
-      }
-    }
-
-    .description-box {
-      padding: 16px;
-      background: var(--el-fill-color-light);
-      border-radius: 8px;
-      line-height: 1.8;
-      font-size: 15px;
-    }
-
-    .tags-list {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 12px;
-
-      .tag-item {
-        padding: 8px 16px;
-        font-size: 14px;
-      }
-    }
-
-    .raw-response {
-      padding: 16px;
-      background: #f5f5f5;
-      border-radius: 8px;
-      font-size: 12px;
-      line-height: 1.6;
-      overflow-x: auto;
-      max-height: 400px;
+    h3 {
+      font-size: 14px;
+      font-weight: 600;
+      color: #333;
+      margin-bottom: 8px;
     }
   }
-}
 
-@media (max-width: 768px) {
-  .result-content {
-    grid-template-columns: 1fr;
+  .category-tags {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+
+    .arrow {
+      font-size: 16px;
+      color: #999;
+    }
+  }
+
+  .filename-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+
+    .filename-tag {
+      padding: 8px 12px;
+      font-size: 13px;
+    }
+  }
+
+  .description {
+    font-size: 13px;
+    line-height: 1.6;
+    color: #666;
+    background: #f5f5f5;
+    padding: 10px;
+    border-radius: 6px;
+  }
+
+  .keywords {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .raw-json {
+    background: #f5f5f5;
+    padding: 12px;
+    border-radius: 6px;
+    font-size: 11px;
+    line-height: 1.5;
+    overflow-x: auto;
   }
 }
 </style>

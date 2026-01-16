@@ -1,54 +1,109 @@
 /**
  * API 凭证管理 Store
- * 负责管理 Cloudflare API 凭证的存储、加密和验证
+ * 负责管理多个 AI Provider 的凭证存储、加密和验证
+ * 支持从环境变量读取凭证（本地 .env.local 或线上环境变量）
  */
 
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { AI_CONFIG } from '@/config/ai-config'
+import { AI_CONFIG, AI_PROVIDERS } from '@/config/ai-config'
 
 const STORAGE_KEY = 'ai_credentials'
 const ENCRYPTION_KEY = 'ai_credentials_encryption_key'
 
 export const useCredentialsStore = defineStore('credentials', () => {
   // State
-  const mode = ref('manual') // 'manual' | 'shared'
+  const mode = ref('env') // 'env' | 'manual' - 默认使用环境变量
+
+  // Cloudflare 凭证
   const accountId = ref('')
   const apiToken = ref('')
   const workerUrl = ref(AI_CONFIG.workerUrl)
+
+  // 豆包凭证
+  const doubaoApiKey = ref('')
+
   const encrypted = ref(true)
   const lastVerified = ref(null)
   const loading = ref(false)
   const loaded = ref(false)
 
   // Computed
-  // 是否为生产环境（Cloudflare Pages 部署）
+  // 是否为生产环境
   const isProduction = computed(() => {
     return import.meta.env.PROD
   })
 
-  // 环境变量中是否有凭证
-  const hasEnvCredentials = computed(() => {
+  // 环境变量中是否有 Cloudflare 凭证
+  const hasCloudflareEnvCredentials = computed(() => {
     const envAccountId = import.meta.env.VITE_CLOUDFLARE_ACCOUNT_ID
     const envApiToken = import.meta.env.VITE_CLOUDFLARE_API_TOKEN
     return !!(envAccountId && envApiToken)
   })
 
-  const hasCredentials = computed(() => {
-    // 1. 生产环境 + 共享模式：检查环境变量
-    if (isProduction.value && mode.value === 'shared') {
-      return hasEnvCredentials.value
-    }
-    // 2. 开发环境 + 共享模式：也检查环境变量（.env.local）
-    if (mode.value === 'shared') {
-      return hasEnvCredentials.value
-    }
-    // 3. 手动模式：检查用户输入
-    return !!(accountId.value && apiToken.value)
+  // 环境变量中是否有豆包凭证
+  const hasDoubaoEnvCredentials = computed(() => {
+    const envApiKey = import.meta.env.VITE_DOUBAO_API_KEY
+    return !!envApiKey
   })
 
+  // 是否有任何凭证
+  const hasCredentials = computed(() => {
+    return (
+      hasCloudflareEnvCredentials.value ||
+      hasDoubaoEnvCredentials.value ||
+      !!(accountId.value && apiToken.value) ||
+      !!doubaoApiKey.value
+    )
+  })
+
+  // 获取 Cloudflare 凭证
+  const cloudflareCredentials = computed(() => {
+    // 优先使用环境变量
+    if (hasCloudflareEnvCredentials.value) {
+      return {
+        accountId: import.meta.env.VITE_CLOUDFLARE_ACCOUNT_ID,
+        apiToken: import.meta.env.VITE_CLOUDFLARE_API_TOKEN,
+        workerUrl: import.meta.env.VITE_WORKER_URL || workerUrl.value
+      }
+    }
+    // 否则使用手动输入的
+    return {
+      accountId: accountId.value,
+      apiToken: apiToken.value,
+      workerUrl: workerUrl.value
+    }
+  })
+
+  // 获取豆包凭证
+  const doubaoCredentials = computed(() => {
+    // 优先使用环境变量
+    if (hasDoubaoEnvCredentials.value) {
+      return {
+        apiKey: import.meta.env.VITE_DOUBAO_API_KEY
+      }
+    }
+    // 否则使用手动输入的
+    return {
+      apiKey: doubaoApiKey.value
+    }
+  })
+
+  // 根据 Provider 获取凭证
+  function getCredentialsByProvider(provider) {
+    if (provider === AI_PROVIDERS.CLOUDFLARE) {
+      return cloudflareCredentials.value
+    } else if (provider === AI_PROVIDERS.DOUBAO) {
+      return doubaoCredentials.value
+    }
+    return null
+  }
+
   const credentialsSource = computed(() => {
-    return mode.value === 'shared' ? '项目共享' : '手动输入'
+    if (hasCloudflareEnvCredentials.value || hasDoubaoEnvCredentials.value) {
+      return '环境变量'
+    }
+    return '手动输入'
   })
 
   /**
@@ -175,23 +230,31 @@ export const useCredentialsStore = defineStore('credentials', () => {
 
   /**
    * 保存凭证
-   * @param {string} newAccountId - Account ID
-   * @param {string} newApiToken - API Token
-   * @param {string} newMode - 凭证模式
+   * @param {Object} credentials - 凭证对象
+   * @param {string} credentials.accountId - Cloudflare Account ID
+   * @param {string} credentials.apiToken - Cloudflare API Token
+   * @param {string} credentials.doubaoApiKey - 豆包 API Key
    */
-  async function saveCredentials(newAccountId, newApiToken, newMode = 'manual') {
+  async function saveCredentials(credentials) {
     try {
-      accountId.value = newAccountId
-      apiToken.value = newApiToken
-      mode.value = newMode
+      if (credentials.accountId) accountId.value = credentials.accountId
+      if (credentials.apiToken) apiToken.value = credentials.apiToken
+      if (credentials.doubaoApiKey) doubaoApiKey.value = credentials.doubaoApiKey
 
-      const encryptedAccountId = await encryptData(newAccountId)
-      const encryptedApiToken = await encryptData(newApiToken)
+      const encryptedData = {}
+
+      if (credentials.accountId) {
+        encryptedData.accountId = await encryptData(credentials.accountId)
+      }
+      if (credentials.apiToken) {
+        encryptedData.apiToken = await encryptData(credentials.apiToken)
+      }
+      if (credentials.doubaoApiKey) {
+        encryptedData.doubaoApiKey = await encryptData(credentials.doubaoApiKey)
+      }
 
       const encryptedCredentials = {
-        mode: newMode,
-        accountId: encryptedAccountId,
-        apiToken: encryptedApiToken,
+        ...encryptedData,
         workerUrl: workerUrl.value,
         encrypted: true,
         lastVerified: lastVerified.value
@@ -208,7 +271,7 @@ export const useCredentialsStore = defineStore('credentials', () => {
 
   /**
    * 加载凭证
-   * 优先从环境变量加载（协作者/管理员），否则从本地存储加载（只读用户）
+   * 优先从环境变量加载，否则从本地存储加载
    */
   async function loadCredentials() {
     // 防止重复加载
@@ -219,18 +282,29 @@ export const useCredentialsStore = defineStore('credentials', () => {
     loading.value = true
 
     try {
-      // 1. 尝试从环境变量加载（项目共享凭证）
-      const envAccountId = import.meta.env.VITE_CLOUDFLARE_ACCOUNT_ID
-      const envApiToken = import.meta.env.VITE_CLOUDFLARE_API_TOKEN
+      // 1. 从环境变量加载
+      const envCloudflareAccountId = import.meta.env.VITE_CLOUDFLARE_ACCOUNT_ID
+      const envCloudflareApiToken = import.meta.env.VITE_CLOUDFLARE_API_TOKEN
       const envWorkerUrl = import.meta.env.VITE_WORKER_URL
+      const envDoubaoApiKey = import.meta.env.VITE_DOUBAO_API_KEY
 
-      if (envAccountId && envApiToken) {
-        console.log('[Credentials] Loading from environment variables (shared credentials)')
-        accountId.value = envAccountId
-        apiToken.value = envApiToken
+      if (envCloudflareAccountId && envCloudflareApiToken) {
+        console.log('[Credentials] Loading Cloudflare credentials from environment')
+        accountId.value = envCloudflareAccountId
+        apiToken.value = envCloudflareApiToken
         workerUrl.value = envWorkerUrl || AI_CONFIG.workerUrl
-        mode.value = 'shared'
-        encrypted.value = false // 环境变量不需要加密
+        mode.value = 'env'
+      }
+
+      if (envDoubaoApiKey) {
+        console.log('[Credentials] Loading Doubao credentials from environment')
+        doubaoApiKey.value = envDoubaoApiKey
+        mode.value = 'env'
+      }
+
+      // 如果环境变量中有凭证，直接返回
+      if (hasCloudflareEnvCredentials.value || hasDoubaoEnvCredentials.value) {
+        encrypted.value = false
         loaded.value = true
         return true
       }
@@ -248,19 +322,27 @@ export const useCredentialsStore = defineStore('credentials', () => {
 
       // 解密凭证
       if (credentials.encrypted) {
-        accountId.value = await decryptData(credentials.accountId)
-        apiToken.value = await decryptData(credentials.apiToken)
+        if (credentials.accountId) {
+          accountId.value = await decryptData(credentials.accountId)
+        }
+        if (credentials.apiToken) {
+          apiToken.value = await decryptData(credentials.apiToken)
+        }
+        if (credentials.doubaoApiKey) {
+          doubaoApiKey.value = await decryptData(credentials.doubaoApiKey)
+        }
       } else {
         // 兼容旧版本未加密的数据
-        accountId.value = credentials.accountId
-        apiToken.value = credentials.apiToken
+        if (credentials.accountId) accountId.value = credentials.accountId
+        if (credentials.apiToken) apiToken.value = credentials.apiToken
+        if (credentials.doubaoApiKey) doubaoApiKey.value = credentials.doubaoApiKey
       }
 
-      mode.value = credentials.mode || 'manual'
+      mode.value = 'manual'
       workerUrl.value = credentials.workerUrl || AI_CONFIG.workerUrl
       lastVerified.value = credentials.lastVerified || null
 
-      console.log('[Credentials] Loaded from local storage (manual credentials)')
+      console.log('[Credentials] Loaded from local storage')
       loaded.value = true
       return true
     } catch (error) {
@@ -384,6 +466,7 @@ export const useCredentialsStore = defineStore('credentials', () => {
     mode,
     accountId,
     apiToken,
+    doubaoApiKey,
     workerUrl,
     encrypted,
     lastVerified,
@@ -392,7 +475,12 @@ export const useCredentialsStore = defineStore('credentials', () => {
 
     // Computed
     hasCredentials,
+    hasCloudflareEnvCredentials,
+    hasDoubaoEnvCredentials,
+    cloudflareCredentials,
+    doubaoCredentials,
     credentialsSource,
+    isProduction,
 
     // Actions
     saveCredentials,
@@ -401,7 +489,6 @@ export const useCredentialsStore = defineStore('credentials', () => {
     clearCredentials,
     setWorkerUrl,
     getCredentials,
-    encryptData,
-    decryptData
+    getCredentialsByProvider
   }
 })

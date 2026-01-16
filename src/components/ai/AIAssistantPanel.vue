@@ -4,44 +4,47 @@
     <div class="panel-content">
       <!-- 左栏：配置区（可滚动） -->
       <div class="left-column">
-        <!-- 凭证配置 -->
-        <div class="config-section">
+        <!-- 凭证配置（仅生产环境显示） -->
+        <div v-if="credentialsStore.isProduction" class="config-section">
           <CredentialsConfig />
         </div>
 
-        <!-- 主分类选择 -->
-        <el-card class="config-card" shadow="hover">
+        <!-- Provider 选择 -->
+        <el-card class="config-card compact" shadow="hover">
           <template #header>
             <div class="card-header">
-              <span class="header-icon">1️⃣</span>
-              <span class="header-title">壁纸类型</span>
+              <span class="header-icon">🔌</span>
+              <span class="header-title">AI 服务商</span>
             </div>
           </template>
-          <el-radio-group v-model="primaryCategory" size="large" class="category-group">
-            <el-radio-button value="desktop">🖥️ Desktop</el-radio-button>
-            <el-radio-button value="mobile">📱 Mobile</el-radio-button>
-            <el-radio-button value="avatar">👤 Avatar</el-radio-button>
+          <el-radio-group
+            v-model="currentProvider"
+            size="default"
+            class="provider-group"
+            @change="handleProviderChange"
+          >
+            <el-radio-button
+              v-for="(display, providerKey) in PROVIDER_DISPLAY"
+              :key="providerKey"
+              :value="providerKey"
+            >
+              <div class="provider-option">
+                <span class="provider-icon">{{ display.icon }}</span>
+                <span class="provider-name">{{ display.name }}</span>
+              </div>
+            </el-radio-button>
           </el-radio-group>
         </el-card>
 
-        <!-- 提示词模板选择 -->
-        <div class="config-section">
-          <PromptTemplateSelector
-            v-model="aiStore.promptTemplate"
-            v-model:custom-prompt="customPrompt"
-            :primary-category="primaryCategory"
-          />
-        </div>
-
         <!-- 模型选择 -->
-        <el-card class="config-card" shadow="hover">
+        <el-card class="config-card compact" shadow="hover">
           <template #header>
             <div class="card-header">
               <span class="header-icon">🎯</span>
               <span class="header-title">AI 模型</span>
             </div>
           </template>
-          <el-radio-group v-model="aiStore.currentModel" size="large" class="model-group">
+          <el-radio-group v-model="aiStore.currentModel" size="default" class="model-group">
             <el-radio-button v-for="model in modelList" :key="model.key" :value="model.key">
               <div class="model-option">
                 <span class="model-name">{{ model.name }}</span>
@@ -72,6 +75,30 @@
             <p class="model-desc">{{ currentModelInfo.description }}</p>
           </div>
         </el-card>
+
+        <!-- 主分类选择 -->
+        <el-card class="config-card compact" shadow="hover">
+          <template #header>
+            <div class="card-header">
+              <span class="header-icon">📂</span>
+              <span class="header-title">壁纸类型</span>
+            </div>
+          </template>
+          <el-radio-group v-model="primaryCategory" size="default" class="category-group">
+            <el-radio-button value="desktop">🖥️ Desktop</el-radio-button>
+            <el-radio-button value="mobile">📱 Mobile</el-radio-button>
+            <el-radio-button value="avatar">👤 Avatar</el-radio-button>
+          </el-radio-group>
+        </el-card>
+
+        <!-- 提示词模板选择 -->
+        <div class="config-section">
+          <PromptTemplateSelector
+            v-model="aiStore.promptTemplate"
+            v-model:custom-prompt="customPrompt"
+            :primary-category="primaryCategory"
+          />
+        </div>
       </div>
 
       <!-- 中栏：上传区 -->
@@ -177,12 +204,22 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { UploadFilled } from '@element-plus/icons-vue'
 import { useAIStore } from '@/stores/ai'
 import { useCredentialsStore } from '@/stores/credentials'
-import { getModelList, SPEED_LEVELS, ACCURACY_LEVELS, COST_LEVELS } from '@/config/ai-config'
+import {
+  getModelList,
+  getModelsByProvider,
+  getRecommendedModel,
+  SPEED_LEVELS,
+  ACCURACY_LEVELS,
+  COST_LEVELS,
+  AI_PROVIDERS,
+  PROVIDER_DISPLAY,
+  AI_CONFIG
+} from '@/config/ai-config'
 import CredentialsConfig from '@/components/ai/CredentialsConfig.vue'
 import PromptTemplateSelector from '@/components/ai/PromptTemplateSelector.vue'
 import ResultCard from '@/components/ai/ResultCard.vue'
@@ -197,15 +234,37 @@ const fileList = ref([])
 const progress = ref(0)
 const currentIndex = ref(0)
 const totalCount = ref(0)
+const currentProvider = ref(AI_CONFIG.defaultProvider)
 
 // Computed
-const modelList = computed(() => getModelList())
+const modelList = computed(() => {
+  return getModelsByProvider(currentProvider.value)
+})
 
 const currentModelInfo = computed(() => {
   return modelList.value.find(m => m.key === aiStore.currentModel) || {}
 })
 
+// 监听 Provider 变化
+watch(currentProvider, newProvider => {
+  // 切换 Provider 时，自动选择该 Provider 的推荐模型
+  const recommendedModel = getRecommendedModel(newProvider)
+  if (recommendedModel) {
+    aiStore.currentModel = recommendedModel.key
+  }
+
+  // 同步更新 AI Store 的 Provider
+  aiStore.setProvider(newProvider)
+
+  // 保存到 localStorage
+  localStorage.setItem('ai_current_provider', newProvider)
+})
+
 // Methods
+function handleProviderChange() {
+  ElMessage.success(`已切换到 ${PROVIDER_DISPLAY[currentProvider.value].name}`)
+}
+
 function handleFileChange(file, files) {
   fileList.value = files
 }
@@ -280,6 +339,16 @@ async function handleAnalyze() {
 
 onMounted(async () => {
   await credentialsStore.loadCredentials()
+
+  // 加载上次选择的 Provider
+  const savedProvider = localStorage.getItem('ai_current_provider')
+  if (savedProvider && AI_PROVIDERS[savedProvider.toUpperCase()]) {
+    currentProvider.value = savedProvider
+    aiStore.setProvider(savedProvider)
+  } else {
+    // 使用默认 Provider
+    aiStore.setProvider(currentProvider.value)
+  }
 })
 </script>
 
@@ -303,7 +372,7 @@ onMounted(async () => {
 .left-column {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 12px;
   overflow-y: auto;
   overflow-x: hidden;
   padding-right: 8px;
@@ -349,17 +418,28 @@ onMounted(async () => {
   :deep(.el-card__body) {
     padding: 20px;
   }
+
+  // 紧凑样式
+  &.compact {
+    :deep(.el-card__header) {
+      padding: 10px 16px;
+    }
+
+    :deep(.el-card__body) {
+      padding: 12px 16px;
+    }
+  }
 }
 
 .card-header {
   display: flex;
   align-items: center;
-  gap: 10px;
-  font-size: 16px;
+  gap: 8px;
+  font-size: 14px;
   font-weight: 600;
 
   .header-icon {
-    font-size: 20px;
+    font-size: 16px;
   }
 
   .header-title {
@@ -369,10 +449,11 @@ onMounted(async () => {
 }
 
 .category-group,
-.model-group {
+.model-group,
+.provider-group {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
   width: 100%;
 
   :deep(.el-radio-button) {
@@ -383,8 +464,8 @@ onMounted(async () => {
       width: 100%;
       border-radius: 8px;
       border: 1px solid #dcdfe6;
-      padding: 12px 16px;
-      font-size: 15px;
+      padding: 8px 12px;
+      font-size: 13px;
       transition: all 0.3s;
       white-space: normal;
       word-break: break-word;
@@ -402,6 +483,22 @@ onMounted(async () => {
       border-color: #667eea;
       color: white;
     }
+  }
+}
+
+.provider-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+
+  .provider-icon {
+    font-size: 18px;
+  }
+
+  .provider-name {
+    font-size: 14px;
+    font-weight: 500;
   }
 }
 

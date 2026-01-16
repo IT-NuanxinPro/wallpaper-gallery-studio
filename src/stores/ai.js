@@ -1,13 +1,15 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { AI_CONFIG, getModelByKey } from '@/config/ai-config'
+import { AI_CONFIG, getModelByKey, AI_PROVIDERS } from '@/config/ai-config'
 import { buildPrompt } from '@/utils/prompt-builder'
 import { parseResponse } from '@/utils/response-parser'
 import { useCredentialsStore } from './credentials'
+import { AIProviderFactory } from '@/services/ai-providers'
 
 export const useAIStore = defineStore('ai', () => {
   const analyzing = ref(false)
   const currentModel = ref(AI_CONFIG.defaultModel)
+  const currentProvider = ref(AI_CONFIG.defaultProvider)
   const promptTemplate = ref(AI_CONFIG.defaultPromptTemplate)
   const results = ref([])
   const error = ref(null)
@@ -59,7 +61,7 @@ export const useAIStore = defineStore('ai', () => {
   }
 
   /**
-   * 调用 AI API
+   * 调用 AI API（支持多 Provider）
    */
   async function callAI(imageBase64, prompt) {
     const credentialsStore = useCredentialsStore()
@@ -73,38 +75,27 @@ export const useAIStore = defineStore('ai', () => {
       throw new Error('无效的模型配置')
     }
 
-    const credentials = credentialsStore.getCredentials()
+    // 根据当前 Provider 创建对应的 Provider 实例
+    const provider = AIProviderFactory.create(currentProvider.value)
 
-    const response = await fetch(credentials.workerUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        accountId: credentials.accountId,
-        aiToken: credentials.apiToken,
-        image: imageBase64.split(',')[1],
-        prompt,
-        model: modelConfig.id,
-        maxTokens: modelConfig.maxTokens,
-        temperature: modelConfig.temperature
-      })
-    })
+    // 获取对应 Provider 的凭证
+    const credentials = credentialsStore.getCredentialsByProvider(currentProvider.value)
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}))
-      if (errorData.errors?.[0]) {
-        const err = errorData.errors[0]
-        if (err.code === 3016) throw new Error('图片解码失败，请使用 JPG/PNG 格式')
-        if (err.code === 5016) throw new Error('需要同意模型许可协议')
-        throw new Error(`AI 错误 (${err.code}): ${err.message}`)
-      }
-      throw new Error(`请求失败: ${response.status}`)
+    if (!credentials) {
+      throw new Error(`未配置 ${currentProvider.value} 的凭证`)
     }
 
-    const data = await response.json()
-    if (data.error) throw new Error(data.message || data.error)
-    if (data.errors?.length > 0) throw new Error(`AI 错误: ${data.errors[0].message}`)
+    // 调用 Provider 的 analyze 方法
+    const analysis = await provider.analyze({
+      imageBase64,
+      prompt,
+      credentials: {
+        ...credentials,
+        model: modelConfig.id
+      }
+    })
 
-    return data
+    return analysis
   }
 
   /**
@@ -117,8 +108,7 @@ export const useAIStore = defineStore('ai', () => {
     try {
       const imageBase64 = await compressImage(file)
       const prompt = buildPrompt(promptTemplate.value, primaryCategory, customPrompt)
-      const apiResponse = await callAI(imageBase64, prompt)
-      const parsedResult = parseResponse(apiResponse, currentModelConfig.value.parser)
+      const analysis = await callAI(imageBase64, prompt)
 
       const result = {
         id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
@@ -127,27 +117,22 @@ export const useAIStore = defineStore('ai', () => {
         imageName: file.name,
         imageSize: file.size,
         primary: primaryCategory,
-        // 如果返回"通用"，使用建议的分类
-        secondary:
-          parsedResult.secondary === '通用' && parsedResult.suggestedCategory
-            ? parsedResult.suggestedCategory
-            : parsedResult.secondary,
-        third:
-          parsedResult.third === '通用' && parsedResult.suggestedThird
-            ? parsedResult.suggestedThird
-            : parsedResult.third,
-        suggestedCategory: parsedResult.suggestedCategory,
-        suggestedThird: parsedResult.suggestedThird,
-        isNewCategory: parsedResult.isNewCategory,
-        isNewThird: parsedResult.isNewThird,
-        filenameSuggestions: parsedResult.filenameSuggestions,
-        selectedFilename: parsedResult.filenameSuggestions[0],
-        description: parsedResult.description,
-        keywords: parsedResult.keywords,
-        confidence: parsedResult.confidence,
+        secondary: analysis.secondary || '通用',
+        third: analysis.third || '通用',
+        filenameSuggestions: analysis.filenameSuggestions || [file.name],
+        selectedFilename: analysis.filenameSuggestions?.[0] || file.name,
+        description: analysis.description || '',
+        keywords: analysis.keywords || [],
+        confidence: analysis.confidence || 0,
         model: currentModel.value,
+        provider: currentProvider.value,
         promptTemplate: promptTemplate.value,
-        raw: parsedResult.raw
+        // 新增字段
+        display_title: analysis.display_title || null,
+        is_perfect_match: analysis.is_perfect_match,
+        new_category_proposal: analysis.new_category_proposal || null,
+        reasoning: analysis.reasoning || null,
+        raw: analysis.raw
       }
 
       results.value.unshift(result)
@@ -194,6 +179,10 @@ export const useAIStore = defineStore('ai', () => {
     currentModel.value = modelKey
   }
 
+  function setProvider(providerKey) {
+    currentProvider.value = providerKey
+  }
+
   function setPromptTemplate(templateId) {
     promptTemplate.value = templateId
   }
@@ -206,6 +195,7 @@ export const useAIStore = defineStore('ai', () => {
   return {
     analyzing,
     currentModel,
+    currentProvider,
     promptTemplate,
     results,
     error,
@@ -214,6 +204,7 @@ export const useAIStore = defineStore('ai', () => {
     analyzeImage,
     analyzeBatch,
     setModel,
+    setProvider,
     setPromptTemplate,
     clearResults
   }
