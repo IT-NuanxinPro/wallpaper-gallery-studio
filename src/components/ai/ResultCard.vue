@@ -38,9 +38,9 @@
           </div>
 
           <!-- 诗意标题 -->
-          <div v-if="result.display_title" class="title-section">
+          <div v-if="result.displayTitle" class="title-section">
             <div class="section-label">诗意标题</div>
-            <div class="display-title">{{ result.display_title }}</div>
+            <div class="display-title">{{ result.displayTitle }}</div>
           </div>
 
           <div class="detail-row">
@@ -167,9 +167,9 @@
           </div>
 
           <!-- 诗意标题 -->
-          <div v-if="result.display_title" class="title-section">
+          <div v-if="result.displayTitle" class="title-section">
             <div class="section-label">诗意标题</div>
-            <div class="display-title">{{ result.display_title }}</div>
+            <div class="display-title">{{ result.displayTitle }}</div>
           </div>
 
           <div class="description-row">
@@ -279,9 +279,9 @@
           </div>
 
           <!-- 诗意标题 -->
-          <div v-if="result.display_title" class="title-section centered">
+          <div v-if="result.displayTitle" class="title-section centered">
             <div class="section-label">诗意标题</div>
-            <div class="display-title">{{ result.display_title }}</div>
+            <div class="display-title">{{ result.displayTitle }}</div>
           </div>
 
           <div class="description-row centered">
@@ -365,7 +365,7 @@
 import { ref, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import { CopyDocument, Document } from '@element-plus/icons-vue'
-import { getModelByKey } from '@/config/ai-config'
+import { getModelByKey } from '@/services/ai/classifier'
 
 const props = defineProps({
   result: { type: Object, required: true }
@@ -420,8 +420,8 @@ function copyFullInfo() {
 关键词: ${props.result.keywords.join(', ')}
 置信度: ${(props.result.confidence * 100).toFixed(0)}%`
 
-  if (props.result.display_title) {
-    info += `\n诗意标题: ${props.result.display_title}`
+  if (props.result.displayTitle) {
+    info += `\n诗意标题: ${props.result.displayTitle}`
   }
 
   if (props.result.is_perfect_match !== undefined) {

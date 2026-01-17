@@ -121,7 +121,11 @@
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useCredentialsStore } from '@/stores/credentials'
-import { AI_CONFIG } from '@/config/ai-config'
+
+// 默认配置
+const AI_CONFIG = {
+  workerUrl: 'https://ai-proxy.han1569250882.workers.dev'
+}
 
 const credentialsStore = useCredentialsStore()
 

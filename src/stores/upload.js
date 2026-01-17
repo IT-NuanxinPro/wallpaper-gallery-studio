@@ -3,9 +3,15 @@ import { ref, computed } from 'vue'
 import { githubService } from '@/services/github'
 import { useConfigStore } from './config'
 import { useHistoryStore } from './history'
+import { useCredentialsStore } from './credentials'
 import { previewManager } from '@/utils/previewManager'
 import { hashWorker } from '@/utils/hashWorker'
 import { imageCompressor } from '@/utils/imageCompressor'
+import {
+  analyzeImage as classifierAnalyze,
+  CLASSIFIER_CONFIG,
+  getModelList
+} from '@/services/ai/classifier'
 
 // 允许的文件类型
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp']
@@ -14,11 +20,30 @@ const MAX_FILE_SIZE = 25 * 1024 * 1024 // 25MB
 const UPLOAD_DELAY = 500 // 上传间隔 500ms，避免触发限流
 const BATCH_WARNING_THRESHOLD = 50 // 超过 50 张提示警告
 
+// 元数据仓库配置
+const METADATA_REPO = {
+  owner: 'IT-NuanxinPro',
+  repo: 'nuanXinProPic',
+  branch: 'main',
+  pendingDir: 'metadata-pending'
+}
+
 export const useUploadStore = defineStore('upload', () => {
   // 状态
   const files = ref([])
   const uploading = ref(false)
   const currentFileIndex = ref(-1)
+
+  // 上传模式: 'ai' = AI 智能分类（推荐）, 'manual' = 手动选择分类
+  const uploadMode = ref('ai')
+
+  // AI 分析状态
+  const aiAnalyzing = ref(false)
+  const aiAnalyzingCount = ref(0)
+
+  // AI 配置（可选覆盖默认值）
+  const selectedProvider = ref(null) // null = 使用默认
+  const selectedModelKey = ref(null) // null = 使用默认
 
   // 目标路径
   const series = ref('desktop') // desktop | mobile | avatar
@@ -134,7 +159,9 @@ export const useUploadStore = defineStore('upload', () => {
           targetPath: targetPath.value,
           targetSeries: series.value,
           targetL1: categoryL1.value,
-          targetL2: categoryL2.value
+          targetL2: categoryL2.value,
+          // AI 元数据（由 AI 分析填充，可选）
+          aiMetadata: null
         })
       } else {
         // 可以在这里触发错误提示
@@ -143,7 +170,115 @@ export const useUploadStore = defineStore('upload', () => {
     }
 
     files.value.push(...validFiles)
+
+    // AI 模式下自动触发分析
+    if (uploadMode.value === 'ai' && validFiles.length > 0) {
+      triggerAiAnalysis(validFiles)
+    }
+
     return validFiles
+  }
+
+  // AI 智能分析：为文件自动生成分类
+  async function triggerAiAnalysis(filesToAnalyze) {
+    const credentialsStore = useCredentialsStore()
+
+    // 检查是否有 AI 凭证
+    if (!credentialsStore.hasCredentials) {
+      console.warn('AI 分析：未配置 AI 凭证')
+      return
+    }
+
+    // 使用选择的 Provider，或默认的
+    const provider = selectedProvider.value || credentialsStore.defaultProvider
+    const credentials = credentialsStore.getCredentialsByProvider(provider)
+
+    if (!credentials) {
+      console.warn(`AI 分析：未找到 ${provider} 的凭证`)
+      return
+    }
+
+    // 使用选择的模型，或该 Provider 的默认模型
+    const providerModels = getModelList(provider)
+    let modelKey = selectedModelKey.value
+    if (!modelKey || !providerModels.find(m => m.key === modelKey)) {
+      modelKey = providerModels.length > 0 ? providerModels[0].key : CLASSIFIER_CONFIG.defaultModel
+    }
+
+    aiAnalyzing.value = true
+    aiAnalyzingCount.value = filesToAnalyze.length
+
+    // 并行分析所有文件（但限制并发数）
+    const concurrency = 3
+    const queue = [...filesToAnalyze]
+
+    async function processNext() {
+      while (queue.length > 0) {
+        const uploadFile = queue.shift()
+        if (!uploadFile) break
+
+        try {
+          const result = await classifierAnalyze({
+            file: uploadFile.file,
+            series: series.value,
+            providerType: provider,
+            credentials,
+            modelKey
+          })
+
+          // 构建 AI 元数据（使用统一字段名）
+          const aiMetadata = {
+            series: series.value,
+            category: result.secondary || '通用',
+            subcategory: result.third || '',
+            // 保留原始字段
+            primary: series.value,
+            secondary: result.secondary || '通用',
+            third: result.third || '',
+            // 其他元数据
+            keywords: result.keywords || [],
+            description: result.description || '',
+            filenameSuggestions: result.filenameSuggestions || [],
+            displayTitle: result.displayTitle || null,
+            confidence: result.confidence || 0,
+            reasoning: result.reasoning || null
+          }
+
+          // 设置 AI 元数据（会自动应用分类）
+          setFileAiMetadata(uploadFile.id, aiMetadata)
+        } catch (error) {
+          console.error(`AI 分析失败: ${uploadFile.name}`, error)
+          // 分析失败时设置一个默认元数据
+          const fallbackMetadata = {
+            series: series.value,
+            category: '通用',
+            subcategory: '',
+            primary: series.value,
+            secondary: '通用',
+            third: '',
+            keywords: [],
+            description: '',
+            filenameSuggestions: [],
+            displayTitle: null,
+            confidence: 0,
+            reasoning: null,
+            error: error.message
+          }
+          setFileAiMetadata(uploadFile.id, fallbackMetadata)
+        }
+
+        aiAnalyzingCount.value--
+      }
+    }
+
+    // 启动并发分析
+    const workers = []
+    for (let i = 0; i < Math.min(concurrency, filesToAnalyze.length); i++) {
+      workers.push(processNext())
+    }
+
+    await Promise.all(workers)
+    aiAnalyzing.value = false
   }
 
   // 更新单个文件的目标路径
@@ -176,13 +311,56 @@ export const useUploadStore = defineStore('upload', () => {
     })
   }
 
+  // 设置单个文件的 AI 元数据
+  // autoApply: 是否自动应用 AI 推荐的分类到文件的 targetPath（默认 true）
+  function setFileAiMetadata(fileId, aiMetadata, autoApply = true) {
+    const file = files.value.find(f => f.id === fileId)
+    if (file) {
+      file.aiMetadata = aiMetadata
+
+      // 在 AI 模式下自动应用推荐的分类
+      if (autoApply && aiMetadata && file.status === 'pending') {
+        // 支持两种字段命名：
+        // 1. series/category/subcategory（新格式）
+        // 2. primary/secondary/third（AI 分析返回格式）
+        const aiSeries = aiMetadata.series || aiMetadata.primary
+        const category = aiMetadata.category || aiMetadata.secondary
+        const subcategory = aiMetadata.subcategory || aiMetadata.third || ''
+
+        if (aiSeries && category) {
+          file.targetSeries = aiSeries
+          file.targetL1 = category
+          file.targetL2 = subcategory
+          const parts = ['wallpaper', aiSeries, category]
+          if (subcategory) parts.push(subcategory)
+          file.targetPath = parts.join('/')
+
+          // 标准化 aiMetadata 的字段名，确保后续使用一致
+          if (!aiMetadata.series) aiMetadata.series = aiSeries
+          if (!aiMetadata.category) aiMetadata.category = category
+          if (!aiMetadata.subcategory) aiMetadata.subcategory = subcategory
+        }
+      }
+    }
+  }
+
+  // 批量设置文件的 AI 元数据
+  function setFilesAiMetadata(metadataMap) {
+    for (const [fileId, aiMetadata] of Object.entries(metadataMap)) {
+      setFileAiMetadata(fileId, aiMetadata)
+    }
+  }
+
   // 移除文件
   function removeFile(id) {
     const index = files.value.findIndex(f => f.id === id)
     if (index > -1) {
+      const file = files.value[index]
       // 释放预览 URL（使用PreviewManager）
       previewManager.revokePreview(id)
+      // 从数组中移除（包括 aiMetadata 等所有数据）
       files.value.splice(index, 1)
+      // 注意：file 对象被移除后，其 aiMetadata 也会被垃圾回收
     }
   }
 
@@ -190,14 +368,16 @@ export const useUploadStore = defineStore('upload', () => {
   function removeFiles(ids) {
     // 批量释放预览URL
     previewManager.revokePreviews(ids)
-    // 从数组中移除
+    // 从数组中移除（包括 aiMetadata 等所有数据）
     files.value = files.value.filter(f => !ids.includes(f.id))
+    // 注意：被过滤掉的 file 对象及其 aiMetadata 会被垃圾回收
   }
 
   // 清空所有文件
   function clearFiles() {
     // 释放所有预览URL
     previewManager.revokeAll()
+    // 清空数组（包括所有 aiMetadata）
     files.value = []
   }
 
@@ -440,6 +620,7 @@ export const useUploadStore = defineStore('upload', () => {
 
     uploading.value = true
     const results = []
+    const uploadedFiles = [] // 收集成功上传的文件
     let permissionError = false
 
     for (let i = 0; i < files.value.length; i++) {
@@ -448,6 +629,11 @@ export const useUploadStore = defineStore('upload', () => {
         currentFileIndex.value = i
         const result = await uploadFile(file)
         results.push({ file, ...result })
+
+        // 收集成功上传的文件用于生成 metadata
+        if (result.success) {
+          uploadedFiles.push(file)
+        }
 
         // 如果是权限错误，停止后续上传
         if (result.errorType === 'PERMISSION_DENIED') {
@@ -472,8 +658,14 @@ export const useUploadStore = defineStore('upload', () => {
     currentFileIndex.value = -1
     uploading.value = false
 
-    // 返回结果，包含权限错误标记
-    return { results, permissionError }
+    // 如果有成功上传的文件，生成 metadata-pending
+    let metadataResult = null
+    if (uploadedFiles.length > 0 && !permissionError) {
+      metadataResult = await generatePendingMetadata(uploadedFiles)
+    }
+
+    // 返回结果，包含权限错误标记和 metadata 生成结果
+    return { results, permissionError, metadataResult }
   }
 
   // 获取 API 配额信息
@@ -504,11 +696,182 @@ export const useUploadStore = defineStore('upload', () => {
     return uploadAll()
   }
 
+  // 生成并上传 metadata-pending 文件
+  // 在批量上传完成后调用，将成功上传的图片信息写入 metadata-pending/{timestamp}.json
+  async function generatePendingMetadata(uploadedFiles) {
+    if (!uploadedFiles || uploadedFiles.length === 0) return null
+
+    const configStore = useConfigStore()
+    const { owner, repo, branch } = configStore.config
+
+    // 构建 pending 数据结构
+    const pendingData = {
+      version: 1,
+      createdAt: new Date().toISOString(),
+      source: 'studio',
+      targetRepo: { owner, repo, branch },
+      images: []
+    }
+
+    for (const file of uploadedFiles) {
+      const fileTargetPath = file.targetPath || targetPath.value
+      const fileSeries = file.targetSeries || series.value
+      const relativePath = `${fileTargetPath}/${file.name}`
+
+      // 解析分类信息
+      const pathParts = fileTargetPath.split('/')
+      const category = pathParts[2] || ''
+      const subcategory = pathParts[3] || ''
+
+      // 构建图片元数据
+      const imageData = {
+        series: fileSeries,
+        relativePath,
+        category,
+        subcategory,
+        filename: file.name,
+        createdAt: new Date().toISOString(),
+        size: file.size,
+        format: getExtension(file.name),
+        ai: file.aiMetadata || {
+          keywords: extractKeywordsFromFilename(file.name),
+          description: '',
+          displayTitle: '',
+          filename: '', // AI 建议的文件名（如果有）
+          confidence: 0,
+          model: 'none',
+          analyzedAt: null
+        }
+      }
+
+      pendingData.images.push(imageData)
+    }
+
+    // 生成文件名（时间戳 + 随机数）
+    const timestamp = Date.now()
+    const random = Math.random().toString(36).substr(2, 6)
+    const pendingFilename = `${timestamp}-${random}.json`
+    const pendingPath = `${METADATA_REPO.pendingDir}/${pendingFilename}`
+
+    try {
+      // 上传到图床仓库的 metadata-pending 目录
+      const content = JSON.stringify(pendingData, null, 2)
+
+      await githubService.createFile(
+        METADATA_REPO.owner,
+        METADATA_REPO.repo,
+        pendingPath,
+        content,
+        `Add pending metadata: ${pendingFilename}`,
+        METADATA_REPO.branch
+      )
+
+      console.log(`Metadata pending file created: ${pendingPath}`)
+      return { success: true, path: pendingPath, count: uploadedFiles.length }
+    } catch (error) {
+      console.error('Failed to create metadata pending file:', error)
+      return { success: false, error: error.message }
+    }
+  }
+
+  // 从文件名提取关键词（用于非 AI 上传的回退方案）
+  function extractKeywordsFromFilename(filename) {
+    const nameWithoutExt = filename.replace(/\.[^.]+$/, '')
+    const separators = /[-_\s、，,&]+/
+    const parts = nameWithoutExt
+      .split(separators)
+      .map(s => s.trim())
+      .filter(s => s.length > 0 && s.length < 20)
+      .filter(s => !/^\d+$/.test(s))
+      .filter(s => !/^(jpg|png|webp|gif|jpeg)$/i.test(s))
+    return [...new Set(parts)]
+  }
+
   // 设置目标分类
   function setTarget(newSeries, l1, l2 = '') {
     series.value = newSeries
     categoryL1.value = l1
     categoryL2.value = l2
+  }
+
+  // 设置上传模式
+  function setUploadMode(mode) {
+    if (mode === 'ai' || mode === 'manual') {
+      uploadMode.value = mode
+    }
+  }
+
+  // 应用 AI 推荐的分类到文件
+  function applyAiRecommendation(fileId) {
+    const file = files.value.find(f => f.id === fileId)
+    if (file && file.aiMetadata && file.status === 'pending') {
+      // 支持两种字段命名
+      const aiSeries = file.aiMetadata.series || file.aiMetadata.primary
+      const category = file.aiMetadata.category || file.aiMetadata.secondary
+      const subcategory = file.aiMetadata.subcategory || file.aiMetadata.third || ''
+
+      if (aiSeries && category) {
+        updateFileTarget(fileId, aiSeries, category, subcategory)
+      }
+    }
+  }
+
+  // 批量应用 AI 推荐
+  function applyAllAiRecommendations() {
+    const pending = files.value.filter(f => f.status === 'pending' && f.aiMetadata)
+    pending.forEach(file => {
+      // 支持两种字段命名
+      const aiSeries = file.aiMetadata.series || file.aiMetadata.primary
+      const category = file.aiMetadata.category || file.aiMetadata.secondary
+      const subcategory = file.aiMetadata.subcategory || file.aiMetadata.third || ''
+
+      if (aiSeries && category) {
+        updateFileTarget(file.id, aiSeries, category, subcategory)
+      }
+    })
+    return pending.length
+  }
+
+  // 检查是否所有待上传文件都已设置目标路径（AI模式下需要等AI分析完成）
+  function canStartUpload() {
+    const pending = pendingFiles.value
+    if (pending.length === 0) return false
+    return pending.every(f => f.targetPath)
+  }
+
+  // 设置 AI Provider
+  function setAiProvider(provider) {
+    selectedProvider.value = provider
+    // 切换 Provider 时重置模型选择
+    selectedModelKey.value = null
+  }
+
+  // 设置 AI 模型
+  function setAiModel(modelKey) {
+    selectedModelKey.value = modelKey
+  }
+
+  // 获取当前 AI 配置信息
+  function getCurrentAiConfig() {
+    const credentialsStore = useCredentialsStore()
+    const provider = selectedProvider.value || credentialsStore.defaultProvider
+    const providerModels = getModelList(provider)
+
+    let modelKey = selectedModelKey.value
+    if (!modelKey || !providerModels.find(m => m.key === modelKey)) {
+      modelKey = providerModels.length > 0 ? providerModels[0].key : CLASSIFIER_CONFIG.defaultModel
+    }
+
+    const model = providerModels.find(m => m.key === modelKey)
+
+    return {
+      provider,
+      providerName: provider === 'doubao' ? '豆包 AI' : 'Cloudflare AI',
+      providerIcon: provider === 'doubao' ? '🫘' : '☁️',
+      modelKey,
+      modelName: model?.name || modelKey,
+      availableModels: providerModels
+    }
   }
 
   // ✅ P1优化：添加清理方法，释放所有资源
@@ -532,9 +895,16 @@ export const useUploadStore = defineStore('upload', () => {
     files,
     uploading,
     currentFileIndex,
+    uploadMode,
     series,
     categoryL1,
     categoryL2,
+    // AI 分析状态
+    aiAnalyzing,
+    aiAnalyzingCount,
+    // AI 配置
+    selectedProvider,
+    selectedModelKey,
     // 计算属性
     targetPath,
     totalProgress,
@@ -545,6 +915,7 @@ export const useUploadStore = defineStore('upload', () => {
     // 方法
     validateFile,
     addFiles,
+    triggerAiAnalysis,
     removeFile,
     removeFiles,
     clearFiles,
@@ -553,8 +924,18 @@ export const useUploadStore = defineStore('upload', () => {
     uploadAll,
     retryFailed,
     setTarget,
+    setUploadMode,
+    setAiProvider,
+    setAiModel,
+    getCurrentAiConfig,
     updateFileTarget,
     updateFilesTarget,
+    setFileAiMetadata,
+    setFilesAiMetadata,
+    applyAiRecommendation,
+    applyAllAiRecommendations,
+    canStartUpload,
+    generatePendingMetadata,
     getRateLimit,
     shouldWarnBatchUpload,
     estimateUploadTime,

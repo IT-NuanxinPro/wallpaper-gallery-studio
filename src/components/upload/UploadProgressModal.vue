@@ -388,13 +388,8 @@ function handleClose() {
 <!-- 全局样式覆盖 el-dialog -->
 <style lang="scss">
 .upload-progress-modal {
-  // 垂直居中
-  display: flex;
-  align-items: center;
-  justify-content: center;
-
   .el-dialog {
-    margin: 0 !important;
+    margin-top: 5vh !important;
     max-height: 90vh;
     display: flex;
     flex-direction: column;

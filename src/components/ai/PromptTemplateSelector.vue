@@ -81,8 +81,8 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { getTemplateList } from '@/config/ai-prompts'
-import { previewPrompt } from '@/utils/prompt-builder'
+import { getTemplateList } from '@/services/ai/classifier'
+import { previewPrompt } from '@/services/ai/classifier/prompts'
 
 const props = defineProps({
   modelValue: {

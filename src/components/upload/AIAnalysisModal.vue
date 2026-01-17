@@ -119,7 +119,7 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
 import { ArrowRight } from '@element-plus/icons-vue'
-import { analyzeImage } from '@/services/ai-classifier'
+import { analyzeImage } from '@/services/ai/classifier'
 
 const props = defineProps({
   modelValue: Boolean,

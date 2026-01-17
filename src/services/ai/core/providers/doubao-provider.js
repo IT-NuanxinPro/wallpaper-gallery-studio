@@ -96,8 +96,7 @@ export class DoubaoProvider extends BaseAIProvider {
       filenameSuggestions,
       description: parsed.description || '无描述',
       confidence: 0.9,
-      // 新增字段
-      display_title: parsed.display_title || null,
+      displayTitle: parsed.displayTitle || parsed.display_title || null,
       is_perfect_match: parsed.is_perfect_match !== undefined ? parsed.is_perfect_match : null,
       new_category_proposal: parsed.new_category_proposal || null,
       reasoning: parsed.reasoning || null,

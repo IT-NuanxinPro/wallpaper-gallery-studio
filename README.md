@@ -116,10 +116,18 @@ src/
 │   │   └── ResultCard.vue
 │   ├── upload/          # 上传相关组件
 │   │   ├── CategorySidebar.vue
-│   │   ├── UploadPanel.vue
+│   │   ├── UploadPanel.vue          # 主上传面板（已重构）
+│   │   ├── UploadPanel/             # 上传面板子组件
+│   │   │   ├── UploadHeader.vue     # 头部区域（模式切换、AI配置）
+│   │   │   ├── UploadDropzone.vue   # 拖拽上传区域
+│   │   │   ├── UploadFileGrid.vue   # 文件网格容器
+│   │   │   ├── UploadFileItem.vue   # 单个文件卡片
+│   │   │   ├── upload-tooltip.scss  # AI tooltip 样式
+│   │   │   └── README.md            # 组件结构说明
 │   │   ├── ImagePreview.vue
 │   │   ├── WorkflowPanel.vue
 │   │   ├── WallpaperStatsBar.vue
+│   │   ├── UploadProgressModal.vue  # 上传进度弹窗
 │   │   └── ReleaseHistoryModal.vue
 │   ├── GlassCard.vue    # 毛玻璃卡片
 │   └── MainLayout.vue   # 主布局
@@ -127,21 +135,37 @@ src/
 │   ├── useAnimation.js
 │   └── useErrorHandler.js
 ├── config/              # 配置文件
-│   ├── ai-config.js     # AI 模型配置
-│   ├── ai-prompts.js    # AI 提示词模板
 │   ├── categories.js    # 分类配置
 │   └── subcategories.js # 子分类配置
 ├── router/              # 路由配置
 ├── services/            # API 服务
-│   ├── ai-providers/    # AI Provider 实现
-│   │   ├── base-provider.js      # Provider 基类
-│   │   ├── cloudflare-provider.js # Cloudflare AI
-│   │   ├── doubao-provider.js    # 豆包 AI
-│   │   └── index.js              # Provider 工厂
+│   ├── ai/              # AI 服务模块（已重构）
+│   │   ├── core/        # 核心功能
+│   │   │   ├── providers/           # AI Provider 实现
+│   │   │   │   ├── base-provider.js      # Provider 基类
+│   │   │   │   ├── cloudflare-provider.js # Cloudflare AI
+│   │   │   │   ├── doubao-provider.js    # 豆包 AI
+│   │   │   │   └── index.js              # Provider 工厂
+│   │   │   ├── image-processor.js   # 图片压缩处理
+│   │   │   └── index.js             # 核心功能导出
+│   │   ├── classifier/  # 分类服务
+│   │   │   ├── service.js           # 分类分析服务
+│   │   │   ├── prompts.js           # 提示词模板
+│   │   │   ├── config.js            # 模型配置
+│   │   │   └── index.js
+│   │   ├── assistant/   # AI 助手服务
+│   │   │   ├── service.js
+│   │   │   ├── prompts.js
+│   │   │   ├── config.js
+│   │   │   └── index.js
+│   │   └── index.js     # AI 服务统一导出
 │   ├── github.js        # GitHub API 封装
-│   └── categoryService.js
+│   ├── gistStorage.js   # Gist 存储服务
+│   └── localStorage.js  # 本地存储服务
 ├── stores/              # Pinia 状态管理
 │   ├── ai.js            # AI 分析状态
+│   ├── ai-classifier.js # AI 分类器状态
+│   ├── ai-assistant.js  # AI 助手状态
 │   ├── auth.js          # 认证状态
 │   ├── config.js        # 配置状态
 │   ├── credentials.js   # 凭证管理
@@ -149,13 +173,14 @@ src/
 │   ├── workflow.js      # 工作流状态
 │   └── history.js       # 历史记录
 ├── styles/              # 全局样式
+│   ├── index.scss       # 全局样式入口
 │   └── variables.scss   # SCSS 变量
 ├── utils/               # 工具函数
 │   ├── errorHandler.js  # 错误处理
-│   ├── prompt-builder.js # 提示词构建
-│   └── response-parser.js # 响应解析
+│   └── ...
 └── views/               # 页面视图
     ├── LoginView.vue
+    ├── CallbackView.vue
     ├── UploadView.vue
     ├── AIAssistantView.vue
     ├── AITestSimple.vue

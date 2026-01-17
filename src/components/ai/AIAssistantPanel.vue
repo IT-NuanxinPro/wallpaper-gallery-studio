@@ -209,20 +209,24 @@ import { ElMessage } from 'element-plus'
 import { UploadFilled } from '@element-plus/icons-vue'
 import { useAIStore } from '@/stores/ai'
 import { useCredentialsStore } from '@/stores/credentials'
+import { AI_PROVIDERS, PROVIDER_DISPLAY } from '@/services/ai/core'
 import {
   getModelList,
-  getModelsByProvider,
+  getModelByKey,
   getRecommendedModel,
+  CLASSIFIER_CONFIG,
   SPEED_LEVELS,
   ACCURACY_LEVELS,
-  COST_LEVELS,
-  AI_PROVIDERS,
-  PROVIDER_DISPLAY,
-  AI_CONFIG
-} from '@/config/ai-config'
+  COST_LEVELS
+} from '@/services/ai/classifier'
 import CredentialsConfig from '@/components/ai/CredentialsConfig.vue'
 import PromptTemplateSelector from '@/components/ai/PromptTemplateSelector.vue'
 import ResultCard from '@/components/ai/ResultCard.vue'
+
+// 根据 Provider 获取模型列表
+function getModelsByProvider(provider) {
+  return getModelList(provider)
+}
 
 const aiStore = useAIStore()
 const credentialsStore = useCredentialsStore()
@@ -234,7 +238,7 @@ const fileList = ref([])
 const progress = ref(0)
 const currentIndex = ref(0)
 const totalCount = ref(0)
-const currentProvider = ref(AI_CONFIG.defaultProvider)
+const currentProvider = ref(CLASSIFIER_CONFIG.defaultProvider)
 
 // Computed
 const modelList = computed(() => {

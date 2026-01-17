@@ -58,9 +58,9 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { ElMessageBox } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
-import UploadHeader from './UploadPanel/UploadHeader.vue'
-import UploadDropzone from './UploadPanel/UploadDropzone.vue'
-import UploadFileGrid from './UploadPanel/UploadFileGrid.vue'
+import UploadHeader from './UploadHeader.vue'
+import UploadDropzone from './UploadDropzone.vue'
+import UploadFileGrid from './UploadFileGrid.vue'
 
 const authStore = useAuthStore()
 

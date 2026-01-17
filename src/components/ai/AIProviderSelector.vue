@@ -69,8 +69,13 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { AI_PROVIDERS, PROVIDER_DISPLAY, getModelsByProvider } from '@/config/ai-models'
-import { validateCredentials } from '@/services/ai-classifier'
+import { AI_PROVIDERS, PROVIDER_DISPLAY } from '@/services/ai/core'
+import { getModelList, validateCredentials } from '@/services/ai/classifier'
+
+// 获取 Provider 对应的模型列表
+function getModelsByProvider(provider) {
+  return getModelList(provider)
+}
 
 const emit = defineEmits(['update:provider', 'update:model', 'update:credentials'])
 

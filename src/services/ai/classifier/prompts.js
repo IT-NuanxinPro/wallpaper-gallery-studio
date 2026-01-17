@@ -1,8 +1,87 @@
-import { PROMPT_TEMPLATES, replaceVariables } from '@/config/ai-prompts'
+/**
+ * 分类服务专用提示词
+ * 独立于 AI 助手的提示词配置
+ */
+
 import { CATEGORIES } from '@/config/categories'
 import { getThirdLevelCategories } from '@/config/subcategories'
 
-const SPECIALIZED_TEMPLATES = {
+/**
+ * 提示词模板配置
+ */
+export const PROMPT_TEMPLATES = {
+  default: {
+    id: 'default',
+    name: '分类 + 文件名',
+    description: '同时生成分类和文件名建议',
+    builtin: true,
+    variables: ['primaryCategory', 'secondaryList', 'thirdHints'],
+    template: `分析这张图片，返回JSON格式的分类结果。
+
+主分类：{{primaryCategory}}
+
+可选的二级分类：{{secondaryList}}
+
+三级分类选项：
+{{thirdHints}}
+
+规则：
+1. 二级分类：从上面列表中选择最匹配的
+2. 三级分类：优先选择具体风格，避免选"通用"
+3. 文件名：**中文长命名**（8-15个汉字），结构：修饰形容词 + 主体 + 场景或动作 + .jpg
+   - ❌拒绝太短（如"女孩.jpg"）
+   - ✅示例：阳光下奔跑的治愈系柴犬.jpg、身穿黑色长裙的卷发港风少女.jpg
+4. 关键词：3-5个中文词
+5. 描述：20-40字优美中文描述
+
+返回JSON（不要其他内容）：
+{
+  "secondary": "二级分类名称",
+  "third": "三级分类名称",
+  "keywords": ["关键词1", "关键词2", "关键词3"],
+  "filename": "修饰形容词+主体+场景或动作.jpg",
+  "description": "20-40字优美描述"
+}`
+  },
+
+  filenameOnly: {
+    id: 'filenameOnly',
+    name: '仅文件名',
+    description: '只生成文件名建议，不分类',
+    builtin: true,
+    variables: [],
+    template: `分析这张图片，生成中文文件名。
+
+规则：
+1. 文件名：**中文长命名**（8-15个汉字），结构：修饰形容词 + 主体 + 场景或动作 + .jpg
+   - ❌拒绝太短（如"女孩.jpg"）
+   - ✅示例：阳光下奔跑的治愈系柴犬.jpg、身穿黑色长裙的卷发港风少女.jpg、赛博朋克风格的都市霓虹夜景.jpg
+2. 关键词：3-5个中文词
+3. 描述：20-40字优美中文描述
+
+返回JSON（不要其他内容）：
+{
+  "keywords": ["关键词1", "关键词2", "关键词3"],
+  "filename": "修饰形容词+主体+场景或动作.jpg",
+  "description": "20-40字优美描述"
+}`
+  },
+
+  custom: {
+    id: 'custom',
+    name: '自定义',
+    description: '使用自定义提示词',
+    builtin: false,
+    variables: [],
+    template: ''
+  }
+}
+
+/**
+ * 系列专用的提示词模板
+ * 每个系列有不同的分类逻辑和判定规则
+ */
+export const SERIES_TEMPLATES = {
   desktop: `你是一位资深的视觉美学专家和壁纸分类大师。请分析图片，完成分类归档与元数据生成。
 
 ## 1. 现有分类体系 (System DB)
@@ -82,7 +161,7 @@ const SPECIALIZED_TEMPLATES = {
 
 ### 任务二：文案生成
 
-- **标题 (display_title)**：
+- **标题 (displayTitle)**:：
   - 8-15个汉字，高雅、富有诗意。
   - 即使是"魅力"类图片，标题也要唯美含蓄，禁止使用低俗词汇。
 
@@ -113,7 +192,7 @@ const SPECIALIZED_TEMPLATES = {
     "suggested_third": "建议三级(如具体IP名)",
     "reason": "提案理由"
   },
-  "display_title": "诗意中文标题",
+  "displayTitle": "诗意中文标题",
   "filenames": ["阳光下奔跑的治愈系柴犬.jpg", "草地上欢快玩耍的小柴犬.jpg"],
   "keywords": ["关键词1", "关键词2", "关键词3"],
   "description": "20-40字优美描述",
@@ -181,7 +260,7 @@ const SPECIALIZED_TEMPLATES = {
 
 ### 任务二：文案生成
 
-- **标题 (display_title)**：
+- **标题 (displayTitle)**:：
   - 8-15个汉字，高雅、富有诗意。
   - 即使是"魅力"类图片，标题也要唯美含蓄（如"月光下的黑色曼陀罗"，禁止使用低俗词汇）。
 
@@ -212,7 +291,7 @@ const SPECIALIZED_TEMPLATES = {
     "suggested_third": "建议三级(如具体IP名)",
     "reason": "提案理由"
   },
-  "display_title": "诗意中文标题",
+  "displayTitle": "诗意中文标题",
   "filenames": ["身穿黑色长裙的卷发港风少女.jpg", "夜色中优雅漫步的长发女孩.jpg"],
   "keywords": ["关键词1", "关键词2", "关键词3"],
   "description": "20-40字优美描述",
@@ -293,20 +372,20 @@ const SPECIALIZED_TEMPLATES = {
 
 ### 任务二：文案生成
 
-- **标题 (display_title)**：
+- **标题 (displayTitle)**:：
   - 8-15个汉字，高雅、富有诗意。
   - 头像类图片标题可以更简洁活泼。
 
 - **文件名 (filenames)**：
   - **提供两个不同的中文文件名**（8-15个汉字）。
-  - 禁止英文命名
+  - 禁止英文命名，禁止包含"头像"二字
   - 侧重于**具体描述**，方便检索。
-  - 结构：修饰形容词 + '主体' + '场景或动作' + '.jpg'。
-  - ❌拒绝太短（如"女孩.jpg"）。
+  - 结构：修饰形容词 + '主体' + '特征或风格' + '.jpg'。
+  - ❌拒绝太短（如"女孩.jpg"）、拒绝包含"头像"（如"可爱头像.jpg"）。
   - ✅示例：
-    - '阳光下奔跑的治愈系柴犬.jpg'
-    - '身穿黑色长裙的卷发港风少女.jpg'
-    - '赛博朋克风格的都市霓虹夜景.jpg'
+    - '可爱粉色系凯蒂猫卡通形象.jpg'
+    - '甜美风格Hello Kitty萌系插画.jpg'
+    - '治愈系柴犬阳光下奔跑.jpg'
 
 - **关键词 (keywords)**：
   - 3-5个精准中文词，包含风格定义词。
@@ -324,40 +403,36 @@ const SPECIALIZED_TEMPLATES = {
     "suggested_third": "建议三级(如具体IP名)",
     "reason": "提案理由"
   },
-  "display_title": "诗意中文标题",
-  "filenames": ["可爱粉色系凯蒂猫卡通头像.jpg", "甜美风格Hello Kitty头像.jpg"],
+  "displayTitle": "诗意中文标题",
+  "filenames": ["可爱粉色系凯蒂猫卡通形象.jpg", "甜美风格Hello Kitty萌系插画.jpg"],
   "keywords": ["关键词1", "关键词2", "关键词3"],
   "description": "20-40字优美描述",
   "reasoning": "逻辑链说明。例如：'识别出Hello Kitty角色特征，根据规则A1，判定为[IP形象/Hello Kitty]'"
 }`
 }
 
-export function buildPrompt(templateId, primaryCategory, customPrompt = '') {
-  if (templateId === 'custom') {
-    return customPrompt
-  }
+/**
+ * 替换模板中的变量
+ * @param {string} template - 模板字符串
+ * @param {Object} variables - 变量对象
+ * @returns {string} 替换后的字符串
+ */
+export function replaceVariables(template, variables) {
+  let result = template
 
-  if (templateId === 'default') {
-    const specialTemplate = SPECIALIZED_TEMPLATES[primaryCategory]
-    if (specialTemplate) {
-      const variables = buildVariables(primaryCategory)
-      return replaceVariables(specialTemplate, variables)
-    }
-  }
+  Object.entries(variables).forEach(([key, value]) => {
+    const regex = new RegExp(`\\{\\{${key}\\}\\}`, 'g')
+    result = result.replace(regex, value)
+  })
 
-  const template = PROMPT_TEMPLATES[templateId]
-  if (!template) {
-    throw new Error(`未找到模板: ${templateId}`)
-  }
-
-  if (!template.variables || template.variables.length === 0) {
-    return template.template
-  }
-
-  const variables = buildVariables(primaryCategory)
-  return replaceVariables(template.template, variables)
+  return result
 }
 
+/**
+ * 构建变量
+ * @param {string} primaryCategory - 主分类
+ * @returns {Object} 变量对象
+ */
 export function buildVariables(primaryCategory) {
   const secondaryCategories = CATEGORIES[primaryCategory]?.subcategories || []
   const secondaryList = secondaryCategories.map(cat => cat.value).join('、')
@@ -375,6 +450,46 @@ export function buildVariables(primaryCategory) {
   }
 }
 
+/**
+ * 构建分类提示词
+ * @param {string} templateId - 模板 ID
+ * @param {string} primaryCategory - 主分类（系列名）
+ * @param {string} customPrompt - 自定义提示词（可选）
+ * @returns {string} 构建的提示词
+ */
+export function buildPrompt(templateId, primaryCategory, customPrompt = '') {
+  if (templateId === 'custom') {
+    return customPrompt
+  }
+
+  // 对于 default 模板，使用系列专用模板
+  if (templateId === 'default') {
+    const specialTemplate = SERIES_TEMPLATES[primaryCategory]
+    if (specialTemplate) {
+      const variables = buildVariables(primaryCategory)
+      return replaceVariables(specialTemplate, variables)
+    }
+  }
+
+  // 使用通用模板
+  const template = PROMPT_TEMPLATES[templateId]
+  if (!template) {
+    throw new Error(`未找到模板: ${templateId}`)
+  }
+
+  if (!template.variables || template.variables.length === 0) {
+    return template.template
+  }
+
+  const variables = buildVariables(primaryCategory)
+  return replaceVariables(template.template, variables)
+}
+
+/**
+ * 验证提示词
+ * @param {string} prompt - 提示词
+ * @returns {boolean} 是否有效
+ */
 export function validatePrompt(prompt) {
   if (!prompt || typeof prompt !== 'string') {
     return false
@@ -387,6 +502,30 @@ export function validatePrompt(prompt) {
   return true
 }
 
+/**
+ * 获取模板列表
+ * @returns {Array} 模板列表
+ */
+export function getTemplateList() {
+  return Object.values(PROMPT_TEMPLATES)
+}
+
+/**
+ * 根据 ID 获取模板
+ * @param {string} templateId - 模板 ID
+ * @returns {Object|null} 模板对象
+ */
+export function getTemplateById(templateId) {
+  return PROMPT_TEMPLATES[templateId] || null
+}
+
+/**
+ * 预览提示词
+ * @param {string} templateId - 模板 ID
+ * @param {string} primaryCategory - 主分类
+ * @param {string} customPrompt - 自定义提示词
+ * @returns {Object} 预览结果
+ */
 export function previewPrompt(templateId, primaryCategory, customPrompt = '') {
   try {
     const prompt = buildPrompt(templateId, primaryCategory, customPrompt)
@@ -402,7 +541,11 @@ export function previewPrompt(templateId, primaryCategory, customPrompt = '') {
   } catch (error) {
     return {
       success: false,
-      error: error.message
+      error: error.message,
+      prompt: '',
+      isValid: false,
+      length: 0,
+      lines: 0
     }
   }
 }

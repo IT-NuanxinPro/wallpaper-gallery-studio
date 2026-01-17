@@ -27,5 +27,21 @@ export default defineConfig({
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url))
     }
+  },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          // 将 Vue 核心库分离
+          'vue-vendor': ['vue', 'vue-router', 'pinia'],
+          // 将 Element Plus 分离
+          'element-plus': ['element-plus', '@element-plus/icons-vue'],
+          // 将工具库分离
+          utils: ['@vueuse/core', 'gsap']
+        }
+      }
+    },
+    // 提高 chunk 大小警告阈值（已经做了分割，可以适当提高）
+    chunkSizeWarningLimit: 600
   }
 })

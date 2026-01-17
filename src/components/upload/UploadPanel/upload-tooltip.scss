@@ -1,0 +1,47 @@
+@use '@/styles/variables' as *;
+
+// AI 分析悬浮提示样式（全局样式，因为 el-tooltip 的 popper 在 body 下）
+.upload-panel__ai-tooltip {
+  max-width: 320px;
+
+  .ai-tooltip-content {
+    padding: $spacing-2;
+  }
+
+  .ai-tooltip-section {
+    margin-bottom: $spacing-2;
+
+    &:last-child {
+      margin-bottom: 0;
+    }
+  }
+
+  .ai-tooltip-label {
+    display: block;
+    font-size: $font-size-xs;
+    color: $gray-400;
+    margin-bottom: $spacing-1;
+  }
+
+  .ai-tooltip-value {
+    display: block;
+    font-size: $font-size-sm;
+    color: $white;
+    word-break: break-word;
+  }
+
+  .ai-tooltip-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: $spacing-1;
+  }
+
+  .ai-tooltip-tag {
+    padding: 2px 8px;
+    background: rgba($primary-start, 0.2);
+    border: 1px solid rgba($primary-start, 0.4);
+    border-radius: $radius-sm;
+    font-size: $font-size-xs;
+    color: $primary-start;
+  }
+}

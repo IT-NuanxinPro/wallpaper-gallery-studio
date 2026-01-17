@@ -6,7 +6,12 @@
 
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { AI_CONFIG, AI_PROVIDERS } from '@/config/ai-config'
+import { AI_PROVIDERS } from '@/services/ai/core'
+
+// 默认配置
+const AI_CONFIG = {
+  workerUrl: 'https://ai-proxy.han1569250882.workers.dev'
+}
 
 const STORAGE_KEY = 'ai_credentials'
 const ENCRYPTION_KEY = 'ai_credentials_encryption_key'
@@ -104,6 +109,42 @@ export const useCredentialsStore = defineStore('credentials', () => {
       return '环境变量'
     }
     return '手动输入'
+  })
+
+  // 默认 Provider（优先使用豆包，因为更稳定）
+  const defaultProvider = computed(() => {
+    // 优先检查豆包
+    if (hasDoubaoEnvCredentials.value || doubaoApiKey.value) {
+      return AI_PROVIDERS.DOUBAO
+    }
+    // 其次检查 Cloudflare
+    if (hasCloudflareEnvCredentials.value || (accountId.value && apiToken.value)) {
+      return AI_PROVIDERS.CLOUDFLARE
+    }
+    // 默认返回豆包
+    return AI_PROVIDERS.DOUBAO
+  })
+
+  // 可用的 Provider 列表
+  const availableProviders = computed(() => {
+    const providers = []
+    if (hasDoubaoEnvCredentials.value || doubaoApiKey.value) {
+      providers.push({
+        key: AI_PROVIDERS.DOUBAO,
+        name: '豆包 AI',
+        icon: '🫘',
+        source: hasDoubaoEnvCredentials.value ? '环境变量' : '手动配置'
+      })
+    }
+    if (hasCloudflareEnvCredentials.value || (accountId.value && apiToken.value)) {
+      providers.push({
+        key: AI_PROVIDERS.CLOUDFLARE,
+        name: 'Cloudflare AI',
+        icon: '☁️',
+        source: hasCloudflareEnvCredentials.value ? '环境变量' : '手动配置'
+      })
+    }
+    return providers
   })
 
   /**
@@ -480,6 +521,8 @@ export const useCredentialsStore = defineStore('credentials', () => {
     cloudflareCredentials,
     doubaoCredentials,
     credentialsSource,
+    defaultProvider,
+    availableProviders,
     isProduction,
 
     // Actions

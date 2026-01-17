@@ -57,6 +57,12 @@
             :progress="uploadStore.totalProgress"
             :pending-count="uploadStore.pendingFiles.length"
             :error-count="uploadStore.errorFiles.length"
+            :upload-mode="uploadStore.uploadMode"
+            :current-series="series"
+            :ai-config="aiConfig"
+            :ai-analyzing="uploadStore.aiAnalyzing"
+            :ai-analyzing-count="uploadStore.aiAnalyzingCount"
+            :available-providers="availableProviders"
             @add-files="addFiles"
             @remove="uploadStore.removeFile"
             @remove-batch="uploadStore.removeFiles"
@@ -65,6 +71,11 @@
             @upload="handleUpload"
             @select="selectPreview"
             @change-target="handleChangeTarget"
+            @mode-change="handleModeChange"
+            @series-change="handleSeriesChange"
+            @apply-all-ai="handleApplyAllAi"
+            @provider-change="handleProviderChange"
+            @model-change="handleModelChange"
           />
         </div>
 
@@ -124,7 +135,7 @@
 
 <script setup>
 import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import MainLayout from '@/components/MainLayout.vue'
 import HeaderStats from '@/components/upload/HeaderStats.vue'
 import CategorySidebar from '@/components/upload/CategorySidebar.vue'
@@ -143,6 +154,7 @@ import { useConfigStore } from '@/stores/config'
 import { useUploadStore } from '@/stores/upload'
 import { useAuthStore } from '@/stores/auth'
 import { useWorkflowStore } from '@/stores/workflow'
+import { useCredentialsStore } from '@/stores/credentials'
 import { useAnimation } from '@/composables/useAnimation'
 import { debounce } from '@/utils/debounce'
 
@@ -150,6 +162,7 @@ const configStore = useConfigStore()
 const uploadStore = useUploadStore()
 const authStore = useAuthStore()
 const workflowStore = useWorkflowStore()
+const credentialsStore = useCredentialsStore()
 const { staggerIn } = useAnimation()
 
 const viewRef = ref(null)
@@ -174,6 +187,10 @@ const stats = reactive({ desktop: 0, mobile: 0, avatar: 0, total: 0 })
 
 const uploading = computed(() => uploadStore.uploading)
 const rateLimit = computed(() => uploadStore.getRateLimit())
+
+// AI 配置
+const aiConfig = computed(() => uploadStore.getCurrentAiConfig())
+const availableProviders = computed(() => credentialsStore.availableProviders)
 
 const categoryCache = new Map()
 const CACHE_TTL = 5 * 60 * 1000
@@ -372,6 +389,45 @@ function handleTargetConfirm({ series: newSeries, l1, l2 }) {
   }
   showTargetModal.value = false
   targetEditFile.value = null
+}
+
+// 上传模式切换
+function handleModeChange(mode) {
+  uploadStore.setUploadMode(mode)
+  // 切换到手动模式时，如果没有选择目录，清空新添加的文件的目标路径
+  if (mode === 'manual' && !uploadStore.targetPath) {
+    ElMessage.info('请在左侧选择上传目录')
+  }
+}
+
+// 系列切换（AI 模式下）
+function handleSeriesChange(newSeries) {
+  series.value = newSeries
+  uploadStore.setTarget(newSeries, '', '')
+  // AI 模式下不需要加载分类树
+}
+
+// 应用所有 AI 推荐
+function handleApplyAllAi() {
+  const count = uploadStore.applyAllAiRecommendations()
+  if (count > 0) {
+    ElMessage.success(`已应用 ${count} 个 AI 推荐分类`)
+  } else {
+    ElMessage.info('没有待应用的 AI 推荐')
+  }
+}
+
+// AI Provider 切换
+function handleProviderChange(provider) {
+  uploadStore.setAiProvider(provider)
+  ElMessage.success(`已切换到 ${provider === 'doubao' ? '豆包 AI' : 'Cloudflare AI'}`)
+}
+
+// AI 模型切换
+function handleModelChange(modelKey) {
+  uploadStore.setAiModel(modelKey)
+  const config = uploadStore.getCurrentAiConfig()
+  ElMessage.success(`已切换到 ${config.modelName}`)
 }
 
 async function handleRetry() {

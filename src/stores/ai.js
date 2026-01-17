@@ -1,64 +1,27 @@
+/**
+ * AI Store (兼容层)
+ * 保持向后兼容，实际使用新的分类器模块
+ * @deprecated 请使用 useAIClassifierStore 或 useAIAssistantStore
+ */
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { AI_CONFIG, getModelByKey, AI_PROVIDERS } from '@/config/ai-config'
-import { buildPrompt } from '@/utils/prompt-builder'
-import { parseResponse } from '@/utils/response-parser'
 import { useCredentialsStore } from './credentials'
-import { AIProviderFactory } from '@/services/ai-providers'
+import { AIProviderFactory, AI_PROVIDERS, compressImage, IMAGE_CONFIG } from '@/services/ai/core'
+import { buildPrompt, getModelByKey, CLASSIFIER_CONFIG } from '@/services/ai/classifier'
+
+// 兼容导出
+export { AI_PROVIDERS }
 
 export const useAIStore = defineStore('ai', () => {
   const analyzing = ref(false)
-  const currentModel = ref(AI_CONFIG.defaultModel)
-  const currentProvider = ref(AI_CONFIG.defaultProvider)
-  const promptTemplate = ref(AI_CONFIG.defaultPromptTemplate)
+  const currentModel = ref(CLASSIFIER_CONFIG.defaultModel)
+  const currentProvider = ref(CLASSIFIER_CONFIG.defaultProvider)
+  const promptTemplate = ref(CLASSIFIER_CONFIG.defaultPromptTemplate)
   const results = ref([])
   const error = ref(null)
 
   const hasResults = computed(() => results.value.length > 0)
   const currentModelConfig = computed(() => getModelByKey(currentModel.value))
-
-  async function compressImage(file) {
-    return new Promise((resolve, reject) => {
-      if (!file.type.startsWith('image/')) {
-        reject(new Error('请上传图片文件'))
-        return
-      }
-
-      const reader = new FileReader()
-      reader.onload = e => {
-        // eslint-disable-next-line no-undef
-        const img = new Image()
-        img.onload = () => {
-          const canvas = document.createElement('canvas')
-          const ctx = canvas.getContext('2d')
-
-          let width = img.width
-          let height = img.height
-          const maxSize = AI_CONFIG.image.maxSize
-
-          if (width > maxSize || height > maxSize) {
-            if (width > height) {
-              height = (height / width) * maxSize
-              width = maxSize
-            } else {
-              width = (width / height) * maxSize
-              height = maxSize
-            }
-          }
-
-          canvas.width = width
-          canvas.height = height
-          ctx.drawImage(img, 0, 0, width, height)
-
-          resolve(canvas.toDataURL(AI_CONFIG.image.format, AI_CONFIG.image.quality))
-        }
-        img.onerror = () => reject(new Error('图片加载失败'))
-        img.src = e.target.result
-      }
-      reader.onerror = () => reject(new Error('文件读取失败'))
-      reader.readAsDataURL(file)
-    })
-  }
 
   /**
    * 调用 AI API（支持多 Provider）
@@ -106,7 +69,7 @@ export const useAIStore = defineStore('ai', () => {
     error.value = null
 
     try {
-      const imageBase64 = await compressImage(file)
+      const imageBase64 = await compressImage(file, IMAGE_CONFIG)
       const prompt = buildPrompt(promptTemplate.value, primaryCategory, customPrompt)
       const analysis = await callAI(imageBase64, prompt)
 
@@ -121,14 +84,14 @@ export const useAIStore = defineStore('ai', () => {
         third: analysis.third || '通用',
         filenameSuggestions: analysis.filenameSuggestions || [file.name],
         selectedFilename: analysis.filenameSuggestions?.[0] || file.name,
+        filename: analysis.filename,
         description: analysis.description || '',
         keywords: analysis.keywords || [],
         confidence: analysis.confidence || 0,
         model: currentModel.value,
         provider: currentProvider.value,
         promptTemplate: promptTemplate.value,
-        // 新增字段
-        display_title: analysis.display_title || null,
+        displayTitle: analysis.displayTitle || null,
         is_perfect_match: analysis.is_perfect_match,
         new_category_proposal: analysis.new_category_proposal || null,
         reasoning: analysis.reasoning || null,
