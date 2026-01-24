@@ -28,6 +28,9 @@ export const useCredentialsStore = defineStore('credentials', () => {
   // 豆包凭证
   const doubaoApiKey = ref('')
 
+  // Groq 凭证
+  const groqApiKey = ref('')
+
   const encrypted = ref(true)
   const lastVerified = ref(null)
   const loading = ref(false)
@@ -52,13 +55,21 @@ export const useCredentialsStore = defineStore('credentials', () => {
     return !!envApiKey
   })
 
+  // 环境变量中是否有 Groq 凭证
+  const hasGroqEnvCredentials = computed(() => {
+    const envApiKey = import.meta.env.VITE_GROQ_API_KEY
+    return !!envApiKey
+  })
+
   // 是否有任何凭证
   const hasCredentials = computed(() => {
     return (
       hasCloudflareEnvCredentials.value ||
       hasDoubaoEnvCredentials.value ||
+      hasGroqEnvCredentials.value ||
       !!(accountId.value && apiToken.value) ||
-      !!doubaoApiKey.value
+      !!doubaoApiKey.value ||
+      !!groqApiKey.value
     )
   })
 
@@ -94,40 +105,72 @@ export const useCredentialsStore = defineStore('credentials', () => {
     }
   })
 
+  // 获取 Groq 凭证
+  const groqCredentials = computed(() => {
+    // 优先使用环境变量
+    if (hasGroqEnvCredentials.value) {
+      return {
+        apiKey: import.meta.env.VITE_GROQ_API_KEY
+      }
+    }
+    // 否则使用手动输入的
+    return {
+      apiKey: groqApiKey.value
+    }
+  })
+
   // 根据 Provider 获取凭证
   function getCredentialsByProvider(provider) {
     if (provider === AI_PROVIDERS.CLOUDFLARE) {
       return cloudflareCredentials.value
     } else if (provider === AI_PROVIDERS.DOUBAO) {
       return doubaoCredentials.value
+    } else if (provider === AI_PROVIDERS.GROQ) {
+      return groqCredentials.value
     }
     return null
   }
 
   const credentialsSource = computed(() => {
-    if (hasCloudflareEnvCredentials.value || hasDoubaoEnvCredentials.value) {
+    if (
+      hasCloudflareEnvCredentials.value ||
+      hasDoubaoEnvCredentials.value ||
+      hasGroqEnvCredentials.value
+    ) {
       return '环境变量'
     }
     return '手动输入'
   })
 
-  // 默认 Provider（优先使用豆包，因为更稳定）
+  // 默认 Provider（优先使用 Groq，其次豆包，最后 Cloudflare）
   const defaultProvider = computed(() => {
-    // 优先检查豆包
+    // 优先检查 Groq
+    if (hasGroqEnvCredentials.value || groqApiKey.value) {
+      return AI_PROVIDERS.GROQ
+    }
+    // 其次检查豆包
     if (hasDoubaoEnvCredentials.value || doubaoApiKey.value) {
       return AI_PROVIDERS.DOUBAO
     }
-    // 其次检查 Cloudflare
+    // 最后检查 Cloudflare
     if (hasCloudflareEnvCredentials.value || (accountId.value && apiToken.value)) {
       return AI_PROVIDERS.CLOUDFLARE
     }
-    // 默认返回豆包
-    return AI_PROVIDERS.DOUBAO
+    // 默认返回 Groq
+    return AI_PROVIDERS.GROQ
   })
 
   // 可用的 Provider 列表
   const availableProviders = computed(() => {
     const providers = []
+    if (hasGroqEnvCredentials.value || groqApiKey.value) {
+      providers.push({
+        key: AI_PROVIDERS.GROQ,
+        name: 'Groq AI',
+        icon: '⚡',
+        source: hasGroqEnvCredentials.value ? '环境变量' : '手动配置'
+      })
+    }
     if (hasDoubaoEnvCredentials.value || doubaoApiKey.value) {
       providers.push({
         key: AI_PROVIDERS.DOUBAO,
@@ -275,12 +318,14 @@ export const useCredentialsStore = defineStore('credentials', () => {
    * @param {string} credentials.accountId - Cloudflare Account ID
    * @param {string} credentials.apiToken - Cloudflare API Token
    * @param {string} credentials.doubaoApiKey - 豆包 API Key
+   * @param {string} credentials.groqApiKey - Groq API Key
    */
   async function saveCredentials(credentials) {
     try {
       if (credentials.accountId) accountId.value = credentials.accountId
       if (credentials.apiToken) apiToken.value = credentials.apiToken
       if (credentials.doubaoApiKey) doubaoApiKey.value = credentials.doubaoApiKey
+      if (credentials.groqApiKey) groqApiKey.value = credentials.groqApiKey
 
       const encryptedData = {}
 
@@ -292,6 +337,9 @@ export const useCredentialsStore = defineStore('credentials', () => {
       }
       if (credentials.doubaoApiKey) {
         encryptedData.doubaoApiKey = await encryptData(credentials.doubaoApiKey)
+      }
+      if (credentials.groqApiKey) {
+        encryptedData.groqApiKey = await encryptData(credentials.groqApiKey)
       }
 
       const encryptedCredentials = {
@@ -328,6 +376,7 @@ export const useCredentialsStore = defineStore('credentials', () => {
       const envCloudflareApiToken = import.meta.env.VITE_CLOUDFLARE_API_TOKEN
       const envWorkerUrl = import.meta.env.VITE_WORKER_URL
       const envDoubaoApiKey = import.meta.env.VITE_DOUBAO_API_KEY
+      const envGroqApiKey = import.meta.env.VITE_GROQ_API_KEY
 
       if (envCloudflareAccountId && envCloudflareApiToken) {
         console.log('[Credentials] Loading Cloudflare credentials from environment')
@@ -343,8 +392,18 @@ export const useCredentialsStore = defineStore('credentials', () => {
         mode.value = 'env'
       }
 
+      if (envGroqApiKey) {
+        console.log('[Credentials] Loading Groq credentials from environment')
+        groqApiKey.value = envGroqApiKey
+        mode.value = 'env'
+      }
+
       // 如果环境变量中有凭证，直接返回
-      if (hasCloudflareEnvCredentials.value || hasDoubaoEnvCredentials.value) {
+      if (
+        hasCloudflareEnvCredentials.value ||
+        hasDoubaoEnvCredentials.value ||
+        hasGroqEnvCredentials.value
+      ) {
         encrypted.value = false
         loaded.value = true
         return true
@@ -372,11 +431,15 @@ export const useCredentialsStore = defineStore('credentials', () => {
         if (credentials.doubaoApiKey) {
           doubaoApiKey.value = await decryptData(credentials.doubaoApiKey)
         }
+        if (credentials.groqApiKey) {
+          groqApiKey.value = await decryptData(credentials.groqApiKey)
+        }
       } else {
         // 兼容旧版本未加密的数据
         if (credentials.accountId) accountId.value = credentials.accountId
         if (credentials.apiToken) apiToken.value = credentials.apiToken
         if (credentials.doubaoApiKey) doubaoApiKey.value = credentials.doubaoApiKey
+        if (credentials.groqApiKey) groqApiKey.value = credentials.groqApiKey
       }
 
       mode.value = 'manual'
@@ -474,6 +537,8 @@ export const useCredentialsStore = defineStore('credentials', () => {
   function clearCredentials() {
     accountId.value = ''
     apiToken.value = ''
+    doubaoApiKey.value = ''
+    groqApiKey.value = ''
     mode.value = 'manual'
     lastVerified.value = null
     loaded.value = false
@@ -508,6 +573,7 @@ export const useCredentialsStore = defineStore('credentials', () => {
     accountId,
     apiToken,
     doubaoApiKey,
+    groqApiKey,
     workerUrl,
     encrypted,
     lastVerified,
@@ -518,8 +584,10 @@ export const useCredentialsStore = defineStore('credentials', () => {
     hasCredentials,
     hasCloudflareEnvCredentials,
     hasDoubaoEnvCredentials,
+    hasGroqEnvCredentials,
     cloudflareCredentials,
     doubaoCredentials,
+    groqCredentials,
     credentialsSource,
     defaultProvider,
     availableProviders,

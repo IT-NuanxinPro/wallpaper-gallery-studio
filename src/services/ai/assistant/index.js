@@ -13,7 +13,10 @@ export {
   ASSISTANT_MODELS,
   getModelList,
   getModelByKey,
-  getRecommendedModel
+  getRecommendedModel,
+  SPEED_LEVELS,
+  ACCURACY_LEVELS,
+  COST_LEVELS
 } from './config'
 
 // 提示词

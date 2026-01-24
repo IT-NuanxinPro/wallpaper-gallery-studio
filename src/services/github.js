@@ -194,16 +194,33 @@ class GitHubService {
     try {
       const data = await this.request(`/repos/${owner}/${repo}`)
 
+      console.log('[GitHub] 仓库权限检查:', {
+        repo: `${owner}/${repo}`,
+        permissions: data.permissions
+      })
+
       if (data.permissions) {
-        if (data.permissions.admin) return 'admin'
-        if (data.permissions.push) return 'write'
-        if (data.permissions.pull) return 'read'
+        if (data.permissions.admin) {
+          console.log('[GitHub] 检测到管理员权限')
+          return 'admin'
+        }
+        if (data.permissions.push) {
+          console.log('[GitHub] 检测到写入权限')
+          return 'write'
+        }
+        if (data.permissions.pull) {
+          console.log('[GitHub] 检测到读取权限')
+          return 'read'
+        }
+        console.log('[GitHub] 无权限')
         return 'none'
       }
 
+      console.log('[GitHub] 无 permissions 字段，默认为读取权限')
       return 'read'
     } catch (error) {
       if (error.status === 404) {
+        console.log('[GitHub] 仓库不存在或无访问权限')
         return 'none'
       }
       throw error

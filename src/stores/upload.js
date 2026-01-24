@@ -71,7 +71,7 @@ export const useUploadStore = defineStore('upload', () => {
 
   // 生成唯一 ID
   function generateId() {
-    return Date.now().toString(36) + Math.random().toString(36).substr(2)
+    return Date.now().toString(36) + Math.random().toString(36).substring(2)
   }
 
   // 获取文件扩展名
@@ -355,7 +355,6 @@ export const useUploadStore = defineStore('upload', () => {
   function removeFile(id) {
     const index = files.value.findIndex(f => f.id === id)
     if (index > -1) {
-      const file = files.value[index]
       // 释放预览 URL（使用PreviewManager）
       previewManager.revokePreview(id)
       // 从数组中移除（包括 aiMetadata 等所有数据）
@@ -749,7 +748,7 @@ export const useUploadStore = defineStore('upload', () => {
 
     // 生成文件名（时间戳 + 随机数）
     const timestamp = Date.now()
-    const random = Math.random().toString(36).substr(2, 6)
+    const random = Math.random().toString(36).substring(2, 8)
     const pendingFilename = `${timestamp}-${random}.json`
     const pendingPath = `${METADATA_REPO.pendingDir}/${pendingFilename}`
 

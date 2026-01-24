@@ -6,74 +6,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Wallpaper Gallery Studio - 优雅的壁纸上传与管理体验" />
     <title>Wallpaper Gallery · Studio</title>
-    <style>
-      /* 加载动画样式 */
-      #app-loading {
-        position: fixed;
-        inset: 0;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-        z-index: 9999;
-        transition: opacity 0.3s ease;
-      }
-
-      #app-loading.fade-out {
-        opacity: 0;
-        pointer-events: none;
-      }
-
-      .loading-spinner {
-        width: 48px;
-        height: 48px;
-        border: 3px solid rgba(139, 92, 246, 0.2);
-        border-top-color: #8b5cf6;
-        border-radius: 50%;
-        animation: spin 0.8s linear infinite;
-      }
-
-      .loading-text {
-        margin-top: 24px;
-        font-size: 14px;
-        color: #94a3b8;
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      }
-
-      .loading-logo {
-        font-size: 32px;
-        margin-bottom: 16px;
-        animation: pulse 2s ease-in-out infinite;
-      }
-
-      @keyframes spin {
-        to {
-          transform: rotate(360deg);
-        }
-      }
-
-      @keyframes pulse {
-        0%,
-        100% {
-          opacity: 1;
-          transform: scale(1);
-        }
-        50% {
-          opacity: 0.8;
-          transform: scale(0.95);
-        }
-      }
-    </style>
   </head>
   <body>
     <div id="app"></div>
-    <!-- 加载动画 -->
-    <div id="app-loading">
-      <div class="loading-logo">🎨</div>
-      <div class="loading-spinner"></div>
-      <div class="loading-text">加载中...</div>
-    </div>
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>

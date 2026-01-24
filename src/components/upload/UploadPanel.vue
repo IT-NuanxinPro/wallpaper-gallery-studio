@@ -14,7 +14,7 @@
       :uploading="uploading"
       :progress="progress"
       :can-upload="authStore.canUpload"
-      :can-start-upload="canUpload"
+      :can-start-upload="canStartUpload"
       @mode-change="handleModeChange"
       @series-change="$emit('series-change', $event)"
       @provider-change="$emit('provider-change', $event)"
@@ -32,6 +32,7 @@
         :compact="files.length > 0"
         :uploading="uploading"
         :can-add-files="canAddFiles"
+        :can-upload="props.canUpload"
         :icon="dropzoneIcon"
         :text="dropzoneText"
         @add-files="handleAddFiles"
@@ -77,7 +78,8 @@ const props = defineProps({
   aiConfig: { type: Object, default: null },
   aiAnalyzing: { type: Boolean, default: false },
   aiAnalyzingCount: { type: Number, default: 0 },
-  availableProviders: { type: Array, default: () => [] }
+  availableProviders: { type: Array, default: () => [] },
+  canUpload: { type: Boolean, default: true } // 新增：是否有上传权限
 })
 
 const emit = defineEmits([
@@ -127,8 +129,8 @@ const dropzoneText = computed(() => {
   return props.targetPath ? '拖拽图片或文件夹到此处' : '请先选择分类'
 })
 
-// 是否可以上传
-const canUpload = computed(() => {
+// 是否可以开始上传（所有文件都有目标路径）
+const canStartUpload = computed(() => {
   if (props.uploading) return false
   if (props.pendingCount === 0) return false
 
@@ -154,6 +156,9 @@ onUnmounted(() => {
 
 // 处理添加文件
 function handleAddFiles(files) {
+  if (!props.canUpload) {
+    return // 已经在 UploadDropzone 中提示过了
+  }
   emit('add-files', files)
 }
 

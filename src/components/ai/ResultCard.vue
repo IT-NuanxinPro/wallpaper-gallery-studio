@@ -12,121 +12,145 @@
           </div>
         </div>
         <div class="info-section">
-          <div v-if="result.promptTemplate !== 'filenameOnly'" class="category-row">
-            <el-tag type="primary" effect="dark">{{ result.primary }}</el-tag>
-            <span class="arrow">›</span>
-            <el-tag type="success" effect="dark">{{ result.secondary }}</el-tag>
-            <span class="arrow">›</span>
-            <el-tag type="warning" effect="dark">{{ result.third }}</el-tag>
-          </div>
-          <div class="filename-section">
-            <div class="section-label">文件名建议</div>
-            <div class="filename-chips">
-              <div
-                v-for="(name, index) in result.filenameSuggestions"
-                :key="index"
-                class="filename-chip"
-                :class="{ active: selectedFilename === name }"
-                @click="selectFilename(name)"
-              >
-                <span class="filename-text">{{ name }}</span>
-                <el-icon class="copy-icon" @click.stop="copyFilename(name)"
-                  ><CopyDocument
-                /></el-icon>
+          <!-- Cloudflare Markdown 渲染模式 -->
+          <template v-if="isMarkdownResponse">
+            <div class="markdown-result-section">
+              <div class="markdown-header">
+                <el-tag type="success" size="small">
+                  <span class="tag-icon">🤖</span>
+                  {{ modelName }} - Markdown 分析结果
+                </el-tag>
               </div>
+              <div class="markdown-content-inline" v-html="renderedMarkdown"></div>
             </div>
-          </div>
+          </template>
 
-          <!-- 诗意标题 -->
-          <div v-if="result.displayTitle" class="title-section">
-            <div class="section-label">诗意标题</div>
-            <div class="display-title">{{ result.displayTitle }}</div>
-          </div>
-
-          <div class="detail-row">
-            <div class="description">
-              <span class="label">描述</span>
-              <span class="value">{{ result.description }}</span>
+          <!-- 标准结构化显示模式 -->
+          <template v-else>
+            <div v-if="result.promptTemplate !== 'filenameOnly'" class="category-row">
+              <el-tag type="primary" effect="dark">{{ result.primary }}</el-tag>
+              <span class="arrow">›</span>
+              <el-tag type="success" effect="dark">{{ result.secondary }}</el-tag>
+              <span class="arrow">›</span>
+              <el-tag type="warning" effect="dark">{{ result.third }}</el-tag>
             </div>
-            <div v-if="result.keywords.length" class="keywords">
-              <el-tag v-for="kw in result.keywords" :key="kw" size="small" effect="plain">{{
-                kw
-              }}</el-tag>
-            </div>
-          </div>
-
-          <!-- 分类匹配度 -->
-          <div v-if="result.is_perfect_match !== undefined" class="match-section">
-            <el-tag :type="result.is_perfect_match ? 'success' : 'warning'" size="small">
-              {{ result.is_perfect_match ? '✓ 完美匹配' : '⚠ 近似匹配' }}
-            </el-tag>
-          </div>
-
-          <!-- 新分类提案 -->
-          <div
-            v-if="result.new_category_proposal && result.new_category_proposal.suggested_third"
-            class="proposal-section"
-          >
-            <div class="section-label">💡 新分类建议</div>
-            <div class="proposal-content">
-              <div class="proposal-path">
-                <el-tag type="info" size="small">{{
-                  result.new_category_proposal.suggested_secondary || result.secondary
-                }}</el-tag>
-                <span class="arrow">›</span>
-                <el-tag type="info" size="small">{{
-                  result.new_category_proposal.suggested_third
-                }}</el-tag>
-              </div>
-              <div class="proposal-reason">{{ result.new_category_proposal.reason }}</div>
-            </div>
-          </div>
-
-          <!-- 分类逻辑 -->
-          <div v-if="result.reasoning" class="reasoning-section">
-            <div class="section-label">🧠 分类逻辑</div>
-            <div class="reasoning-content">{{ result.reasoning }}</div>
-          </div>
-
-          <div class="footer-section">
-            <div class="meta-row">
-              <div class="meta-item">
-                <span class="meta-icon">🤖</span>
-                <span class="meta-value model-name">{{ modelName }}</span>
-              </div>
-              <div class="meta-item">
-                <span class="meta-icon">⏱️</span>
-                <span class="meta-value">{{ formatTime(result.timestamp) }}</span>
-              </div>
-              <div class="meta-item">
-                <span class="meta-icon">📊</span>
-                <el-tag :type="confidenceType" size="small" effect="dark"
-                  >{{ (result.confidence * 100).toFixed(0) }}%</el-tag
+            <div class="filename-section">
+              <div class="section-label">文件名建议</div>
+              <div class="filename-chips">
+                <div
+                  v-for="(name, index) in result.filenameSuggestions"
+                  :key="index"
+                  class="filename-chip"
+                  :class="{ active: selectedFilename === name }"
+                  @click="selectFilename(name)"
                 >
-              </div>
-              <div class="meta-item">
-                <span class="meta-icon">📁</span>
-                <span class="meta-value">{{ formatSize(result.imageSize) }}</span>
-              </div>
-              <div class="meta-item">
-                <span class="meta-icon">🏷️</span>
-                <span class="meta-value">{{ result.keywords?.length || 0 }} 标签</span>
-              </div>
-              <div class="meta-item">
-                <span class="meta-icon">📝</span>
-                <span class="meta-value">{{ result.filenameSuggestions?.length || 0 }} 建议</span>
+                  <span class="filename-text">{{ name }}</span>
+                  <el-icon class="copy-icon" @click.stop="copyFilename(name)"
+                    ><CopyDocument
+                  /></el-icon>
+                </div>
               </div>
             </div>
-            <div class="action-row">
-              <el-button size="small" type="primary" @click="copyPath">
-                <el-icon><CopyDocument /></el-icon> 复制路径
-              </el-button>
-              <el-button size="small" @click="copyFullInfo">
-                <el-icon><Document /></el-icon> 复制全部
-              </el-button>
-              <el-button size="small" text @click="showRaw = true"> 原始数据 </el-button>
+
+            <!-- 诗意标题 -->
+            <div v-if="result.displayTitle" class="title-section">
+              <div class="section-label">诗意标题</div>
+              <div class="display-title">{{ result.displayTitle }}</div>
             </div>
-          </div>
+
+            <div class="detail-row">
+              <div class="description">
+                <span class="label">描述</span>
+                <span class="value">{{ result.description }}</span>
+              </div>
+              <div v-if="result.keywords.length" class="keywords">
+                <el-tag v-for="kw in result.keywords" :key="kw" size="small" effect="plain">{{
+                  kw
+                }}</el-tag>
+              </div>
+            </div>
+
+            <!-- 分类匹配度 -->
+            <div v-if="result.is_perfect_match !== undefined" class="match-section">
+              <el-tag :type="result.is_perfect_match ? 'success' : 'warning'" size="small">
+                {{ result.is_perfect_match ? '✓ 完美匹配' : '⚠ 近似匹配' }}
+              </el-tag>
+            </div>
+
+            <!-- 新分类提案 -->
+            <div
+              v-if="result.new_category_proposal && result.new_category_proposal.suggested_third"
+              class="proposal-section"
+            >
+              <div class="section-label">💡 新分类建议</div>
+              <div class="proposal-content">
+                <div class="proposal-path">
+                  <el-tag type="info" size="small">{{
+                    result.new_category_proposal.suggested_secondary || result.secondary
+                  }}</el-tag>
+                  <span class="arrow">›</span>
+                  <el-tag type="info" size="small">{{
+                    result.new_category_proposal.suggested_third
+                  }}</el-tag>
+                </div>
+                <div class="proposal-reason">{{ result.new_category_proposal.reason }}</div>
+              </div>
+            </div>
+
+            <!-- 分类逻辑 -->
+            <div v-if="result.reasoning" class="reasoning-section">
+              <div class="section-label">🧠 分类逻辑</div>
+              <div class="reasoning-content">{{ result.reasoning }}</div>
+            </div>
+
+            <div class="footer-section">
+              <div class="meta-row">
+                <div class="meta-item">
+                  <span class="meta-icon">🤖</span>
+                  <span class="meta-value model-name">{{ modelName }}</span>
+                </div>
+                <div class="meta-item">
+                  <span class="meta-icon">⏱️</span>
+                  <span class="meta-value">{{ formatTime(result.timestamp) }}</span>
+                </div>
+                <div class="meta-item">
+                  <span class="meta-icon">📊</span>
+                  <el-tag :type="confidenceType" size="small" effect="dark"
+                    >{{ (result.confidence * 100).toFixed(0) }}%</el-tag
+                  >
+                </div>
+                <div class="meta-item">
+                  <span class="meta-icon">📁</span>
+                  <span class="meta-value">{{ formatSize(result.imageSize) }}</span>
+                </div>
+                <div class="meta-item">
+                  <span class="meta-icon">🏷️</span>
+                  <span class="meta-value">{{ result.keywords?.length || 0 }} 标签</span>
+                </div>
+                <div class="meta-item">
+                  <span class="meta-icon">📝</span>
+                  <span class="meta-value">{{ result.filenameSuggestions?.length || 0 }} 建议</span>
+                </div>
+              </div>
+              <div class="action-row">
+                <el-button size="small" type="primary" @click="copyPath">
+                  <el-icon><CopyDocument /></el-icon> 复制路径
+                </el-button>
+                <el-button size="small" @click="copyFullInfo">
+                  <el-icon><Document /></el-icon> 复制全部
+                </el-button>
+                <el-button
+                  v-if="isMarkdownResponse"
+                  size="small"
+                  type="success"
+                  @click="showMarkdown = true"
+                >
+                  📝 查看 Markdown
+                </el-button>
+                <el-button size="small" text @click="showRaw = true"> 原始数据 </el-button>
+              </div>
+            </div>
+          </template>
         </div>
       </div>
     </template>
@@ -141,104 +165,128 @@
           </el-tag>
         </div>
         <div class="info-section">
-          <div v-if="result.promptTemplate !== 'filenameOnly'" class="category-row">
-            <el-tag type="primary" size="small" effect="dark">{{ result.primary }}</el-tag>
-            <span class="arrow">›</span>
-            <el-tag type="success" size="small" effect="dark">{{ result.secondary }}</el-tag>
-            <span class="arrow">›</span>
-            <el-tag type="warning" size="small" effect="dark">{{ result.third }}</el-tag>
-          </div>
-          <div class="filename-section">
-            <div class="section-label">文件名</div>
-            <div class="filename-chips">
-              <div
-                v-for="(name, index) in result.filenameSuggestions"
-                :key="index"
-                class="filename-chip"
-                :class="{ active: selectedFilename === name }"
-                @click="selectFilename(name)"
-              >
-                <span class="filename-text">{{ name }}</span>
-                <el-icon class="copy-icon" @click.stop="copyFilename(name)"
-                  ><CopyDocument
-                /></el-icon>
+          <!-- Cloudflare Markdown 渲染模式 -->
+          <template v-if="isMarkdownResponse">
+            <div class="markdown-result-section">
+              <div class="markdown-header">
+                <el-tag type="success" size="small">
+                  <span class="tag-icon">🤖</span>
+                  {{ modelName }} - Markdown 分析结果
+                </el-tag>
+              </div>
+              <div class="markdown-content-inline" v-html="renderedMarkdown"></div>
+            </div>
+          </template>
+
+          <!-- 标准结构化显示模式 -->
+          <template v-else>
+            <div v-if="result.promptTemplate !== 'filenameOnly'" class="category-row">
+              <el-tag type="primary" size="small" effect="dark">{{ result.primary }}</el-tag>
+              <span class="arrow">›</span>
+              <el-tag type="success" size="small" effect="dark">{{ result.secondary }}</el-tag>
+              <span class="arrow">›</span>
+              <el-tag type="warning" size="small" effect="dark">{{ result.third }}</el-tag>
+            </div>
+            <div class="filename-section">
+              <div class="section-label">文件名</div>
+              <div class="filename-chips">
+                <div
+                  v-for="(name, index) in result.filenameSuggestions"
+                  :key="index"
+                  class="filename-chip"
+                  :class="{ active: selectedFilename === name }"
+                  @click="selectFilename(name)"
+                >
+                  <span class="filename-text">{{ name }}</span>
+                  <el-icon class="copy-icon" @click.stop="copyFilename(name)"
+                    ><CopyDocument
+                  /></el-icon>
+                </div>
               </div>
             </div>
-          </div>
 
-          <!-- 诗意标题 -->
-          <div v-if="result.displayTitle" class="title-section">
-            <div class="section-label">诗意标题</div>
-            <div class="display-title">{{ result.displayTitle }}</div>
-          </div>
-
-          <div class="description-row">
-            <span class="label">描述：</span>
-            <span class="value">{{ result.description }}</span>
-          </div>
-          <div v-if="result.keywords.length" class="keywords-row">
-            <span class="label">关键词：</span>
-            <div class="keywords-list">
-              <el-tag v-for="kw in result.keywords" :key="kw" size="small" effect="plain">{{
-                kw
-              }}</el-tag>
+            <!-- 诗意标题 -->
+            <div v-if="result.displayTitle" class="title-section">
+              <div class="section-label">诗意标题</div>
+              <div class="display-title">{{ result.displayTitle }}</div>
             </div>
-          </div>
 
-          <!-- 分类匹配度 -->
-          <div v-if="result.is_perfect_match !== undefined" class="match-section">
-            <el-tag :type="result.is_perfect_match ? 'success' : 'warning'" size="small">
-              {{ result.is_perfect_match ? '✓ 完美匹配' : '⚠ 近似匹配' }}
-            </el-tag>
-          </div>
-
-          <!-- 新分类提案 -->
-          <div
-            v-if="result.new_category_proposal && result.new_category_proposal.suggested_third"
-            class="proposal-section"
-          >
-            <div class="section-label">💡 新分类建议</div>
-            <div class="proposal-content">
-              <div class="proposal-path">
-                <el-tag type="info" size="small">{{
-                  result.new_category_proposal.suggested_secondary || result.secondary
-                }}</el-tag>
-                <span class="arrow">›</span>
-                <el-tag type="info" size="small">{{
-                  result.new_category_proposal.suggested_third
+            <div class="description-row">
+              <span class="label">描述：</span>
+              <span class="value">{{ result.description }}</span>
+            </div>
+            <div v-if="result.keywords.length" class="keywords-row">
+              <span class="label">关键词：</span>
+              <div class="keywords-list">
+                <el-tag v-for="kw in result.keywords" :key="kw" size="small" effect="plain">{{
+                  kw
                 }}</el-tag>
               </div>
-              <div class="proposal-reason">{{ result.new_category_proposal.reason }}</div>
             </div>
-          </div>
 
-          <!-- 分类逻辑 -->
-          <div v-if="result.reasoning" class="reasoning-section">
-            <div class="section-label">🧠 分类逻辑</div>
-            <div class="reasoning-content">{{ result.reasoning }}</div>
-          </div>
+            <!-- 分类匹配度 -->
+            <div v-if="result.is_perfect_match !== undefined" class="match-section">
+              <el-tag :type="result.is_perfect_match ? 'success' : 'warning'" size="small">
+                {{ result.is_perfect_match ? '✓ 完美匹配' : '⚠ 近似匹配' }}
+              </el-tag>
+            </div>
 
-          <div class="footer-section">
-            <div class="meta-row">
-              <div class="meta-item">
-                <span class="meta-icon">🤖</span>
-                <span class="meta-value model-name">{{ modelName }}</span>
-              </div>
-              <div class="meta-item">
-                <span class="meta-icon">⏱️</span>
-                <span class="meta-value">{{ formatTime(result.timestamp) }}</span>
-              </div>
-              <div class="meta-item">
-                <span class="meta-icon">📁</span>
-                <span class="meta-value">{{ formatSize(result.imageSize) }}</span>
+            <!-- 新分类提案 -->
+            <div
+              v-if="result.new_category_proposal && result.new_category_proposal.suggested_third"
+              class="proposal-section"
+            >
+              <div class="section-label">💡 新分类建议</div>
+              <div class="proposal-content">
+                <div class="proposal-path">
+                  <el-tag type="info" size="small">{{
+                    result.new_category_proposal.suggested_secondary || result.secondary
+                  }}</el-tag>
+                  <span class="arrow">›</span>
+                  <el-tag type="info" size="small">{{
+                    result.new_category_proposal.suggested_third
+                  }}</el-tag>
+                </div>
+                <div class="proposal-reason">{{ result.new_category_proposal.reason }}</div>
               </div>
             </div>
-            <div class="action-row">
-              <el-button size="small" type="primary" @click="copyPath">复制路径</el-button>
-              <el-button size="small" @click="copyFullInfo">复制全部</el-button>
-              <el-button size="small" text @click="showRaw = true">详情</el-button>
+
+            <!-- 分类逻辑 -->
+            <div v-if="result.reasoning" class="reasoning-section">
+              <div class="section-label">🧠 分类逻辑</div>
+              <div class="reasoning-content">{{ result.reasoning }}</div>
             </div>
-          </div>
+
+            <div class="footer-section">
+              <div class="meta-row">
+                <div class="meta-item">
+                  <span class="meta-icon">🤖</span>
+                  <span class="meta-value model-name">{{ modelName }}</span>
+                </div>
+                <div class="meta-item">
+                  <span class="meta-icon">⏱️</span>
+                  <span class="meta-value">{{ formatTime(result.timestamp) }}</span>
+                </div>
+                <div class="meta-item">
+                  <span class="meta-icon">📁</span>
+                  <span class="meta-value">{{ formatSize(result.imageSize) }}</span>
+                </div>
+              </div>
+              <div class="action-row">
+                <el-button size="small" type="primary" @click="copyPath">复制路径</el-button>
+                <el-button size="small" @click="copyFullInfo">复制全部</el-button>
+                <el-button
+                  v-if="isMarkdownResponse"
+                  size="small"
+                  type="success"
+                  @click="showMarkdown = true"
+                >
+                  📝 Markdown
+                </el-button>
+                <el-button size="small" text @click="showRaw = true">详情</el-button>
+              </div>
+            </div>
+          </template>
         </div>
       </div>
     </template>
@@ -253,110 +301,139 @@
           </el-tag>
         </div>
         <div class="info-section">
-          <div v-if="result.promptTemplate !== 'filenameOnly'" class="category-row">
-            <el-tag type="primary" size="small" effect="dark">{{ result.primary }}</el-tag>
-            <span class="arrow">›</span>
-            <el-tag type="success" size="small" effect="dark">{{ result.secondary }}</el-tag>
-            <span class="arrow">›</span>
-            <el-tag type="warning" size="small" effect="dark">{{ result.third }}</el-tag>
-          </div>
-          <div class="filename-section">
-            <div class="section-label centered">文件名</div>
-            <div class="filename-chips centered">
-              <div
-                v-for="(name, index) in result.filenameSuggestions"
-                :key="index"
-                class="filename-chip"
-                :class="{ active: selectedFilename === name }"
-                @click="selectFilename(name)"
-              >
-                <span class="filename-text">{{ name }}</span>
-                <el-icon class="copy-icon" @click.stop="copyFilename(name)"
-                  ><CopyDocument
-                /></el-icon>
+          <!-- Cloudflare Markdown 渲染模式 -->
+          <template v-if="isMarkdownResponse">
+            <div class="markdown-result-section">
+              <div class="markdown-header">
+                <el-tag type="success" size="small">
+                  <span class="tag-icon">🤖</span>
+                  {{ modelName }} - Markdown 分析结果
+                </el-tag>
+              </div>
+              <div class="markdown-content-inline" v-html="renderedMarkdown"></div>
+            </div>
+          </template>
+
+          <!-- 标准结构化显示模式 -->
+          <template v-else>
+            <div v-if="result.promptTemplate !== 'filenameOnly'" class="category-row">
+              <el-tag type="primary" size="small" effect="dark">{{ result.primary }}</el-tag>
+              <span class="arrow">›</span>
+              <el-tag type="success" size="small" effect="dark">{{ result.secondary }}</el-tag>
+              <span class="arrow">›</span>
+              <el-tag type="warning" size="small" effect="dark">{{ result.third }}</el-tag>
+            </div>
+            <div class="filename-section">
+              <div class="section-label centered">文件名</div>
+              <div class="filename-chips centered">
+                <div
+                  v-for="(name, index) in result.filenameSuggestions"
+                  :key="index"
+                  class="filename-chip"
+                  :class="{ active: selectedFilename === name }"
+                  @click="selectFilename(name)"
+                >
+                  <span class="filename-text">{{ name }}</span>
+                  <el-icon class="copy-icon" @click.stop="copyFilename(name)"
+                    ><CopyDocument
+                  /></el-icon>
+                </div>
               </div>
             </div>
-          </div>
 
-          <!-- 诗意标题 -->
-          <div v-if="result.displayTitle" class="title-section centered">
-            <div class="section-label">诗意标题</div>
-            <div class="display-title">{{ result.displayTitle }}</div>
-          </div>
-
-          <div class="description-row centered">
-            <span class="label">描述：</span>
-            <span class="value">{{ result.description }}</span>
-          </div>
-          <div v-if="result.keywords.length" class="keywords-row centered">
-            <span class="label">关键词：</span>
-            <div class="keywords-list">
-              <el-tag v-for="kw in result.keywords" :key="kw" size="small" effect="plain">{{
-                kw
-              }}</el-tag>
+            <!-- 诗意标题 -->
+            <div v-if="result.displayTitle" class="title-section centered">
+              <div class="section-label">诗意标题</div>
+              <div class="display-title">{{ result.displayTitle }}</div>
             </div>
-          </div>
 
-          <!-- 分类匹配度 -->
-          <div v-if="result.is_perfect_match !== undefined" class="match-section centered">
-            <el-tag :type="result.is_perfect_match ? 'success' : 'warning'" size="small">
-              {{ result.is_perfect_match ? '✓ 完美匹配' : '⚠ 近似匹配' }}
-            </el-tag>
-          </div>
-
-          <!-- 新分类提案 -->
-          <div
-            v-if="result.new_category_proposal && result.new_category_proposal.suggested_third"
-            class="proposal-section centered"
-          >
-            <div class="section-label">💡 新分类建议</div>
-            <div class="proposal-content">
-              <div class="proposal-path">
-                <el-tag type="info" size="small">{{
-                  result.new_category_proposal.suggested_secondary || result.secondary
-                }}</el-tag>
-                <span class="arrow">›</span>
-                <el-tag type="info" size="small">{{
-                  result.new_category_proposal.suggested_third
+            <div class="description-row centered">
+              <span class="label">描述：</span>
+              <span class="value">{{ result.description }}</span>
+            </div>
+            <div v-if="result.keywords.length" class="keywords-row centered">
+              <span class="label">关键词：</span>
+              <div class="keywords-list">
+                <el-tag v-for="kw in result.keywords" :key="kw" size="small" effect="plain">{{
+                  kw
                 }}</el-tag>
               </div>
-              <div class="proposal-reason">{{ result.new_category_proposal.reason }}</div>
             </div>
-          </div>
 
-          <!-- 分类逻辑 -->
-          <div v-if="result.reasoning" class="reasoning-section centered">
-            <div class="section-label">🧠 分类逻辑</div>
-            <div class="reasoning-content">{{ result.reasoning }}</div>
-          </div>
+            <!-- 分类匹配度 -->
+            <div v-if="result.is_perfect_match !== undefined" class="match-section centered">
+              <el-tag :type="result.is_perfect_match ? 'success' : 'warning'" size="small">
+                {{ result.is_perfect_match ? '✓ 完美匹配' : '⚠ 近似匹配' }}
+              </el-tag>
+            </div>
 
-          <div class="footer-section centered">
-            <div class="meta-row">
-              <div class="meta-item">
-                <span class="meta-icon">🤖</span>
-                <span class="meta-value model-name">{{ modelName }}</span>
-              </div>
-              <div class="meta-item">
-                <span class="meta-icon">⏱️</span>
-                <span class="meta-value">{{ formatTime(result.timestamp) }}</span>
-              </div>
-              <div class="meta-item">
-                <span class="meta-icon">📁</span>
-                <span class="meta-value">{{ formatSize(result.imageSize) }}</span>
+            <!-- 新分类提案 -->
+            <div
+              v-if="result.new_category_proposal && result.new_category_proposal.suggested_third"
+              class="proposal-section centered"
+            >
+              <div class="section-label">💡 新分类建议</div>
+              <div class="proposal-content">
+                <div class="proposal-path">
+                  <el-tag type="info" size="small">{{
+                    result.new_category_proposal.suggested_secondary || result.secondary
+                  }}</el-tag>
+                  <span class="arrow">›</span>
+                  <el-tag type="info" size="small">{{
+                    result.new_category_proposal.suggested_third
+                  }}</el-tag>
+                </div>
+                <div class="proposal-reason">{{ result.new_category_proposal.reason }}</div>
               </div>
             </div>
-            <div class="action-row">
-              <el-button size="small" type="primary" @click="copyPath">复制路径</el-button>
-              <el-button size="small" @click="copyFullInfo">复制全部</el-button>
-              <el-button size="small" text @click="showRaw = true">原始数据</el-button>
+
+            <!-- 分类逻辑 -->
+            <div v-if="result.reasoning" class="reasoning-section centered">
+              <div class="section-label">🧠 分类逻辑</div>
+              <div class="reasoning-content">{{ result.reasoning }}</div>
             </div>
-          </div>
+
+            <div class="footer-section centered">
+              <div class="meta-row">
+                <div class="meta-item">
+                  <span class="meta-icon">🤖</span>
+                  <span class="meta-value model-name">{{ modelName }}</span>
+                </div>
+                <div class="meta-item">
+                  <span class="meta-icon">⏱️</span>
+                  <span class="meta-value">{{ formatTime(result.timestamp) }}</span>
+                </div>
+                <div class="meta-item">
+                  <span class="meta-icon">📁</span>
+                  <span class="meta-value">{{ formatSize(result.imageSize) }}</span>
+                </div>
+              </div>
+              <div class="action-row">
+                <el-button size="small" type="primary" @click="copyPath">复制路径</el-button>
+                <el-button size="small" @click="copyFullInfo">复制全部</el-button>
+                <el-button
+                  v-if="isMarkdownResponse"
+                  size="small"
+                  type="success"
+                  @click="showMarkdown = true"
+                >
+                  📝 Markdown
+                </el-button>
+                <el-button size="small" text @click="showRaw = true">原始数据</el-button>
+              </div>
+            </div>
+          </template>
         </div>
       </div>
     </template>
 
     <el-dialog v-model="showRaw" title="原始 AI 响应" width="70%" top="5vh">
       <pre class="raw-data">{{ JSON.stringify(result.raw, null, 2) }}</pre>
+    </el-dialog>
+
+    <!-- Markdown 渲染对话框 (Cloudflare) -->
+    <el-dialog v-model="showMarkdown" title="🤖 AI 分析结果 (Markdown)" width="70%" top="5vh">
+      <div class="markdown-content" v-html="renderedMarkdown"></div>
     </el-dialog>
   </div>
 </template>
@@ -366,6 +443,7 @@ import { ref, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import { CopyDocument, Document } from '@element-plus/icons-vue'
 import { getModelByKey } from '@/services/ai/classifier'
+import { marked } from 'marked'
 
 const props = defineProps({
   result: { type: Object, required: true }
@@ -373,6 +451,7 @@ const props = defineProps({
 
 const selectedFilename = ref(props.result.selectedFilename || props.result.filenameSuggestions[0])
 const showRaw = ref(false)
+const showMarkdown = ref(false)
 
 const layoutClass = computed(() => `layout-${props.result.primary}`)
 const confidenceType = computed(() => {
@@ -385,6 +464,31 @@ const confidenceType = computed(() => {
 const modelName = computed(() => {
   const modelConfig = getModelByKey(props.result.model)
   return modelConfig?.name || props.result.model || '未知模型'
+})
+
+// 检测是否是 Cloudflare 返回的 Markdown 格式
+const isMarkdownResponse = computed(() => {
+  // 直接检测是否使用 Cloudflare provider
+  console.log('🔍 Provider Detection:', {
+    provider: props.result.provider,
+    isCloudflare: props.result.provider === 'cloudflare',
+    result: props.result
+  })
+  return props.result.provider === 'cloudflare'
+})
+
+// 渲染 Markdown
+const renderedMarkdown = computed(() => {
+  if (!isMarkdownResponse.value) return ''
+  const rawResponse = props.result.raw?.result?.response || ''
+  console.log('📝 Markdown Rendering:', {
+    hasRaw: !!props.result.raw,
+    hasResult: !!props.result.raw?.result,
+    hasResponse: !!props.result.raw?.result?.response,
+    responseLength: rawResponse.length,
+    responsePreview: rawResponse.substring(0, 100)
+  })
+  return marked(rawResponse)
 })
 
 function formatTime(ts) {
@@ -842,6 +946,314 @@ function copyFullInfo() {
 
   &.centered {
     text-align: center;
+  }
+}
+
+.markdown-content {
+  padding: 20px;
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 12px;
+  color: #333;
+  line-height: 1.8;
+  font-size: 14px;
+
+  :deep(h1),
+  :deep(h2),
+  :deep(h3),
+  :deep(h4) {
+    margin-top: 1.5em;
+    margin-bottom: 0.5em;
+    font-weight: 600;
+    color: #667eea;
+  }
+
+  :deep(h1) {
+    font-size: 1.8em;
+    border-bottom: 2px solid #667eea;
+    padding-bottom: 0.3em;
+  }
+
+  :deep(h2) {
+    font-size: 1.5em;
+    border-bottom: 1px solid rgba(102, 126, 234, 0.3);
+    padding-bottom: 0.3em;
+  }
+
+  :deep(h3) {
+    font-size: 1.3em;
+  }
+
+  :deep(p) {
+    margin: 0.8em 0;
+  }
+
+  :deep(ul),
+  :deep(ol) {
+    margin: 0.8em 0;
+    padding-left: 2em;
+  }
+
+  :deep(li) {
+    margin: 0.4em 0;
+  }
+
+  :deep(strong) {
+    font-weight: 600;
+    color: #667eea;
+  }
+
+  :deep(code) {
+    background: rgba(102, 126, 234, 0.1);
+    padding: 0.2em 0.4em;
+    border-radius: 4px;
+    font-family: 'Monaco', 'Consolas', monospace;
+    font-size: 0.9em;
+    color: #764ba2;
+  }
+
+  :deep(pre) {
+    background: #1a1a2e;
+    padding: 1em;
+    border-radius: 8px;
+    overflow-x: auto;
+    margin: 1em 0;
+
+    code {
+      background: none;
+      padding: 0;
+      color: #e0e0e0;
+    }
+  }
+
+  :deep(blockquote) {
+    border-left: 4px solid #667eea;
+    padding-left: 1em;
+    margin: 1em 0;
+    color: #666;
+    font-style: italic;
+  }
+
+  :deep(table) {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 1em 0;
+
+    th,
+    td {
+      border: 1px solid rgba(0, 0, 0, 0.1);
+      padding: 0.5em 1em;
+      text-align: left;
+    }
+
+    th {
+      background: rgba(102, 126, 234, 0.1);
+      font-weight: 600;
+    }
+  }
+
+  :deep(hr) {
+    border: none;
+    border-top: 1px solid rgba(102, 126, 234, 0.2);
+    margin: 1.5em 0;
+  }
+}
+
+// Markdown 内联显示样式
+.markdown-result-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.markdown-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+
+  .tag-icon {
+    margin-right: 4px;
+  }
+}
+
+.markdown-content-inline {
+  padding: 20px;
+  background: rgba(30, 30, 50, 0.6);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 12px;
+  color: rgba(255, 255, 255, 0.9);
+  line-height: 1.8;
+  font-size: 14px;
+  max-height: 600px;
+  overflow-y: auto;
+
+  // 自定义滚动条
+  &::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.05);
+    border-radius: 3px;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: rgba(102, 126, 234, 0.3);
+    border-radius: 3px;
+
+    &:hover {
+      background: rgba(102, 126, 234, 0.5);
+    }
+  }
+
+  :deep(h1),
+  :deep(h2),
+  :deep(h3),
+  :deep(h4) {
+    margin-top: 1.2em;
+    margin-bottom: 0.5em;
+    font-weight: 600;
+    color: #a8b5ff;
+
+    &:first-child {
+      margin-top: 0;
+    }
+  }
+
+  :deep(h1) {
+    font-size: 1.6em;
+    border-bottom: 2px solid rgba(168, 181, 255, 0.4);
+    padding-bottom: 0.4em;
+    color: #c5d0ff;
+  }
+
+  :deep(h2) {
+    font-size: 1.4em;
+    border-bottom: 1px solid rgba(168, 181, 255, 0.25);
+    padding-bottom: 0.3em;
+    color: #b8c5ff;
+  }
+
+  :deep(h3) {
+    font-size: 1.2em;
+    color: #a8b5ff;
+  }
+
+  :deep(h4) {
+    font-size: 1.05em;
+    color: #9aa8ff;
+  }
+
+  :deep(p) {
+    margin: 0.7em 0;
+    line-height: 1.7;
+    color: rgba(255, 255, 255, 0.85);
+  }
+
+  :deep(ul),
+  :deep(ol) {
+    margin: 0.7em 0;
+    padding-left: 2em;
+    color: rgba(255, 255, 255, 0.85);
+  }
+
+  :deep(li) {
+    margin: 0.4em 0;
+    line-height: 1.6;
+  }
+
+  :deep(strong) {
+    font-weight: 600;
+    color: #c5d0ff;
+  }
+
+  :deep(em) {
+    font-style: italic;
+    color: #d4a5ff;
+  }
+
+  :deep(code) {
+    background: rgba(168, 181, 255, 0.15);
+    padding: 0.2em 0.5em;
+    border-radius: 4px;
+    font-family: 'Monaco', 'Consolas', monospace;
+    font-size: 0.9em;
+    color: #d4a5ff;
+    border: 1px solid rgba(168, 181, 255, 0.2);
+  }
+
+  :deep(pre) {
+    background: rgba(10, 10, 20, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 1em;
+    border-radius: 8px;
+    overflow-x: auto;
+    margin: 1em 0;
+
+    code {
+      background: none;
+      padding: 0;
+      border: none;
+      color: #e0e0e0;
+      font-size: 0.9em;
+    }
+  }
+
+  :deep(blockquote) {
+    border-left: 3px solid #a8b5ff;
+    padding-left: 1em;
+    margin: 1em 0;
+    color: rgba(255, 255, 255, 0.7);
+    font-style: italic;
+    background: rgba(168, 181, 255, 0.05);
+    padding: 0.8em 1em;
+    border-radius: 4px;
+  }
+
+  :deep(hr) {
+    border: none;
+    border-top: 1px solid rgba(255, 255, 255, 0.2);
+    margin: 1.5em 0;
+  }
+
+  :deep(table) {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 1em 0;
+    font-size: 0.9em;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+
+    th,
+    td {
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      padding: 0.6em 1em;
+      text-align: left;
+    }
+
+    th {
+      background: rgba(168, 181, 255, 0.15);
+      font-weight: 600;
+      color: #c5d0ff;
+    }
+
+    td {
+      color: rgba(255, 255, 255, 0.85);
+    }
+
+    tr:hover {
+      background: rgba(168, 181, 255, 0.08);
+    }
+  }
+
+  :deep(a) {
+    color: #a8b5ff;
+    text-decoration: underline;
+
+    &:hover {
+      color: #c5d0ff;
+    }
   }
 }
 </style>

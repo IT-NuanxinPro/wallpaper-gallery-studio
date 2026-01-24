@@ -4,15 +4,21 @@
     <div class="header-stats__items">
       <div class="header-stats__item">
         <span class="header-stats__icon">🖥️</span>
-        <span class="header-stats__value">{{ stats.desktop }}</span>
+        <span class="header-stats__value">
+          <AnimatedNumber :value="stats.desktop" />
+        </span>
       </div>
       <div class="header-stats__item">
         <span class="header-stats__icon">📱</span>
-        <span class="header-stats__value">{{ stats.mobile }}</span>
+        <span class="header-stats__value">
+          <AnimatedNumber :value="stats.mobile" />
+        </span>
       </div>
       <div class="header-stats__item">
         <span class="header-stats__icon">👤</span>
-        <span class="header-stats__value">{{ stats.avatar }}</span>
+        <span class="header-stats__value">
+          <AnimatedNumber :value="stats.avatar" />
+        </span>
       </div>
       <button class="header-stats__refresh" :disabled="loading" @click="$emit('refresh')">
         <el-icon :class="{ 'is-loading': loading }"><Refresh /></el-icon>
@@ -23,9 +29,9 @@
     <div class="header-stats__quota">
       <div class="header-stats__quota-info">
         <span class="header-stats__quota-label">API</span>
-        <span class="header-stats__quota-value"
-          >{{ rateLimit.remaining }}/{{ rateLimit.limit }}</span
-        >
+        <span class="header-stats__quota-value">
+          <AnimatedNumber :value="rateLimit.remaining" :duration="0.4" />/{{ rateLimit.limit }}
+        </span>
       </div>
       <div class="header-stats__quota-bar">
         <div
@@ -41,6 +47,7 @@
 <script setup>
 import { computed } from 'vue'
 import { Refresh } from '@element-plus/icons-vue'
+import AnimatedNumber from '@/components/common/AnimatedNumber.vue'
 
 const props = defineProps({
   stats: { type: Object, required: true },

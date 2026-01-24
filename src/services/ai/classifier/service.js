@@ -6,6 +6,13 @@
 import { AIProviderFactory, compressImage, IMAGE_CONFIG } from '../core'
 import { buildPrompt, validatePrompt } from './prompts'
 import { getModelByKey } from './config'
+import { createGroqRateLimiter, createDoubaoRateLimiter } from '@/utils/rateLimiter'
+
+// 为不同 provider 创建速率限制器
+const rateLimiters = {
+  groq: createGroqRateLimiter(),
+  doubao: createDoubaoRateLimiter()
+}
 
 /**
  * 分析图片并生成分类和文件名建议
@@ -30,7 +37,7 @@ export async function analyzeImage({
       throw new Error('No image provided')
     }
 
-    const prompt = buildPrompt(promptTemplate, series, customPrompt)
+    const prompt = buildPrompt(promptTemplate, series, customPrompt, providerType)
     if (!validatePrompt(prompt)) {
       throw new Error('Invalid prompt')
     }
@@ -78,9 +85,100 @@ export async function analyzeImage({
 }
 
 /**
- * 批量分析图片
+ * 批量分析图片（带速率限制）
  */
 export async function analyzeBatch({
+  files,
+  series,
+  providerType,
+  credentials,
+  modelKey,
+  promptTemplate = 'default',
+  customPrompt = '',
+  onProgress
+}) {
+  const results = []
+  const rateLimiter = rateLimiters[providerType]
+
+  // 如果没有对应的速率限制器，使用默认的串行处理
+  if (!rateLimiter) {
+    console.warn(`[Classifier] 没有为 ${providerType} 配置速率限制器，使用默认处理`)
+    return analyzeBatchDefault({
+      files,
+      series,
+      providerType,
+      credentials,
+      modelKey,
+      promptTemplate,
+      customPrompt,
+      onProgress
+    })
+  }
+
+  console.log(`[Classifier] 开始批量分析 ${files.length} 张图片，使用速率限制器`)
+
+  // 创建所有任务
+  const tasks = files.map((file, index) => ({
+    file,
+    index,
+    execute: () =>
+      analyzeImage({
+        file,
+        series,
+        providerType,
+        credentials,
+        modelKey,
+        promptTemplate,
+        customPrompt
+      })
+  }))
+
+  // 使用速率限制器执行所有任务
+  for (const task of tasks) {
+    try {
+      const result = await rateLimiter.execute(task.execute, {
+        fileName: task.file.name,
+        index: task.index
+      })
+
+      results.push({
+        file: task.file,
+        analysis: result,
+        success: true
+      })
+
+      console.log(`[Classifier] ✓ 成功分析: ${task.file.name} (${task.index + 1}/${files.length})`)
+    } catch (error) {
+      console.error(`[Classifier] ✗ 分析失败: ${task.file.name}`, error.message)
+
+      results.push({
+        file: task.file,
+        error: error.message,
+        success: false
+      })
+    }
+
+    // 更新进度
+    if (onProgress) {
+      onProgress({
+        current: results.length,
+        total: files.length,
+        progress: Math.round((results.length / files.length) * 100)
+      })
+    }
+  }
+
+  const successCount = results.filter(r => r.success).length
+  const failedCount = results.length - successCount
+  console.log(`[Classifier] 批量分析完成: 成功 ${successCount}, 失败 ${failedCount}`)
+
+  return results
+}
+
+/**
+ * 默认的批量分析（无速率限制）
+ */
+async function analyzeBatchDefault({
   files,
   series,
   providerType,

@@ -19,7 +19,8 @@
 
 ### 🤖 AI 智能助手
 
-- **多 AI Provider 支持** - 支持 Cloudflare Workers AI 和豆包 AI（字节跳动）
+- **多 AI Provider 支持** - 支持 Groq AI（默认）、豆包 AI 和 Cloudflare Workers AI
+- **Groq 超快推理** - 使用 Llama 4 Scout 视觉模型，速度极快
 - **AI 图片分析** - 智能图片分析和分类
 - **自动分类** - 自动识别图片类型并推荐分类（Desktop/Mobile/Avatar）
 - **智能命名** - AI 生成 2 个中文文件名建议
@@ -73,18 +74,20 @@
 
 ## 🛠️ 技术栈
 
-| 类别 | 技术                                     |
-| ---- | ---------------------------------------- |
-| 框架 | Vue 3 + Composition API                  |
-| 构建 | Vite 7                                   |
-| UI   | Element Plus                             |
-| 状态 | Pinia                                    |
-| 动画 | GSAP                                     |
-| 样式 | SCSS + CSS Variables                     |
-| AI   | Cloudflare Workers AI + 豆包 AI (Doubao) |
-| 规范 | ESLint + Prettier + Husky                |
+| 类别 | 技术                                                |
+| ---- | --------------------------------------------------- |
+| 框架 | Vue 3 + Composition API                             |
+| 构建 | Vite 7                                              |
+| UI   | Element Plus                                        |
+| 状态 | Pinia                                               |
+| 动画 | GSAP                                                |
+| 样式 | SCSS + CSS Variables                                |
+| AI   | Groq AI + Cloudflare Workers AI + 豆包 AI (Doubao)  |
+| 规范 | ESLint + Prettier + Husky                           |
 
 ## 🚀 快速开始
+
+### 本地开发
 
 ```bash
 # 安装依赖
@@ -102,6 +105,19 @@ pnpm lint
 # 代码格式化
 pnpm format
 ```
+
+### 部署到 Cloudflare Pages
+
+详细部署步骤请查看 [Cloudflare 部署文档](./docs/cloudflare-deployment.md)
+
+**快速步骤：**
+
+1. 在 Cloudflare Pages 创建项目并连接 GitHub 仓库
+2. 配置环境变量（Settings → Environment variables）：
+   - `VITE_GROQ_API_KEY` - Groq AI API Key
+   - `VITE_GITHUB_CLIENT_ID` - GitHub OAuth Client ID
+   - `VITE_OAUTH_WORKER_URL` - OAuth Worker URL
+3. 推送代码，自动部署
 
 ## 📁 项目结构
 
@@ -195,12 +211,28 @@ src/
 ```env
 VITE_GITHUB_CLIENT_ID=your_client_id
 VITE_OAUTH_WORKER_URL=https://your-worker.workers.dev
-VITE_DOUBAO_API_KEY=your_doubao_api_key  # 可选，豆包 AI API Key
+
+# AI Provider API Keys（可选）
+VITE_GROQ_API_KEY=your_groq_api_key          # Groq AI（推荐）
+VITE_DOUBAO_API_KEY=your_doubao_api_key      # 豆包 AI
+VITE_CLOUDFLARE_ACCOUNT_ID=your_account_id   # Cloudflare AI
+VITE_CLOUDFLARE_API_TOKEN=your_api_token     # Cloudflare AI
 ```
 
 ### AI 配置
 
-支持两种 AI Provider：
+支持三种 AI Provider：
+
+#### Groq AI（推荐，默认）
+
+- **API Key** - 从 [Groq Console](https://console.groq.com/keys) 获取
+- **模型** - Llama 4 Scout Vision（速度极快，准确度高）
+- **配置方式** - 环境变量 `VITE_GROQ_API_KEY` 或页面手动配置
+
+#### 豆包 AI
+
+- **API Key** - 从环境变量 `VITE_DOUBAO_API_KEY` 读取，或在页面手动配置
+- **模型选择** - 支持 Doubao Seed 1.8 版本
 
 #### Cloudflare Workers AI
 
@@ -210,11 +242,6 @@ VITE_DOUBAO_API_KEY=your_doubao_api_key  # 可选，豆包 AI API Key
 - **API Token** - Cloudflare API Token
 - **Worker URL** - AI Proxy Worker URL
 
-#### 豆包 AI（推荐）
-
-- **API Key** - 从环境变量 `VITE_DOUBAO_API_KEY` 读取，或在页面手动配置
-- **模型选择** - 支持 Doubao Seed 1.6 Vision 和 1.8 版本
-
 ### 默认配置
 
 | 配置项      | 默认值                                     |
@@ -222,17 +249,21 @@ VITE_DOUBAO_API_KEY=your_doubao_api_key  # 可选，豆包 AI API Key
 | 图床仓库    | `IT-NuanxinPro/nuanXinProPic`              |
 | 工作流仓库  | `IT-NuanxinPro/wallpaper-gallery-workflow` |
 | 分支        | `main`                                     |
-| AI Provider | `豆包 AI`                                  |
-| AI 模型     | `doubao-1.6` (Doubao Seed 1.6 Vision)      |
+| AI Provider | `Groq AI`                                  |
+| AI 模型     | `groq-llama-4-scout` (Llama 4 Scout Vision)|
 
 ## 🤖 AI 功能说明
 
 ### 支持的 AI Provider
 
-#### 豆包 AI（推荐）
+#### Groq AI（推荐，默认）
 
-- **Doubao Seed 1.6 Vision** - 默认推荐，速度快、准确度高
-- **Doubao Seed 1.8** - 最新版本，性能更强
+- **Llama 4 Scout Vision** - 速度极快、准确度高、成本低
+- **优势** - 超快推理速度，显著提升用户体验
+
+#### 豆包 AI
+
+- **Doubao Seed 1.8** - 最新版本，性能强
 
 #### Cloudflare Workers AI
 
@@ -289,6 +320,30 @@ VITE_DOUBAO_API_KEY=your_doubao_api_key  # 可选，豆包 AI API Key
 | `upload_history`     | 上传历史记录         | 手动清除            |
 | `ai_credentials_enc` | AI 凭证（加密）      | 手动清除            |
 | `doubao_api_key_enc` | 豆包 API Key（加密） | 手动清除            |
+
+## 📝 更新日志
+
+### v1.3.0 (2026-01-25)
+
+#### 新增功能
+- ✨ 添加文件夹上传批量警告功能（超过 50 张图片时显示预计上传时间）
+- ✨ 文件夹选择时显示文件数量反馈
+- ✨ 拖拽文件夹时显示"正在读取文件夹..."加载提示
+- ✨ 添加 Groq AI 速率限制器，避免 API 超限（429 错误）
+- ✨ 添加豆包 AI 速率限制器
+- ✨ 自动重试机制：失败时自动重试 3 次，指数退避
+
+#### 优化改进
+- 🐛 修复 AI 分类 third 字段偶尔返回完整路径的问题（如 "插画/场景" → "场景"）
+- 🐛 修复所有 AI provider（Groq、Doubao、Cloudflare）的分类路径清理逻辑
+- 🔧 修复 `substr()` 已弃用警告，改用 `substring()`
+- 📝 添加详细的调试日志，方便排查 AI 分类问题
+- 🎨 优化批量上传体验，提供更友好的提示信息
+
+#### 技术改进
+- 🛠️ 新增 `rateLimiter.js` 工具类，统一管理 API 速率限制
+- 🛠️ 优化 AI 分类服务的并发控制和错误处理
+- 🛠️ 改进代码质量，移除已弃用的 API 调用
 
 ## 📄 License
 

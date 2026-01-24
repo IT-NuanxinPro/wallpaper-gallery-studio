@@ -15,16 +15,16 @@ export class BaseAIProvider {
    * @param {Object} params.credentials - 凭证信息
    * @returns {Promise<Object>} 分析结果
    */
-  async analyze({ imageBase64, prompt, credentials }) {
+  async analyze({ imageBase64: _imageBase64, prompt: _prompt, credentials: _credentials }) {
     throw new Error('analyze() must be implemented by subclass')
   }
 
   /**
    * 验证凭证
-   * @param {Object} credentials - 凭证信息
+   * @param {Object} _credentials - 凭证信息
    * @returns {boolean} 是否有效
    */
-  validateCredentials(credentials) {
+  validateCredentials(_credentials) {
     throw new Error('validateCredentials() must be implemented by subclass')
   }
 

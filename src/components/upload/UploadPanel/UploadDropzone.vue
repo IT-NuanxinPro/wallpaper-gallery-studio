@@ -33,9 +33,12 @@
       <div class="upload-dropzone__content">
         <span class="upload-dropzone__icon">{{ icon }}</span>
         <span class="upload-dropzone__text">{{ text }}</span>
-        <div v-if="canAddFiles && !uploading" class="upload-dropzone__btns">
+        <div v-if="canAddFiles && !uploading && canUpload" class="upload-dropzone__btns">
           <button class="upload-dropzone__btn" @click="triggerInput">🖼️ 选择图片</button>
           <button class="upload-dropzone__btn" @click="triggerFolderInput">📂 选择文件夹</button>
+        </div>
+        <div v-else-if="!canUpload" class="upload-dropzone__no-permission">
+          🔒 需要协作者或管理员权限
         </div>
       </div>
     </div>
@@ -52,7 +55,8 @@ const props = defineProps({
   uploading: { type: Boolean, default: false },
   canAddFiles: { type: Boolean, default: true },
   icon: { type: String, default: '📁' },
-  text: { type: String, default: '拖拽图片或文件夹到此处' }
+  text: { type: String, default: '拖拽图片或文件夹到此处' },
+  canUpload: { type: Boolean, default: true } // 新增：是否有上传权限
 })
 
 const emit = defineEmits(['add-files'])
@@ -63,6 +67,10 @@ const isDragging = ref(false)
 
 // 触发文件选择
 function triggerInput() {
+  if (!props.canUpload) {
+    ElMessage.error('🔒 您没有上传权限')
+    return
+  }
   if (!props.canAddFiles) {
     ElMessage.warning('请先选择上传分类')
     return
@@ -72,6 +80,10 @@ function triggerInput() {
 
 // 触发文件夹选择
 function triggerFolderInput() {
+  if (!props.canUpload) {
+    ElMessage.error('🔒 您没有上传权限')
+    return
+  }
   if (!props.canAddFiles) {
     ElMessage.warning('请先选择上传分类')
     return
@@ -103,6 +115,11 @@ async function readEntriesRecursively(entry) {
 // 处理拖拽（支持文件夹）
 async function handleDrop(e) {
   isDragging.value = false
+
+  if (!props.canUpload) {
+    ElMessage.error('🔒 您没有上传权限')
+    return
+  }
   if (!props.canAddFiles) {
     ElMessage.warning('请先选择上传分类')
     return
@@ -122,18 +139,57 @@ async function handleDrop(e) {
   }
 
   if (entries.length > 0) {
-    // 使用 Entry API 递归读取
-    for (const entry of entries) {
-      const files = await readEntriesRecursively(entry)
-      allFiles.push(...files)
+    // 显示处理中提示
+    const loadingMsg = ElMessage({
+      message: '📂 正在读取文件夹...',
+      type: 'info',
+      duration: 0
+    })
+
+    try {
+      // 使用 Entry API 递归读取
+      for (const entry of entries) {
+        const files = await readEntriesRecursively(entry)
+        allFiles.push(...files)
+      }
+
+      loadingMsg.close()
+
+      // 过滤出图片文件
+      const imageFiles = allFiles.filter(f => f.type.startsWith('image/'))
+
+      if (imageFiles.length === 0) {
+        ElMessage.warning('文件夹中没有找到图片文件')
+        return
+      }
+
+      // 大批量文件警告
+      if (imageFiles.length > 50) {
+        ElMessage({
+          message: `📂 检测到 ${imageFiles.length} 张图片，建议分批上传以获得更好的体验`,
+          type: 'warning',
+          duration: 5000
+        })
+      } else {
+        ElMessage({
+          message: `📂 已选择 ${imageFiles.length} 张图片`,
+          type: 'success',
+          duration: 3000
+        })
+      }
+
+      emit('add-files', imageFiles)
+    } catch (error) {
+      loadingMsg.close()
+      ElMessage.error('读取文件夹失败')
+      console.error('读取文件夹错误:', error)
     }
   } else {
     // 降级：直接使用 files
-    allFiles.push(...Array.from(e.dataTransfer.files))
-  }
-
-  if (allFiles.length > 0) {
-    emit('add-files', allFiles)
+    const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'))
+    if (files.length > 0) {
+      emit('add-files', files)
+    }
   }
 }
 
@@ -145,12 +201,31 @@ function handleFileSelect(e) {
 
 // 处理文件夹选择
 function handleFolderSelect(e) {
-  const files = Array.from(e.target.files).filter(f => f.type.startsWith('image/'))
-  if (files.length > 0) {
-    emit('add-files', files)
-  } else {
+  const allFiles = Array.from(e.target.files)
+  const files = allFiles.filter(f => f.type.startsWith('image/'))
+
+  if (files.length === 0) {
     ElMessage.warning('文件夹中没有找到图片文件')
+    e.target.value = ''
+    return
   }
+
+  // 大批量文件警告
+  if (files.length > 50) {
+    ElMessage({
+      message: `📂 检测到 ${files.length} 张图片，建议分批上传以获得更好的体验`,
+      type: 'warning',
+      duration: 5000
+    })
+  } else {
+    ElMessage({
+      message: `📂 已选择 ${files.length} 张图片`,
+      type: 'success',
+      duration: 3000
+    })
+  }
+
+  emit('add-files', files)
   e.target.value = ''
 }
 </script>
@@ -232,6 +307,12 @@ function handleFolderSelect(e) {
       border-color: rgba($primary-start, 0.4);
       color: $white;
     }
+  }
+
+  &__no-permission {
+    color: rgba(255, 255, 255, 0.5);
+    font-size: $font-size-sm;
+    padding: $spacing-2 $spacing-4;
   }
 }
 </style>

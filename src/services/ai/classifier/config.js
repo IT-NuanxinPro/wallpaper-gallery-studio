@@ -9,20 +9,21 @@ import { AI_PROVIDERS } from '../core'
  * 分类服务的模型配置
  */
 export const CLASSIFIER_MODELS = {
-  // 豆包 AI 模型（默认推荐）
-  'doubao-1.6': {
-    id: 'doubao-seed-1-6-vision-250815',
-    name: 'Doubao Seed 1.6 Vision',
-    provider: AI_PROVIDERS.DOUBAO,
-    description: '豆包视觉模型 1.6 版本，速度快，准确度高',
+  // Groq AI 模型（默认推荐）
+  'groq-llama-4-scout': {
+    id: 'meta-llama/llama-4-scout-17b-16e-instruct',
+    name: 'Llama 4 Scout Vision',
+    provider: AI_PROVIDERS.GROQ,
+    description: 'Groq 最新视觉模型，速度极快，准确度高',
     speed: 'fast',
     accuracy: 'high',
     cost: 'low',
-    maxTokens: 4096,
-    temperature: 0.3,
+    maxTokens: 1024,
+    temperature: 1,
     recommended: true
   },
 
+  // 豆包 AI 模型
   'doubao-1.8': {
     id: 'doubao-seed-1-8-251228',
     name: 'Doubao Seed 1.8',
@@ -34,20 +35,6 @@ export const CLASSIFIER_MODELS = {
     maxTokens: 4096,
     temperature: 0.3,
     recommended: false
-  },
-
-  // Cloudflare Workers AI 模型
-  'llama-3.2': {
-    id: '@cf/meta/llama-3.2-11b-vision-instruct',
-    name: 'Llama 3.2 11B Vision',
-    provider: AI_PROVIDERS.CLOUDFLARE,
-    description: 'Meta 的视觉理解模型，准确度高',
-    speed: 'medium',
-    accuracy: 'high',
-    cost: 'medium',
-    maxTokens: 10000,
-    temperature: 0.3,
-    recommended: false
   }
 }
 
@@ -56,10 +43,10 @@ export const CLASSIFIER_MODELS = {
  */
 export const CLASSIFIER_CONFIG = {
   // 默认 Provider
-  defaultProvider: AI_PROVIDERS.DOUBAO,
+  defaultProvider: AI_PROVIDERS.GROQ,
 
   // 默认模型
-  defaultModel: 'doubao-1.6',
+  defaultModel: 'groq-llama-4-scout',
 
   // 默认提示词模板
   defaultPromptTemplate: 'default',

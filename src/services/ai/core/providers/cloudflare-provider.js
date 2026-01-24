@@ -51,87 +51,31 @@ export class CloudflareProvider extends BaseAIProvider {
   parseResponse(data) {
     const content = data.result?.response || ''
 
-    // 尝试提取 JSON
+    // 尝试提取 JSON（如果 AI 真的返回了 JSON）
     const jsonMatch = content.match(/\{[\s\S]*\}/)
     if (jsonMatch) {
       try {
         const parsed = JSON.parse(jsonMatch[0])
         return this.buildResult(parsed, data)
-      } catch (e) {
-        // JSON 解析失败，继续尝试 Markdown 解析
+      } catch {
+        // JSON 解析失败，使用简单的默认值
       }
     }
 
-    // 解析 Markdown 格式的响应
-    const result = this.parseMarkdownResponse(content)
-    return this.buildResult(result, data)
-  }
-
-  /**
-   * 解析 Markdown 格式的响应
-   */
-  parseMarkdownResponse(content) {
+    // Cloudflare 通常返回 Markdown，我们只提取基本信息用于显示
+    // 完整的 Markdown 内容会在 UI 层渲染
     const result = {
       secondary: '通用',
       third: '通用',
       keywords: [],
       filenames: [],
-      description: '',
+      description: 'Cloudflare AI 分析结果（点击查看 Markdown）',
       displayTitle: null,
-      reasoning: null
+      reasoning: null,
+      new_category_proposal: null
     }
 
-    // 提取 Secondary
-    const secondaryMatch = content.match(/\*\*Secondary\*\*[：:]\s*(.+)/i)
-    if (secondaryMatch) {
-      result.secondary = secondaryMatch[1].trim()
-    }
-
-    // 提取 Third
-    const thirdMatch = content.match(/\*\*Third\*\*[：:]\s*(.+)/i)
-    if (thirdMatch) {
-      result.third = thirdMatch[1].trim()
-    }
-
-    // 提取 displayTitle (兼容 display_title)
-    const titleMatch = content.match(
-      /\*\*(display_?title|displayTitle)\*\*[：:]\s*[""]?([^""\n]+)[""]?/i
-    )
-    if (titleMatch) {
-      result.displayTitle = titleMatch[2].trim()
-    }
-
-    // 提取 filenames
-    const filenamesMatch = content.match(/\*\*filenames\*\*[：:]\s*\[([^\]]+)\]/i)
-    if (filenamesMatch) {
-      result.filenames = filenamesMatch[1]
-        .split(',')
-        .map(f => f.trim().replace(/["'"]/g, ''))
-        .filter(f => f)
-    }
-
-    // 提取 keywords
-    const keywordsMatch = content.match(/\*\*keywords\*\*[：:]\s*\[([^\]]+)\]/i)
-    if (keywordsMatch) {
-      result.keywords = keywordsMatch[1]
-        .split(',')
-        .map(k => k.trim().replace(/["'"]/g, ''))
-        .filter(k => k)
-    }
-
-    // 提取 description
-    const descMatch = content.match(/\*\*description\*\*[：:]\s*[""]?([^""\n]+)[""]?/i)
-    if (descMatch) {
-      result.description = descMatch[1].trim()
-    }
-
-    // 提取 reasoning
-    const reasoningMatch = content.match(/\*\*reasoning\*\*[：:]\s*[""]?([^""\n]+)[""]?/i)
-    if (reasoningMatch) {
-      result.reasoning = reasoningMatch[1].trim()
-    }
-
-    return result
+    return this.buildResult(result, data)
   }
 
   /**
@@ -156,9 +100,16 @@ export class CloudflareProvider extends BaseAIProvider {
       }
     }
 
+    // 清理 third 字段：如果包含路径分隔符，只保留最后一级
+    let cleanThird = parsed.third || '通用'
+    if (cleanThird.includes('/')) {
+      const parts = cleanThird.split('/')
+      cleanThird = parts[parts.length - 1].trim()
+    }
+
     return {
       secondary: parsed.secondary || '通用',
-      third: parsed.third || '通用',
+      third: cleanThird,
       keywords: parsed.keywords || [],
       filenameSuggestions,
       description: parsed.description || '无描述',

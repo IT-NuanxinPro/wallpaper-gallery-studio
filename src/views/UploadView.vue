@@ -1,6 +1,14 @@
 <template>
   <MainLayout>
-    <div ref="viewRef" class="upload-view">
+    <!-- 全局加载状态 -->
+    <div v-if="pageLoading" class="upload-view__loading">
+      <div class="loading-spinner">
+        <div class="spinner"></div>
+        <p class="loading-text">加载中...</p>
+      </div>
+    </div>
+
+    <div v-else ref="viewRef" class="upload-view">
       <!-- 只读提示 -->
       <el-alert
         v-if="authStore.permissionChecked && !authStore.canUpload"
@@ -19,6 +27,14 @@
           <div class="upload-view__title-badge">🎨 Workspace</div>
           <h1 class="upload-view__title">上传中心</h1>
         </div>
+
+        <!-- 壁纸统计条 -->
+        <WallpaperStatsBar
+          :stats-data="workflowStore.statsData"
+          class="upload-view__stats-bar"
+          @show-history="showHistoryModal = true"
+        />
+
         <HeaderStats
           :stats="stats"
           :rate-limit="rateLimit"
@@ -43,12 +59,8 @@
           @refresh="handleRefreshCategories"
         />
 
-        <!-- 中间列：统计条 + 上传面板 -->
+        <!-- 中间列：上传面板 -->
         <div class="upload-view__center">
-          <WallpaperStatsBar
-            :stats-data="workflowStore.statsData"
-            @show-history="showHistoryModal = true"
-          />
           <UploadPanel
             :target-path="uploadStore.targetPath"
             :files="uploadStore.files"
@@ -63,6 +75,7 @@
             :ai-analyzing="uploadStore.aiAnalyzing"
             :ai-analyzing-count="uploadStore.aiAnalyzingCount"
             :available-providers="availableProviders"
+            :can-upload="authStore.canUpload"
             @add-files="addFiles"
             @remove="uploadStore.removeFile"
             @remove-batch="uploadStore.removeFiles"
@@ -135,7 +148,8 @@
 
 <script setup>
 import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
+import { gsap } from 'gsap'
 import MainLayout from '@/components/MainLayout.vue'
 import HeaderStats from '@/components/upload/HeaderStats.vue'
 import CategorySidebar from '@/components/upload/CategorySidebar.vue'
@@ -155,17 +169,17 @@ import { useUploadStore } from '@/stores/upload'
 import { useAuthStore } from '@/stores/auth'
 import { useWorkflowStore } from '@/stores/workflow'
 import { useCredentialsStore } from '@/stores/credentials'
-import { useAnimation } from '@/composables/useAnimation'
 import { debounce } from '@/utils/debounce'
+import { detectBatchImageTypes, getDetectionStats } from '@/utils/image-detector'
 
 const configStore = useConfigStore()
 const uploadStore = useUploadStore()
 const authStore = useAuthStore()
 const workflowStore = useWorkflowStore()
 const credentialsStore = useCredentialsStore()
-const { staggerIn } = useAnimation()
 
 const viewRef = ref(null)
+const pageLoading = ref(true) // 页面加载状态
 const series = ref('desktop')
 const treeData = ref([])
 const treeKey = ref(0) // 用于强制刷新树组件
@@ -190,7 +204,13 @@ const rateLimit = computed(() => uploadStore.getRateLimit())
 
 // AI 配置
 const aiConfig = computed(() => uploadStore.getCurrentAiConfig())
-const availableProviders = computed(() => credentialsStore.availableProviders)
+
+// 上传页面只显示分类器支持的 providers（Groq 和豆包）
+const availableProviders = computed(() => {
+  const allProviders = credentialsStore.availableProviders
+  // 只保留 groq 和 doubao
+  return allProviders.filter(p => ['groq', 'doubao'].includes(p.key))
+})
 
 const categoryCache = new Map()
 const CACHE_TTL = 5 * 60 * 1000
@@ -298,12 +318,67 @@ function handleCategorySelect({ data, node }) {
   }
 }
 
-function addFiles(files) {
+async function addFiles(files) {
+  // 权限检查
+  if (!authStore.canUpload) {
+    ElMessage.error('🔒 您没有上传权限，无法添加文件')
+    return
+  }
+
   const imgs = files.filter(f => f.type.startsWith('image/'))
   if (!imgs.length) {
     ElMessage.warning('请选择图片文件')
     return
   }
+
+  // 大批量上传警告
+  if (uploadStore.shouldWarnBatchUpload(imgs.length)) {
+    const estimatedTime = uploadStore.estimateUploadTime(imgs.length)
+    const minutes = Math.floor(estimatedTime / 60)
+    const seconds = estimatedTime % 60
+    const timeStr = minutes > 0 ? `${minutes}分${seconds}秒` : `${seconds}秒`
+
+    ElMessage({
+      message: `⚠️ 批量上传 ${imgs.length} 张图片，预计需要 ${timeStr}，建议分批上传`,
+      type: 'warning',
+      duration: 6000,
+      showClose: true
+    })
+  }
+
+  // 自动检测图片类型
+  if (uploadStore.uploadMode === 'ai' && imgs.length > 0) {
+    try {
+      const detectionResults = await detectBatchImageTypes(imgs)
+      const stats = getDetectionStats(detectionResults)
+
+      // 如果大部分图片是同一类型，自动切换
+      const dominantType = ['desktop', 'mobile', 'avatar'].reduce((a, b) =>
+        stats[a] > stats[b] ? a : b
+      )
+
+      if (stats[dominantType] >= imgs.length * 0.7 && dominantType !== series.value) {
+        series.value = dominantType
+        uploadStore.setSeries(dominantType)
+
+        ElMessage({
+          message: `🔍 检测到 ${stats[dominantType]}/${imgs.length} 张${dominantType === 'desktop' ? '桌面' : dominantType === 'mobile' ? '手机' : '头像'}壁纸，已自动切换类型`,
+          type: 'success',
+          duration: 4000
+        })
+      } else if (stats.desktop + stats.mobile + stats.avatar < imgs.length) {
+        // 有检测失败的
+        ElMessage({
+          message: `⚠️ 部分图片类型检测失败，请确认当前选择的类型（${series.value}）是否正确`,
+          type: 'warning',
+          duration: 5000
+        })
+      }
+    } catch (error) {
+      console.warn('批量检测图片类型失败:', error)
+    }
+  }
+
   const added = uploadStore.addFiles(imgs)
   if (added.length < imgs.length)
     ElMessage.warning(`${imgs.length - added.length} 个文件不符合要求`)
@@ -420,7 +495,12 @@ function handleApplyAllAi() {
 // AI Provider 切换
 function handleProviderChange(provider) {
   uploadStore.setAiProvider(provider)
-  ElMessage.success(`已切换到 ${provider === 'doubao' ? '豆包 AI' : 'Cloudflare AI'}`)
+  const providerNames = {
+    groq: 'Groq AI',
+    doubao: '豆包 AI',
+    cloudflare: 'Cloudflare AI'
+  }
+  ElMessage.success(`已切换到 ${providerNames[provider] || provider}`)
 }
 
 // AI 模型切换
@@ -677,16 +757,124 @@ async function _refreshStats() {
 // 防抖版本的刷新统计函数（2秒防抖）
 const refreshStats = debounce(_refreshStats, 2000)
 
-onMounted(() => {
-  loadRootCategories()
-  refreshStats()
-  const els = viewRef.value?.querySelectorAll('.upload-view__content > *')
-  if (els?.length) staggerIn(els, { duration: 0.5, stagger: 0.1, y: 20 })
+// 保存动画 timeline 引用，用于清理
+let entranceTimeline = null
+
+onMounted(async () => {
+  pageLoading.value = true
+
+  try {
+    // 1. 强制重新检查权限（清除缓存）
+    if (authStore.isAuthenticated) {
+      const { owner, repo } = configStore.config
+      const cacheKey = `permission_${owner}_${repo}`
+
+      // 清除旧缓存
+      sessionStorage.removeItem(cacheKey)
+      console.log('[UploadView] 清除权限缓存，重新检查')
+
+      // 重新检查权限
+      authStore.permissionChecked = false
+      await authStore.checkPermission(owner, repo)
+
+      console.log('[UploadView] 权限检查完成:', {
+        permissionLevel: authStore.permissionLevel,
+        canUpload: authStore.canUpload,
+        permissionChecked: authStore.permissionChecked
+      })
+    }
+
+    // 2. 加载数据
+    await Promise.all([loadRootCategories(), refreshStats()])
+
+    console.log('[UploadView] 数据加载完成')
+  } catch (err) {
+    console.error('加载失败:', err)
+  } finally {
+    // 3. 隐藏 loading
+    pageLoading.value = false
+  }
+
+  // 4. 等待 DOM 更新后播放动画
+  await new Promise(resolve => setTimeout(resolve, 100))
+
+  // 5. 播放入场动画
+  entranceTimeline = gsap.timeline({ defaults: { ease: 'power3.out' } })
+
+  // 1. 顶部 header（标题 + 统计条 + HeaderStats）
+  const header = viewRef.value?.querySelector('.upload-view__header')
+  if (header) {
+    entranceTimeline.fromTo(
+      header,
+      { opacity: 0, y: -30 },
+      {
+        opacity: 1,
+        y: 0,
+        duration: 0.8,
+        clearProps: 'transform' // 只清除 transform，保留 opacity
+      }
+    )
+  }
+
+  // 2. 三栏内容区域 - 分别设置不同的入场方向
+  const contentColumns = viewRef.value?.querySelectorAll('.upload-view__content > *')
+  if (contentColumns?.length >= 3) {
+    // 左侧栏：从左边滑入
+    entranceTimeline.fromTo(
+      contentColumns[0],
+      { opacity: 0, x: -60, scale: 0.96 },
+      {
+        opacity: 1,
+        x: 0,
+        scale: 1,
+        duration: 0.9,
+        ease: 'back.out(1.1)',
+        clearProps: 'transform' // 只清除 transform，保留 opacity
+      },
+      '-=0.4' // 与 header 重叠
+    )
+
+    // 中间栏：从底部向上
+    entranceTimeline.fromTo(
+      contentColumns[1],
+      { opacity: 0, y: 60, scale: 0.96 },
+      {
+        opacity: 1,
+        y: 0,
+        scale: 1,
+        duration: 0.9,
+        ease: 'back.out(1.1)',
+        clearProps: 'transform' // 只清除 transform，保留 opacity
+      },
+      '-=0.7' // 与左侧栏重叠 0.2 秒后开始
+    )
+
+    // 右侧栏：从右边滑入
+    entranceTimeline.fromTo(
+      contentColumns[2],
+      { opacity: 0, x: 60, scale: 0.96 },
+      {
+        opacity: 1,
+        x: 0,
+        scale: 1,
+        duration: 0.9,
+        ease: 'back.out(1.1)',
+        clearProps: 'transform' // 只清除 transform，保留 opacity
+      },
+      '-=0.7' // 与中间栏重叠 0.2 秒后开始
+    )
+  }
 })
 
 // 组件卸载时清理资源
 onUnmounted(() => {
   console.log('[UploadView] 组件卸载，清理资源')
+
+  // 清理入场动画 timeline，防止内存泄漏
+  if (entranceTimeline) {
+    entranceTimeline.kill()
+    entranceTimeline = null
+  }
 
   // 清理工作流轮询和定时器
   workflowStore.cleanup()
@@ -714,6 +902,48 @@ watch(
 <style scoped lang="scss">
 @use '@/styles/variables' as *;
 
+.upload-view__loading {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+  z-index: 9999;
+}
+
+.loading-spinner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: $spacing-6;
+}
+
+.spinner {
+  width: 60px;
+  height: 60px;
+  border: 4px solid rgba(102, 126, 234, 0.2);
+  border-top-color: $primary-start;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.loading-text {
+  font-size: $font-size-xl;
+  color: $white;
+  font-weight: 500;
+  margin: 0;
+}
+
 .upload-view {
   display: flex;
   flex-direction: column;
@@ -734,10 +964,17 @@ watch(
   }
 
   &__header {
-    display: flex;
+    display: grid;
+    grid-template-columns: auto 1fr auto;
     align-items: center;
-    justify-content: space-between;
+    gap: $spacing-6;
     flex-shrink: 0;
+    // 初始状态：隐藏，等待动画
+    opacity: 0;
+  }
+
+  &__stats-bar {
+    justify-self: center;
   }
 
   &__title-area {
@@ -779,13 +1016,15 @@ watch(
       min-height: 0;
       height: 100%;
       overflow: hidden;
+      // 初始状态：隐藏，等待动画
+      opacity: 0;
     }
   }
 
   &__center {
     display: flex;
     flex-direction: column;
-    gap: $spacing-4;
+    gap: $spacing-3;
     min-height: 0;
     overflow: hidden;
   }

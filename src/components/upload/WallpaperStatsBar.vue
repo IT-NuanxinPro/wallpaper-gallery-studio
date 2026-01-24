@@ -8,7 +8,9 @@
       <div class="stats-bar__item stats-bar__item--desktop">
         <span class="stats-bar__icon">🖥️</span>
         <span class="stats-bar__label">桌面</span>
-        <span class="stats-bar__count">{{ statsData?.total?.desktop || 0 }}</span>
+        <span class="stats-bar__count">
+          <AnimatedNumber :value="statsData?.total?.desktop || 0" :delay="1.2" />
+        </span>
         <span v-if="latestRelease?.added?.desktop > 0" class="stats-bar__delta">
           +{{ latestRelease.added.desktop }}
         </span>
@@ -16,7 +18,9 @@
       <div class="stats-bar__item stats-bar__item--mobile">
         <span class="stats-bar__icon">📱</span>
         <span class="stats-bar__label">手机</span>
-        <span class="stats-bar__count">{{ statsData?.total?.mobile || 0 }}</span>
+        <span class="stats-bar__count">
+          <AnimatedNumber :value="statsData?.total?.mobile || 0" :delay="1.2" />
+        </span>
         <span v-if="latestRelease?.added?.mobile > 0" class="stats-bar__delta">
           +{{ latestRelease.added.mobile }}
         </span>
@@ -24,7 +28,9 @@
       <div class="stats-bar__item stats-bar__item--avatar">
         <span class="stats-bar__icon">👤</span>
         <span class="stats-bar__label">头像</span>
-        <span class="stats-bar__count">{{ statsData?.total?.avatar || 0 }}</span>
+        <span class="stats-bar__count">
+          <AnimatedNumber :value="statsData?.total?.avatar || 0" :delay="1.2" />
+        </span>
         <span v-if="latestRelease?.added?.avatar > 0" class="stats-bar__delta">
           +{{ latestRelease.added.avatar }}
         </span>
@@ -40,6 +46,7 @@
 <script setup>
 import { computed } from 'vue'
 import { Clock } from '@element-plus/icons-vue'
+import AnimatedNumber from '@/components/common/AnimatedNumber.vue'
 
 const props = defineProps({
   statsData: { type: Object, default: null }

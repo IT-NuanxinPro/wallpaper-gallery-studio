@@ -1,5 +1,13 @@
 <template>
-  <div class="ai-assistant-panel">
+  <!-- 全局加载状态 -->
+  <div v-if="pageLoading" class="ai-assistant-loading">
+    <div class="loading-spinner">
+      <div class="spinner"></div>
+      <p class="loading-text">加载中...</p>
+    </div>
+  </div>
+
+  <div v-else ref="panelRef" class="ai-assistant-panel">
     <!-- 三栏布局 -->
     <div class="panel-content">
       <!-- 左栏：配置区（可滚动） -->
@@ -54,26 +62,6 @@
               </div>
             </el-radio-button>
           </el-radio-group>
-          <div class="model-info">
-            <el-descriptions :column="1" size="small" border>
-              <el-descriptions-item label="速度">
-                <el-tag :color="SPEED_LEVELS[currentModelInfo.speed]?.color" size="small">
-                  {{ SPEED_LEVELS[currentModelInfo.speed]?.label }}
-                </el-tag>
-              </el-descriptions-item>
-              <el-descriptions-item label="准确度">
-                <el-tag :color="ACCURACY_LEVELS[currentModelInfo.accuracy]?.color" size="small">
-                  {{ ACCURACY_LEVELS[currentModelInfo.accuracy]?.label }}
-                </el-tag>
-              </el-descriptions-item>
-              <el-descriptions-item label="成本">
-                <el-tag :color="COST_LEVELS[currentModelInfo.cost]?.color" size="small">
-                  {{ COST_LEVELS[currentModelInfo.cost]?.label }}
-                </el-tag>
-              </el-descriptions-item>
-            </el-descriptions>
-            <p class="model-desc">{{ currentModelInfo.description }}</p>
-          </div>
         </el-card>
 
         <!-- 主分类选择 -->
@@ -204,21 +192,15 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ElMessage, ElNotification } from 'element-plus'
 import { UploadFilled } from '@element-plus/icons-vue'
+import { gsap } from 'gsap'
 import { useAIStore } from '@/stores/ai'
 import { useCredentialsStore } from '@/stores/credentials'
 import { AI_PROVIDERS, PROVIDER_DISPLAY } from '@/services/ai/core'
-import {
-  getModelList,
-  getModelByKey,
-  getRecommendedModel,
-  CLASSIFIER_CONFIG,
-  SPEED_LEVELS,
-  ACCURACY_LEVELS,
-  COST_LEVELS
-} from '@/services/ai/classifier'
+import { getModelList, getRecommendedModel, ASSISTANT_CONFIG } from '@/services/ai/assistant'
+import { detectImageTypeFromFile } from '@/utils/image-detector'
 import CredentialsConfig from '@/components/ai/CredentialsConfig.vue'
 import PromptTemplateSelector from '@/components/ai/PromptTemplateSelector.vue'
 import ResultCard from '@/components/ai/ResultCard.vue'
@@ -232,21 +214,22 @@ const aiStore = useAIStore()
 const credentialsStore = useCredentialsStore()
 
 // State
+const panelRef = ref(null)
+const pageLoading = ref(true) // 页面加载状态
 const primaryCategory = ref('desktop')
 const customPrompt = ref('')
 const fileList = ref([])
 const progress = ref(0)
 const currentIndex = ref(0)
 const totalCount = ref(0)
-const currentProvider = ref(CLASSIFIER_CONFIG.defaultProvider)
+const currentProvider = ref(ASSISTANT_CONFIG.defaultProvider)
+
+// 保存动画 timeline 引用，用于清理
+let entranceTimeline = null
 
 // Computed
 const modelList = computed(() => {
   return getModelsByProvider(currentProvider.value)
-})
-
-const currentModelInfo = computed(() => {
-  return modelList.value.find(m => m.key === aiStore.currentModel) || {}
 })
 
 // 监听 Provider 变化
@@ -269,8 +252,38 @@ function handleProviderChange() {
   ElMessage.success(`已切换到 ${PROVIDER_DISPLAY[currentProvider.value].name}`)
 }
 
-function handleFileChange(file, files) {
+async function handleFileChange(file, files) {
   fileList.value = files
+
+  // 自动检测第一张图片的类型
+  if (files.length > 0 && file.raw) {
+    try {
+      const detection = await detectImageTypeFromFile(file.raw)
+
+      // 如果检测置信度较高，自动切换类型
+      if (detection.confidence >= 0.8 && detection.type !== primaryCategory.value) {
+        const oldType = primaryCategory.value
+        primaryCategory.value = detection.type
+
+        ElNotification({
+          title: '🔍 自动检测壁纸类型',
+          message: `检测到 ${detection.resolution} (${detection.aspectRatio})\n已自动切换：${oldType} → ${detection.type}`,
+          type: 'success',
+          duration: 4000
+        })
+      } else if (detection.confidence < 0.8) {
+        // 置信度较低，提示用户确认
+        ElNotification({
+          title: '⚠️ 请确认壁纸类型',
+          message: `${detection.reason}\n当前选择：${primaryCategory.value}\n如不正确请手动调整`,
+          type: 'warning',
+          duration: 5000
+        })
+      }
+    } catch (error) {
+      console.warn('图片类型检测失败:', error)
+    }
+  }
 }
 
 function handleFileRemove(file, files) {
@@ -342,21 +355,136 @@ async function handleAnalyze() {
 }
 
 onMounted(async () => {
-  await credentialsStore.loadCredentials()
+  pageLoading.value = true
 
-  // 加载上次选择的 Provider
-  const savedProvider = localStorage.getItem('ai_current_provider')
-  if (savedProvider && AI_PROVIDERS[savedProvider.toUpperCase()]) {
-    currentProvider.value = savedProvider
-    aiStore.setProvider(savedProvider)
-  } else {
-    // 使用默认 Provider
-    aiStore.setProvider(currentProvider.value)
+  try {
+    // 1. 加载凭证
+    await credentialsStore.loadCredentials()
+
+    // 2. 加载上次选择的 Provider
+    const savedProvider = localStorage.getItem('ai_current_provider')
+    if (savedProvider && AI_PROVIDERS[savedProvider.toUpperCase()]) {
+      currentProvider.value = savedProvider
+      aiStore.setProvider(savedProvider)
+    } else {
+      // 使用默认 Provider
+      aiStore.setProvider(currentProvider.value)
+    }
+
+    console.log('[AIAssistant] 数据加载完成')
+  } catch (err) {
+    console.error('加载凭证失败:', err)
+  } finally {
+    // 3. 隐藏 loading
+    pageLoading.value = false
+  }
+
+  // 4. 等待 DOM 更新后播放动画
+  await new Promise(resolve => setTimeout(resolve, 100))
+
+  // 5. 播放入场动画
+  entranceTimeline = gsap.timeline({ defaults: { ease: 'power3.out' } })
+
+  const columns = panelRef.value?.querySelectorAll('.panel-content > *')
+  if (columns?.length >= 3) {
+    // 左栏：从左边滑入
+    entranceTimeline.fromTo(
+      columns[0],
+      { opacity: 0, x: -50, scale: 0.96 },
+      {
+        opacity: 1,
+        x: 0,
+        scale: 1,
+        duration: 0.8,
+        ease: 'back.out(1.1)',
+        clearProps: 'transform' // 只清除 transform，保留 opacity
+      }
+    )
+
+    // 中栏：从底部向上
+    entranceTimeline.fromTo(
+      columns[1],
+      { opacity: 0, y: 50, scale: 0.96 },
+      {
+        opacity: 1,
+        y: 0,
+        scale: 1,
+        duration: 0.8,
+        ease: 'back.out(1.1)',
+        clearProps: 'transform' // 只清除 transform，保留 opacity
+      },
+      '-=0.6' // 与左栏重叠
+    )
+
+    // 右栏：从右边滑入
+    entranceTimeline.fromTo(
+      columns[2],
+      { opacity: 0, x: 50, scale: 0.96 },
+      {
+        opacity: 1,
+        x: 0,
+        scale: 1,
+        duration: 0.8,
+        ease: 'back.out(1.1)',
+        clearProps: 'transform' // 只清除 transform，保留 opacity
+      },
+      '-=0.6' // 与中栏重叠
+    )
+  }
+})
+
+onUnmounted(() => {
+  // 清理入场动画 timeline，防止内存泄漏
+  if (entranceTimeline) {
+    entranceTimeline.kill()
+    entranceTimeline = null
   }
 })
 </script>
 
 <style lang="scss" scoped>
+.ai-assistant-loading {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+  z-index: 9999;
+}
+
+.loading-spinner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+}
+
+.spinner {
+  width: 60px;
+  height: 60px;
+  border: 4px solid rgba(102, 126, 234, 0.2);
+  border-top-color: #667eea;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.loading-text {
+  font-size: 20px;
+  color: #ffffff;
+  font-weight: 500;
+  margin: 0;
+}
+
 .ai-assistant-panel {
   height: 100%;
   padding: 24px;
@@ -370,6 +498,11 @@ onMounted(async () => {
   gap: 20px;
   flex: 1;
   min-height: 0;
+
+  // 初始状态：所有列隐藏，等待动画
+  > * {
+    opacity: 0;
+  }
 }
 
 // 左栏：配置区（独立滚动）
@@ -523,16 +656,7 @@ onMounted(async () => {
 }
 
 .model-info {
-  margin-top: 16px;
-  padding-top: 16px;
   border-top: 1px solid rgba(0, 0, 0, 0.06);
-
-  .model-desc {
-    margin: 12px 0 0 0;
-    font-size: 13px;
-    color: #666;
-    line-height: 1.6;
-  }
 }
 
 // 中栏：上传区

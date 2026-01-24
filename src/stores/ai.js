@@ -7,7 +7,12 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { useCredentialsStore } from './credentials'
 import { AIProviderFactory, AI_PROVIDERS, compressImage, IMAGE_CONFIG } from '@/services/ai/core'
-import { buildPrompt, getModelByKey, CLASSIFIER_CONFIG } from '@/services/ai/classifier'
+import {
+  buildPrompt,
+  getModelByKey as getClassifierModel,
+  CLASSIFIER_CONFIG
+} from '@/services/ai/classifier'
+import { getModelByKey as getAssistantModel } from '@/services/ai/assistant'
 
 // 兼容导出
 export { AI_PROVIDERS }
@@ -21,7 +26,10 @@ export const useAIStore = defineStore('ai', () => {
   const error = ref(null)
 
   const hasResults = computed(() => results.value.length > 0)
-  const currentModelConfig = computed(() => getModelByKey(currentModel.value))
+  const currentModelConfig = computed(() => {
+    // 先尝试从 assistant 配置中查找，再从 classifier 配置中查找
+    return getAssistantModel(currentModel.value) || getClassifierModel(currentModel.value)
+  })
 
   /**
    * 调用 AI API（支持多 Provider）
@@ -70,7 +78,12 @@ export const useAIStore = defineStore('ai', () => {
 
     try {
       const imageBase64 = await compressImage(file, IMAGE_CONFIG)
-      const prompt = buildPrompt(promptTemplate.value, primaryCategory, customPrompt)
+      const prompt = buildPrompt(
+        promptTemplate.value,
+        primaryCategory,
+        customPrompt,
+        currentProvider.value
+      )
       const analysis = await callAI(imageBase64, prompt)
 
       const result = {

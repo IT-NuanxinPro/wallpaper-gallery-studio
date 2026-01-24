@@ -274,11 +274,6 @@ const CATEGORIES = {
   }
 }
 
-function saveConfig() {
-  localStorage.setItem('doubao_config', JSON.stringify(config.value))
-  ElMessage.success('配置已保存')
-}
-
 function loadConfig() {
   const saved = localStorage.getItem('doubao_config')
   if (saved) {

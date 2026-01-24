@@ -66,7 +66,7 @@ export async function analyzeImage({
   const prompts = {
     analyze: '请详细分析这张图片的内容、风格、情感和构图。',
     filename:
-      '请为这张图片生成3个合适的中文文件名（8-15个汉字），格式：[\"文件名1.jpg\", \"文件名2.jpg\", \"文件名3.jpg\"]',
+      '请为这张图片生成3个合适的中文文件名（8-15个汉字），格式：["文件名1.jpg", "文件名2.jpg", "文件名3.jpg"]',
     describe: '请用20-40字优美地描述这张图片。'
   }
 

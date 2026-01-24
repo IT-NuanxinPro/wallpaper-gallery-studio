@@ -162,7 +162,7 @@ function loadProviderConfig(provider) {
       selectedModel.value = config.model
       credentials.value = config.credentials || {}
       ElMessage.success('配置已加载')
-    } catch (error) {
+    } catch {
       ElMessage.error('配置加载失败')
     }
   } else {

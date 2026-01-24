@@ -8,16 +8,34 @@ importers:
 
   .:
     dependencies:
+      '@element-plus/icons-vue':
+        specifier: ^2.3.2
+        version: 2.3.2(vue@3.5.26)
+      '@vueuse/core':
+        specifier: ^14.1.0
+        version: 14.1.0(vue@3.5.26)
+      element-plus:
+        specifier: ^2.13.1
+        version: 2.13.1(vue@3.5.26)
+      gsap:
+        specifier: ^3.14.2
+        version: 3.14.2
+      marked:
+        specifier: ^17.0.1
+        version: 17.0.1
+      pinia:
+        specifier: ^3.0.4
+        version: 3.0.4(vue@3.5.26)
       vue:
         specifier: ^3.5.24
         version: 3.5.26
+      vue-router:
+        specifier: ^4.6.4
+        version: 4.6.4(vue@3.5.26)
       vue3-virtual-scroller:
         specifier: ^0.2.3
         version: 0.2.3(rollup@4.55.1)(vue@3.5.26)
     devDependencies:
-      '@element-plus/icons-vue':
-        specifier: ^2.3.2
-        version: 2.3.2(vue@3.5.26)
       '@eslint/js':
         specifier: ^9.39.2
         version: 9.39.2
@@ -27,12 +45,6 @@ importers:
       '@vue/test-utils':
         specifier: ^2.4.6
         version: 2.4.6
-      '@vueuse/core':
-        specifier: ^14.1.0
-        version: 14.1.0(vue@3.5.26)
-      element-plus:
-        specifier: ^2.13.1
-        version: 2.13.1(vue@3.5.26)
       eslint:
         specifier: ^9.39.2
         version: 9.39.2
@@ -48,9 +60,6 @@ importers:
       fast-check:
         specifier: ^4.5.3
         version: 4.5.3
-      gsap:
-        specifier: ^3.14.2
-        version: 3.14.2
       husky:
         specifier: ^9.1.7
         version: 9.1.7
@@ -60,9 +69,6 @@ importers:
       lint-staged:
         specifier: ^16.2.7
         version: 16.2.7
-      pinia:
-        specifier: ^3.0.4
-        version: 3.0.4(vue@3.5.26)
       prettier:
         specifier: ^3.7.4
         version: 3.7.4
@@ -81,9 +87,6 @@ importers:
       vitest:
         specifier: ^4.0.16
         version: 4.0.16(jsdom@27.4.0)(sass@1.97.2)(yaml@2.8.2)
-      vue-router:
-        specifier: ^4.6.4
-        version: 4.6.4(vue@3.5.26)
 
 packages:
 
@@ -1328,6 +1331,11 @@ packages:
 
   magic-string@0.30.21:
     resolution: {integrity: sha512-vd2F4YUyEXKGcLHoq+TEyCjxueSeHnFxyyjNp80yg0XV4vUhnDer/lvvlqM/arB5bXQN5K2/3oinyCRyx8T2CQ==}
+
+  marked@17.0.1:
+    resolution: {integrity: sha512-boeBdiS0ghpWcSwoNm/jJBwdpFaMnZWRzjA6SkUMYb40SVaN1x7mmfGKp0jvexGcx+7y2La5zRZsYFZI6Qpypg==}
+    engines: {node: '>= 20'}
+    hasBin: true
 
   mdn-data@2.12.2:
     resolution: {integrity: sha512-IEn+pegP1aManZuckezWCO+XZQDplx1366JoVhTpMpBB1sPey/SbveZQUosKiKiGYjg1wH4pMlNgXbCiYgihQA==}
@@ -3066,6 +3074,8 @@ snapshots:
   magic-string@0.30.21:
     dependencies:
       '@jridgewell/sourcemap-codec': 1.5.5
+
+  marked@17.0.1: {}
 
   mdn-data@2.12.2: {}
 

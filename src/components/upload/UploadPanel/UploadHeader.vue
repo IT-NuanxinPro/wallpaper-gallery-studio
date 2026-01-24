@@ -56,7 +56,9 @@
                 <span class="upload-header__ai-btn-text">{{
                   aiConfig?.modelName || 'AI 模型'
                 }}</span>
-                <span v-if="aiAnalyzing" class="upload-header__ai-btn-loading">⏳</span>
+                <span v-if="aiAnalyzing" class="upload-header__ai-btn-badge">
+                  {{ aiAnalyzingCount }}
+                </span>
                 <span v-else class="upload-header__ai-btn-arrow">▼</span>
               </button>
             </template>
@@ -101,11 +103,6 @@
               </div>
             </div>
           </el-popover>
-
-          <!-- 分析状态 -->
-          <span v-if="aiAnalyzing" class="upload-header__ai-status">
-            分析中 ({{ aiAnalyzingCount }})
-          </span>
         </div>
       </div>
 
@@ -329,6 +326,7 @@ async function handleModeChange(mode) {
     font-size: $font-size-sm;
     cursor: pointer;
     transition: all $duration-normal;
+    max-width: 180px;
 
     &:hover:not(:disabled) {
       background: rgba(255, 255, 255, 0.12);
@@ -342,32 +340,36 @@ async function handleModeChange(mode) {
 
     &-icon {
       font-size: 14px;
+      flex-shrink: 0;
     }
 
     &-text {
-      max-width: 120px;
+      max-width: 100px;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
     }
 
-    &-loading {
-      animation: pulse 1.5s ease-in-out infinite;
+    &-badge {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 20px;
+      height: 20px;
+      padding: 0 6px;
+      background: $warning;
+      color: $white;
+      font-size: 11px;
+      font-weight: 600;
+      border-radius: $radius-full;
+      animation: pulse 2s ease-in-out infinite;
     }
 
     &-arrow {
       font-size: 10px;
       color: $gray-400;
+      flex-shrink: 0;
     }
-  }
-
-  &__ai-status {
-    font-size: $font-size-xs;
-    color: $warning;
-    padding: $spacing-1 $spacing-2;
-    background: rgba($warning, 0.1);
-    border-radius: $radius-sm;
-    animation: pulse 2s ease-in-out infinite;
   }
 
   // AI 下拉菜单

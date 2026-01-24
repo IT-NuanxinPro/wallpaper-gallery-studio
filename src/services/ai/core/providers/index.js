@@ -1,12 +1,14 @@
 import { CloudflareProvider } from './cloudflare-provider'
 import { DoubaoProvider } from './doubao-provider'
+import { GroqProvider } from './groq-provider'
 
 /**
  * AI Provider 类型
  */
 export const AI_PROVIDERS = {
   CLOUDFLARE: 'cloudflare',
-  DOUBAO: 'doubao'
+  DOUBAO: 'doubao',
+  GROQ: 'groq'
 }
 
 /**
@@ -16,7 +18,8 @@ export const AI_PROVIDERS = {
 export class AIProviderFactory {
   static providers = {
     cloudflare: CloudflareProvider,
-    doubao: DoubaoProvider
+    doubao: DoubaoProvider,
+    groq: GroqProvider
   }
 
   /**
@@ -71,8 +74,15 @@ export const PROVIDER_DISPLAY = {
     color: '#00C4CC',
     description: '字节跳动豆包 AI 服务',
     credentialFields: [{ key: 'apiKey', label: 'API Key', type: 'password', required: true }]
+  },
+  [AI_PROVIDERS.GROQ]: {
+    name: 'Groq AI',
+    icon: '⚡',
+    color: '#F55036',
+    description: 'Groq 超快速 AI 推理服务',
+    credentialFields: [{ key: 'apiKey', label: 'API Key', type: 'password', required: true }]
   }
 }
 
 export { BaseAIProvider } from './base-provider'
-export { CloudflareProvider, DoubaoProvider }
+export { CloudflareProvider, DoubaoProvider, GroqProvider }

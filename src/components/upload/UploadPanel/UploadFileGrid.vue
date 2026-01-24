@@ -2,37 +2,49 @@
   <div v-if="files.length > 0" class="upload-file-grid">
     <!-- 批量操作栏 -->
     <div v-if="!uploading" class="upload-file-grid__batch">
-      <el-checkbox
-        :model-value="selectAll"
-        :indeterminate="isIndeterminate"
-        :disabled="pendingFiles.length === 0"
-        @update:model-value="handleSelectAll"
-      >
-        全选（用于批量删除）
-      </el-checkbox>
-
-      <Transition name="fade">
-        <button
-          v-if="selectedIds.length > 0"
-          class="upload-file-grid__batch-delete"
-          @click="$emit('batch-delete', selectedIds)"
+      <div class="upload-file-grid__batch-left">
+        <el-checkbox
+          :model-value="selectAll"
+          :indeterminate="isIndeterminate"
+          :disabled="pendingFiles.length === 0"
+          @update:model-value="handleSelectAll"
         >
-          <el-icon><Delete /></el-icon>
-          删除选中 ({{ selectedIds.length }})
-        </button>
-      </Transition>
+          全选（用于批量删除）
+        </el-checkbox>
 
-      <!-- AI 模式：批量应用 AI 推荐 -->
-      <Transition name="fade">
-        <button
-          v-if="uploadMode === 'ai' && filesWithAiButNoTarget > 0"
-          class="upload-file-grid__batch-apply"
-          @click="$emit('apply-all-ai')"
-        >
-          <span>🤖</span>
-          应用全部 AI 推荐 ({{ filesWithAiButNoTarget }})
-        </button>
-      </Transition>
+        <!-- 文件数量提示 -->
+        <span class="upload-file-grid__count">
+          共 {{ files.length }} 个文件
+          <template v-if="pendingFiles.length !== files.length">
+            （{{ pendingFiles.length }} 待上传）
+          </template>
+        </span>
+      </div>
+
+      <div class="upload-file-grid__batch-right">
+        <Transition name="fade">
+          <button
+            v-if="selectedIds.length > 0"
+            class="upload-file-grid__batch-delete"
+            @click="$emit('batch-delete', selectedIds)"
+          >
+            <el-icon><Delete /></el-icon>
+            删除选中 ({{ selectedIds.length }})
+          </button>
+        </Transition>
+
+        <!-- AI 模式：批量应用 AI 推荐 -->
+        <Transition name="fade">
+          <button
+            v-if="uploadMode === 'ai' && filesWithAiButNoTarget > 0"
+            class="upload-file-grid__batch-apply"
+            @click="$emit('apply-all-ai')"
+          >
+            <span>🤖</span>
+            应用全部 AI 推荐 ({{ filesWithAiButNoTarget }})
+          </button>
+        </Transition>
+      </div>
     </div>
 
     <!-- 图片网格 -->
@@ -75,7 +87,7 @@ const props = defineProps({
   uploadMode: { type: String, default: 'ai' }
 })
 
-const emit = defineEmits(['select', 'remove', 'change-target', 'batch-delete', 'apply-all-ai'])
+defineEmits(['select', 'remove', 'change-target', 'batch-delete', 'apply-all-ai'])
 
 const selectedIds = ref([])
 
@@ -150,10 +162,19 @@ defineExpose({
   &__batch {
     display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: $spacing-3;
     margin-bottom: $spacing-3;
     padding-bottom: $spacing-2;
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    flex-wrap: wrap;
+
+    &-left,
+    &-right {
+      display: flex;
+      align-items: center;
+      gap: $spacing-3;
+    }
 
     :deep(.el-checkbox__label) {
       color: $gray-400;
@@ -194,7 +215,6 @@ defineExpose({
       font-size: $font-size-xs;
       cursor: pointer;
       transition: all $duration-normal;
-      margin-left: auto;
 
       &:hover {
         background: rgba($primary-start, 0.2);
@@ -206,22 +226,46 @@ defineExpose({
     }
   }
 
+  &__count {
+    font-size: $font-size-xs;
+    color: $gray-500;
+    padding: $spacing-1 $spacing-2;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: $radius-sm;
+  }
+
   &__grid {
     flex: 1;
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
-    gap: $spacing-3;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: $spacing-4;
     overflow-y: auto;
-    padding-right: $spacing-1;
+    padding-right: $spacing-2;
+    padding-bottom: $spacing-4;
     align-content: start;
+    max-height: 100%;
+
+    // 限制最大列数，避免图片过小
+    @media (min-width: 1400px) {
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    }
+
+    @media (min-width: 1600px) {
+      grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    }
+
+    // 限制最多显示的列数
+    @supports (grid-template-columns: repeat(auto-fill, minmax(max(120px, 100% / 8), 1fr))) {
+      grid-template-columns: repeat(auto-fill, minmax(max(120px, 100% / 8), 1fr));
+    }
 
     &::-webkit-scrollbar {
-      width: 4px;
+      width: 6px;
     }
 
     &::-webkit-scrollbar-thumb {
       background: rgba(255, 255, 255, 0.15);
-      border-radius: 2px;
+      border-radius: 3px;
 
       &:hover {
         background: rgba(255, 255, 255, 0.25);
@@ -229,7 +273,8 @@ defineExpose({
     }
 
     &::-webkit-scrollbar-track {
-      background: transparent;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 3px;
     }
   }
 

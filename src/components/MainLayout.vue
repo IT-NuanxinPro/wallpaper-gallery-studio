@@ -115,8 +115,8 @@ const permissionTagType = computed(() => {
 
 const navItems = [
   { path: '/upload', label: '上传', icon: Upload },
+  { path: '/ai-assistant', label: 'AI 工坊', icon: MagicStick },
   { path: '/history', label: '历史', icon: Clock },
-  { path: '/ai-assistant', label: 'AI 助手', icon: MagicStick },
   { path: '/settings', label: '设置', icon: Setting }
 ]
 

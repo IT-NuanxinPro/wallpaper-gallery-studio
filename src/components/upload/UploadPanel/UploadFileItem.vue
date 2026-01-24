@@ -397,7 +397,6 @@ const aiKeywords = computed(() => {
 }
 </style>
 
-<!-- 全局样式：AI tooltip -->
 <style lang="scss">
-@import './upload-tooltip.scss';
+@use './upload-tooltip.scss';
 </style>

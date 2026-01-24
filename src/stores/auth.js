@@ -100,9 +100,24 @@ export const useAuthStore = defineStore('auth', () => {
 
   // 检查仓库权限
   async function checkPermission(owner, repo) {
+    // 如果已经检查过且不超过 5 分钟，直接返回缓存结果
+    const cacheKey = `permission_${owner}_${repo}`
+    const cached = sessionStorage.getItem(cacheKey)
+    if (cached && permissionChecked.value) {
+      const { level, timestamp } = JSON.parse(cached)
+      const now = Date.now()
+      // 缓存 5 分钟
+      if (now - timestamp < 5 * 60 * 1000) {
+        console.log('[Auth] 使用缓存的权限:', level)
+        permissionLevel.value = level
+        return level
+      }
+    }
+
     permissionChecked.value = false
 
     if (!token.value) {
+      console.log('[Auth] 未登录，权限为 none')
       permissionLevel.value = 'none'
       permissionChecked.value = true
       return 'none'
@@ -110,13 +125,21 @@ export const useAuthStore = defineStore('auth', () => {
 
     try {
       const level = await githubService.checkRepoAccess(owner, repo)
+      console.log('[Auth] 权限检查结果:', level)
       permissionLevel.value = level
+      // 缓存结果
+      sessionStorage.setItem(cacheKey, JSON.stringify({ level, timestamp: Date.now() }))
       return level
-    } catch {
+    } catch (error) {
+      console.error('[Auth] 权限检查失败:', error)
       permissionLevel.value = 'none'
       return 'none'
     } finally {
       permissionChecked.value = true
+      console.log(
+        '[Auth] permissionChecked 设置为 true, canUpload:',
+        ['admin', 'write'].includes(permissionLevel.value)
+      )
     }
   }
 

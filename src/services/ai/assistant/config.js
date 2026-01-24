@@ -9,14 +9,18 @@ import { AI_PROVIDERS } from '../core'
  * 助手服务的模型配置
  */
 export const ASSISTANT_MODELS = {
-  'doubao-1.6': {
-    id: 'doubao-seed-1-6-vision-250815',
-    name: 'Doubao Seed 1.6 Vision',
-    provider: AI_PROVIDERS.DOUBAO,
-    description: '豆包视觉模型 1.6 版本',
-    maxTokens: 4096,
+  // Groq AI 模型（默认推荐）
+  'groq-llama-4-scout': {
+    id: 'meta-llama/llama-4-scout-17b-16e-instruct',
+    name: 'Llama 4 Scout Vision',
+    provider: AI_PROVIDERS.GROQ,
+    description: 'Groq 最新视觉模型，速度极快',
+    maxTokens: 1024,
     temperature: 0.7,
-    recommended: true
+    recommended: true,
+    speed: 'fast',
+    accuracy: 'high',
+    cost: 'low'
   },
   'doubao-1.8': {
     id: 'doubao-seed-1-8-251228',
@@ -25,7 +29,10 @@ export const ASSISTANT_MODELS = {
     description: '豆包最新 1.8 版本',
     maxTokens: 4096,
     temperature: 0.7,
-    recommended: false
+    recommended: false,
+    speed: 'fast',
+    accuracy: 'high',
+    cost: 'low'
   },
   'llama-3.2': {
     id: '@cf/meta/llama-3.2-11b-vision-instruct',
@@ -34,7 +41,10 @@ export const ASSISTANT_MODELS = {
     description: 'Meta 的视觉理解模型',
     maxTokens: 10000,
     temperature: 0.7,
-    recommended: false
+    recommended: false,
+    speed: 'medium',
+    accuracy: 'high',
+    cost: 'medium'
   }
 }
 
@@ -42,12 +52,39 @@ export const ASSISTANT_MODELS = {
  * 助手服务默认配置
  */
 export const ASSISTANT_CONFIG = {
-  defaultProvider: AI_PROVIDERS.DOUBAO,
-  defaultModel: 'doubao-1.6',
+  defaultProvider: AI_PROVIDERS.GROQ,
+  defaultModel: 'groq-llama-4-scout',
   defaultSystemPrompt: 'default',
   conversation: {
     maxHistory: 20
   }
+}
+
+/**
+ * 速度等级映射
+ */
+export const SPEED_LEVELS = {
+  fast: { label: '快', value: 3, color: '#67c23a' },
+  medium: { label: '中等', value: 2, color: '#e6a23c' },
+  slow: { label: '慢', value: 1, color: '#f56c6c' }
+}
+
+/**
+ * 准确度等级映射
+ */
+export const ACCURACY_LEVELS = {
+  high: { label: '高', value: 3, color: '#67c23a' },
+  medium: { label: '中等', value: 2, color: '#e6a23c' },
+  low: { label: '低', value: 1, color: '#f56c6c' }
+}
+
+/**
+ * 成本等级映射
+ */
+export const COST_LEVELS = {
+  low: { label: '低', value: 1, color: '#67c23a' },
+  medium: { label: '中等', value: 2, color: '#e6a23c' },
+  high: { label: '高', value: 3, color: '#f56c6c' }
 }
 
 /**

@@ -73,12 +73,20 @@ router.beforeEach(async (to, from, next) => {
     return
   }
 
-  // 已登录但权限未检查，自动检查权限
-  if (to.meta.requiresAuth && authStore.isAuthenticated && !authStore.permissionChecked) {
+  // 已登录但权限未检查，自动检查权限（仅在首次进入需要认证的页面时检查）
+  if (
+    to.meta.requiresAuth &&
+    authStore.isAuthenticated &&
+    !authStore.permissionChecked &&
+    !from.name // 只在首次加载时检查，不在页面间导航时检查
+  ) {
     const configStore = useConfigStore()
     const { owner, repo } = configStore.config
     if (owner && repo) {
-      await authStore.checkPermission(owner, repo)
+      // 异步检查权限，不阻塞页面加载
+      authStore.checkPermission(owner, repo).catch(err => {
+        console.warn('权限检查失败:', err)
+      })
     }
   }
 
