@@ -22,6 +22,19 @@ export const ASSISTANT_MODELS = {
     accuracy: 'high',
     cost: 'low'
   },
+  // Groq AI - Maverick 模型（更强大的上下文）
+  'groq-llama-4-maverick': {
+    id: 'meta-llama/llama-4-maverick-17b-128e-instruct',
+    name: 'Llama 4 Maverick Vision',
+    provider: AI_PROVIDERS.GROQ,
+    description: 'Groq 超长上下文模型（128K），分析更深入',
+    maxTokens: 2048,
+    temperature: 0.7,
+    recommended: false,
+    speed: 'fast',
+    accuracy: 'high',
+    cost: 'low'
+  },
   'doubao-1.8': {
     id: 'doubao-seed-1-8-251228',
     name: 'Doubao Seed 1.8',
@@ -34,11 +47,24 @@ export const ASSISTANT_MODELS = {
     accuracy: 'high',
     cost: 'low'
   },
-  'llama-3.2': {
-    id: '@cf/meta/llama-3.2-11b-vision-instruct',
-    name: 'Llama 3.2 11B Vision',
+  // Cloudflare Workers AI - Scout 模型
+  'cloudflare-llama-4-scout': {
+    id: '@cf/meta/llama-4-scout-17b-16e-instruct',
+    name: 'Llama 4 Scout Vision (CF)',
     provider: AI_PROVIDERS.CLOUDFLARE,
-    description: 'Meta 的视觉理解模型',
+    description: 'Cloudflare 托管的 Scout 模型',
+    maxTokens: 1024,
+    temperature: 0.7,
+    recommended: false,
+    speed: 'medium',
+    accuracy: 'high',
+    cost: 'low'
+  },
+  'cloudflare-llama-3.2': {
+    id: '@cf/meta/llama-3.2-11b-vision-instruct',
+    name: 'Llama 3.2 11B Vision (CF)',
+    provider: AI_PROVIDERS.CLOUDFLARE,
+    description: 'Cloudflare 托管的 Llama 3.2 视觉模型',
     maxTokens: 10000,
     temperature: 0.7,
     recommended: false,

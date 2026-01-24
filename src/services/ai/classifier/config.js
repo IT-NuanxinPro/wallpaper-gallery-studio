@@ -23,6 +23,48 @@ export const CLASSIFIER_MODELS = {
     recommended: true
   },
 
+  // Groq AI - Maverick 模型（更强大的上下文）
+  'groq-llama-4-maverick': {
+    id: 'meta-llama/llama-4-maverick-17b-128e-instruct',
+    name: 'Llama 4 Maverick Vision',
+    provider: AI_PROVIDERS.GROQ,
+    description: 'Groq 超长上下文模型（128K），分析更深入',
+    speed: 'fast',
+    accuracy: 'high',
+    cost: 'low',
+    maxTokens: 2048,
+    temperature: 1,
+    recommended: false
+  },
+
+  // Cloudflare Workers AI - Scout 模型
+  'cloudflare-llama-4-scout': {
+    id: '@cf/meta/llama-4-scout-17b-16e-instruct',
+    name: 'Llama 4 Scout Vision (CF)',
+    provider: AI_PROVIDERS.CLOUDFLARE,
+    description: 'Cloudflare 托管的 Scout 模型，无需 Groq Key',
+    speed: 'medium',
+    accuracy: 'high',
+    cost: 'low',
+    maxTokens: 1024,
+    temperature: 0.3,
+    recommended: false
+  },
+
+  // Cloudflare Workers AI - Llama 3.2 11B Vision
+  'cloudflare-llama-3.2': {
+    id: '@cf/meta/llama-3.2-11b-vision-instruct',
+    name: 'Llama 3.2 11B Vision (CF)',
+    provider: AI_PROVIDERS.CLOUDFLARE,
+    description: 'Cloudflare 托管的 Llama 3.2 视觉模型',
+    speed: 'medium',
+    accuracy: 'high',
+    cost: 'medium',
+    maxTokens: 10000,
+    temperature: 0.3,
+    recommended: false
+  },
+
   // 豆包 AI 模型
   'doubao-1.8': {
     id: 'doubao-seed-1-8-251228',
