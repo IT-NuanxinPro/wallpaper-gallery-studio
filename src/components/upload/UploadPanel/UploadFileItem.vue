@@ -74,6 +74,16 @@
         ×
       </button>
 
+      <!-- AI 编辑按钮 -->
+      <button
+        v-if="file.status === 'pending' && file.aiMetadata && uploadMode === 'ai'"
+        class="upload-file-item__edit-ai"
+        title="编辑 AI 分析结果"
+        @click.stop="$emit('edit-ai', file)"
+      >
+        ✏️
+      </button>
+
       <!-- 目标路径标签 -->
       <div
         v-if="file.status === 'pending' && file.targetPath"
@@ -122,7 +132,7 @@ const props = defineProps({
   uploadMode: { type: String, default: 'ai' }
 })
 
-defineEmits(['select', 'remove', 'change-target', 'toggle-check'])
+defineEmits(['select', 'remove', 'change-target', 'toggle-check', 'edit-ai'])
 
 // 是否显示复选框
 const showCheckbox = computed(
@@ -318,6 +328,34 @@ const aiKeywords = computed(() => {
 
     &:hover {
       background: $danger;
+    }
+  }
+
+  &__edit-ai {
+    position: absolute;
+    top: 4px;
+    right: 28px;
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(102, 126, 234, 0.8);
+    border: none;
+    border-radius: 50%;
+    color: $white;
+    font-size: 10px;
+    cursor: pointer;
+    opacity: 0;
+    transition: all $duration-normal;
+
+    .upload-file-item:hover & {
+      opacity: 1;
+    }
+
+    &:hover {
+      background: $primary-start;
+      transform: scale(1.1);
     }
   }
 

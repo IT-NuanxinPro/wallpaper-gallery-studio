@@ -62,6 +62,7 @@
           @remove="$emit('remove', $event)"
           @change-target="$emit('change-target', file)"
           @toggle-check="toggleCheck"
+          @edit-ai="$emit('edit-ai', file)"
         />
       </TransitionGroup>
     </div>
@@ -87,7 +88,7 @@ const props = defineProps({
   uploadMode: { type: String, default: 'ai' }
 })
 
-defineEmits(['select', 'remove', 'change-target', 'batch-delete', 'apply-all-ai'])
+defineEmits(['select', 'remove', 'change-target', 'batch-delete', 'apply-all-ai', 'edit-ai'])
 
 const selectedIds = ref([])
 

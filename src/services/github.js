@@ -20,6 +20,18 @@ class GitHubService {
       reset: null,
       used: 0
     }
+    // 目录存在性缓存，避免重复检查
+    this.directoryCache = new Map()
+  }
+
+  /**
+   * 清理目录缓存
+   * 在需要强制重新检查目录时调用
+   */
+  clearDirectoryCache() {
+    if (this.directoryCache) {
+      this.directoryCache.clear()
+    }
   }
 
   /**
@@ -293,6 +305,9 @@ class GitHubService {
   async uploadImage(owner, repo, path, file, message, branch = 'main') {
     const content = await this.fileToBase64(file)
 
+    // 检查并创建目录结构
+    await this.ensureDirectoryExists(owner, repo, path, branch)
+
     // 检查文件是否存在
     let sha = null
     try {
@@ -317,6 +332,71 @@ class GitHubService {
       method: 'PUT',
       body: JSON.stringify(body)
     })
+  }
+
+  /**
+   * 确保目录结构存在
+   * 如果目录不存在，会创建 .gitkeep 文件来保持目录结构
+   * 使用缓存避免重复检查和创建
+   */
+  async ensureDirectoryExists(owner, repo, filePath, branch = 'main') {
+    // 提取目录路径
+    const pathParts = filePath.split('/')
+    pathParts.pop() // 移除文件名，只保留目录路径
+
+    if (pathParts.length === 0) return // 根目录，无需创建
+
+    const dirPath = pathParts.join('/')
+    const cacheKey = `${owner}/${repo}/${branch}/${dirPath}`
+
+    // 检查缓存，避免重复检查同一目录
+    if (!this.directoryCache) {
+      this.directoryCache = new Map()
+    }
+
+    if (this.directoryCache.has(cacheKey)) {
+      const cached = this.directoryCache.get(cacheKey)
+      if (cached.exists || Date.now() - cached.timestamp < 60000) {
+        // 1分钟缓存
+        return
+      }
+    }
+
+    try {
+      // 检查目录是否存在
+      await this.request(`/repos/${owner}/${repo}/contents/${dirPath}?ref=${branch}`)
+      // 目录存在，缓存结果
+      this.directoryCache.set(cacheKey, { exists: true, timestamp: Date.now() })
+      return
+    } catch (error) {
+      if (error.status === 404) {
+        // 目录不存在，需要创建
+        console.log(`[GitHub] 创建目录: ${dirPath}`)
+
+        try {
+          // 创建 .gitkeep 文件来保持目录结构
+          const gitkeepPath = `${dirPath}/.gitkeep`
+          const gitkeepMessage = `Create directory: ${dirPath}`
+
+          await this.createFile(owner, repo, gitkeepPath, '', gitkeepMessage, branch)
+          console.log(`[GitHub] 目录创建成功: ${dirPath}`)
+
+          // 缓存创建成功的结果
+          this.directoryCache.set(cacheKey, { exists: true, timestamp: Date.now() })
+        } catch (createError) {
+          console.warn(`[GitHub] 创建目录失败: ${dirPath}`, createError)
+
+          // 如果创建失败，可能是因为目录已经被其他请求创建了
+          // 缓存失败结果，但时间较短，允许后续重试
+          this.directoryCache.set(cacheKey, { exists: false, timestamp: Date.now() })
+
+          // 不抛出错误，让上传继续进行
+        }
+      } else {
+        // 其他错误，不处理
+        console.warn(`[GitHub] 检查目录时出错: ${dirPath}`, error)
+      }
+    }
   }
 
   /**

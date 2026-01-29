@@ -50,6 +50,7 @@
         @change-target="$emit('change-target', $event)"
         @batch-delete="handleBatchDelete"
         @apply-all-ai="$emit('apply-all-ai')"
+        @edit-ai="$emit('edit-ai', $event)"
       />
     </div>
   </div>
@@ -95,7 +96,8 @@ const emit = defineEmits([
   'series-change',
   'apply-all-ai',
   'provider-change',
-  'model-change'
+  'model-change',
+  'edit-ai'
 ])
 
 const fileGridRef = ref(null)

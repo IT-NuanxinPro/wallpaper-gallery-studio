@@ -37,20 +37,6 @@ export const CLASSIFIER_MODELS = {
     recommended: false
   },
 
-  // Cloudflare Workers AI - Scout 模型
-  'cloudflare-llama-4-scout': {
-    id: '@cf/meta/llama-4-scout-17b-16e-instruct',
-    name: 'Llama 4 Scout Vision (CF)',
-    provider: AI_PROVIDERS.CLOUDFLARE,
-    description: 'Cloudflare 托管的 Scout 模型，无需 Groq Key',
-    speed: 'medium',
-    accuracy: 'high',
-    cost: 'low',
-    maxTokens: 1024,
-    temperature: 0.3,
-    recommended: false
-  },
-
   // Cloudflare Workers AI - Llama 3.2 11B Vision
   'cloudflare-llama-3.2': {
     id: '@cf/meta/llama-3.2-11b-vision-instruct',
@@ -59,8 +45,22 @@ export const CLASSIFIER_MODELS = {
     description: 'Cloudflare 托管的 Llama 3.2 视觉模型',
     speed: 'medium',
     accuracy: 'high',
-    cost: 'medium',
+    cost: 'low',
     maxTokens: 10000,
+    temperature: 0.3,
+    recommended: false
+  },
+
+  // Cloudflare Workers AI - LLaVA 1.5 7B
+  'cloudflare-llava-1.5': {
+    id: '@cf/llava-hf/llava-1.5-7b-hf',
+    name: 'LLaVA 1.5 7B (CF)',
+    provider: AI_PROVIDERS.CLOUDFLARE,
+    description: 'Cloudflare 托管的 LLaVA 视觉模型',
+    speed: 'medium',
+    accuracy: 'medium',
+    cost: 'low',
+    maxTokens: 2048,
     temperature: 0.3,
     recommended: false
   },

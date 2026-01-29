@@ -1,6 +1,6 @@
 <template>
   <MainLayout>
-    <!-- 全局加载状态 -->
+    <!-- 全局加载状态（仅在必要时显示） -->
     <div v-if="pageLoading" class="upload-view__loading">
       <div class="loading-spinner">
         <div class="spinner"></div>
@@ -89,6 +89,7 @@
             @apply-all-ai="handleApplyAllAi"
             @provider-change="handleProviderChange"
             @model-change="handleModelChange"
+            @edit-ai="handleEditAI"
           />
         </div>
 
@@ -142,6 +143,15 @@
         @close="showDeleteModal = false"
         @confirm="confirmDeleteCategory"
       />
+
+      <!-- 编辑 AI 分析结果弹窗 -->
+      <EditAIResultModal
+        :visible="showEditAIModal"
+        :file="editAIFile"
+        :saving="savingAI"
+        @close="showEditAIModal = false"
+        @save="handleSaveAIResult"
+      />
     </div>
   </MainLayout>
 </template>
@@ -149,7 +159,6 @@
 <script setup>
 import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { gsap } from 'gsap'
 import MainLayout from '@/components/MainLayout.vue'
 import HeaderStats from '@/components/upload/HeaderStats.vue'
 import CategorySidebar from '@/components/upload/CategorySidebar.vue'
@@ -162,6 +171,7 @@ import CreateCategoryModal from '@/components/upload/CreateCategoryModal.vue'
 import DeleteCategoryModal from '@/components/upload/DeleteCategoryModal.vue'
 import UploadProgressModal from '@/components/upload/UploadProgressModal.vue'
 import TargetSelectModal from '@/components/upload/TargetSelectModal.vue'
+import EditAIResultModal from '@/components/upload/EditAIResultModal.vue'
 import { githubService } from '@/services/github'
 import { localStorageService } from '@/services/localStorage'
 import { useConfigStore } from '@/stores/config'
@@ -179,7 +189,7 @@ const workflowStore = useWorkflowStore()
 const credentialsStore = useCredentialsStore()
 
 const viewRef = ref(null)
-const pageLoading = ref(true) // 页面加载状态
+const pageLoading = ref(false) // 页面加载状态，默认不显示 loading
 const series = ref('desktop')
 const treeData = ref([])
 const treeKey = ref(0) // 用于强制刷新树组件
@@ -192,9 +202,12 @@ const showProgressModal = ref(false)
 const showHistoryModal = ref(false)
 const showTargetModal = ref(false)
 const showDeleteModal = ref(false)
+const showEditAIModal = ref(false)
 const targetEditFile = ref(null)
+const editAIFile = ref(null)
 const creating = ref(false)
 const deleting = ref(false)
+const savingAI = ref(false)
 const deleteTarget = reactive({ data: null, hasSubDirs: false, hasImages: false })
 
 const stats = reactive({ desktop: 0, mobile: 0, avatar: 0, total: 0 })
@@ -510,6 +523,29 @@ function handleModelChange(modelKey) {
   ElMessage.success(`已切换到 ${config.modelName}`)
 }
 
+// 编辑 AI 分析结果
+function handleEditAI(file) {
+  editAIFile.value = file
+  showEditAIModal.value = true
+}
+
+// 保存 AI 分析结果修改
+async function handleSaveAIResult({ fileId, aiMetadata }) {
+  savingAI.value = true
+  try {
+    // 更新文件的 AI 元数据
+    uploadStore.setFileAiMetadata(fileId, aiMetadata, true)
+
+    ElMessage.success('AI 分析结果已更新')
+    showEditAIModal.value = false
+    editAIFile.value = null
+  } catch (error) {
+    ElMessage.error('保存失败：' + error.message)
+  } finally {
+    savingAI.value = false
+  }
+}
+
 async function handleRetry() {
   try {
     const results = await uploadStore.retryFailed()
@@ -757,15 +793,10 @@ async function _refreshStats() {
 // 防抖版本的刷新统计函数（2秒防抖）
 const refreshStats = debounce(_refreshStats, 2000)
 
-// 保存动画 timeline 引用，用于清理
-let entranceTimeline = null
-
 onMounted(async () => {
-  pageLoading.value = true
-
   try {
-    // 1. 强制重新检查权限（清除缓存）
-    if (authStore.isAuthenticated) {
+    // 1. 检查权限（如果需要的话）
+    if (authStore.isAuthenticated && !authStore.permissionChecked) {
       const { owner, repo } = configStore.config
       const cacheKey = `permission_${owner}_${repo}`
 
@@ -784,97 +815,18 @@ onMounted(async () => {
       })
     }
 
-    // 2. 加载数据
+    // 2. 加载数据（并行执行）
     await Promise.all([loadRootCategories(), refreshStats()])
 
     console.log('[UploadView] 数据加载完成')
   } catch (err) {
     console.error('加载失败:', err)
-  } finally {
-    // 3. 隐藏 loading
-    pageLoading.value = false
-  }
-
-  // 4. 等待 DOM 更新后播放动画
-  await new Promise(resolve => setTimeout(resolve, 100))
-
-  // 5. 播放入场动画
-  entranceTimeline = gsap.timeline({ defaults: { ease: 'power3.out' } })
-
-  // 1. 顶部 header（标题 + 统计条 + HeaderStats）
-  const header = viewRef.value?.querySelector('.upload-view__header')
-  if (header) {
-    entranceTimeline.fromTo(
-      header,
-      { opacity: 0, y: -30 },
-      {
-        opacity: 1,
-        y: 0,
-        duration: 0.8,
-        clearProps: 'transform' // 只清除 transform，保留 opacity
-      }
-    )
-  }
-
-  // 2. 三栏内容区域 - 分别设置不同的入场方向
-  const contentColumns = viewRef.value?.querySelectorAll('.upload-view__content > *')
-  if (contentColumns?.length >= 3) {
-    // 左侧栏：从左边滑入
-    entranceTimeline.fromTo(
-      contentColumns[0],
-      { opacity: 0, x: -60, scale: 0.96 },
-      {
-        opacity: 1,
-        x: 0,
-        scale: 1,
-        duration: 0.9,
-        ease: 'back.out(1.1)',
-        clearProps: 'transform' // 只清除 transform，保留 opacity
-      },
-      '-=0.4' // 与 header 重叠
-    )
-
-    // 中间栏：从底部向上
-    entranceTimeline.fromTo(
-      contentColumns[1],
-      { opacity: 0, y: 60, scale: 0.96 },
-      {
-        opacity: 1,
-        y: 0,
-        scale: 1,
-        duration: 0.9,
-        ease: 'back.out(1.1)',
-        clearProps: 'transform' // 只清除 transform，保留 opacity
-      },
-      '-=0.7' // 与左侧栏重叠 0.2 秒后开始
-    )
-
-    // 右侧栏：从右边滑入
-    entranceTimeline.fromTo(
-      contentColumns[2],
-      { opacity: 0, x: 60, scale: 0.96 },
-      {
-        opacity: 1,
-        x: 0,
-        scale: 1,
-        duration: 0.9,
-        ease: 'back.out(1.1)',
-        clearProps: 'transform' // 只清除 transform，保留 opacity
-      },
-      '-=0.7' // 与中间栏重叠 0.2 秒后开始
-    )
   }
 })
 
 // 组件卸载时清理资源
 onUnmounted(() => {
   console.log('[UploadView] 组件卸载，清理资源')
-
-  // 清理入场动画 timeline，防止内存泄漏
-  if (entranceTimeline) {
-    entranceTimeline.kill()
-    entranceTimeline = null
-  }
 
   // 清理工作流轮询和定时器
   workflowStore.cleanup()
@@ -969,8 +921,7 @@ watch(
     align-items: center;
     gap: $spacing-6;
     flex-shrink: 0;
-    // 初始状态：隐藏，等待动画
-    opacity: 0;
+    // 移除初始隐藏状态，让元素默认可见
   }
 
   &__stats-bar {
@@ -1016,8 +967,7 @@ watch(
       min-height: 0;
       height: 100%;
       overflow: hidden;
-      // 初始状态：隐藏，等待动画
-      opacity: 0;
+      // 移除初始隐藏状态，让元素默认可见
     }
   }
 

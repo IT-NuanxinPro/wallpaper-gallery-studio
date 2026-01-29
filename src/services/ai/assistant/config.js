@@ -47,19 +47,7 @@ export const ASSISTANT_MODELS = {
     accuracy: 'high',
     cost: 'low'
   },
-  // Cloudflare Workers AI - Scout 模型
-  'cloudflare-llama-4-scout': {
-    id: '@cf/meta/llama-4-scout-17b-16e-instruct',
-    name: 'Llama 4 Scout Vision (CF)',
-    provider: AI_PROVIDERS.CLOUDFLARE,
-    description: 'Cloudflare 托管的 Scout 模型',
-    maxTokens: 1024,
-    temperature: 0.7,
-    recommended: false,
-    speed: 'medium',
-    accuracy: 'high',
-    cost: 'low'
-  },
+  // Cloudflare Workers AI - Llama 3.2 11B Vision
   'cloudflare-llama-3.2': {
     id: '@cf/meta/llama-3.2-11b-vision-instruct',
     name: 'Llama 3.2 11B Vision (CF)',
@@ -70,7 +58,20 @@ export const ASSISTANT_MODELS = {
     recommended: false,
     speed: 'medium',
     accuracy: 'high',
-    cost: 'medium'
+    cost: 'low'
+  },
+  // Cloudflare Workers AI - LLaVA 1.5 7B
+  'cloudflare-llava-1.5': {
+    id: '@cf/llava-hf/llava-1.5-7b-hf',
+    name: 'LLaVA 1.5 7B (CF)',
+    provider: AI_PROVIDERS.CLOUDFLARE,
+    description: 'Cloudflare 托管的 LLaVA 视觉模型',
+    maxTokens: 2048,
+    temperature: 0.7,
+    recommended: false,
+    speed: 'medium',
+    accuracy: 'medium',
+    cost: 'low'
   }
 }
 
