@@ -52,6 +52,23 @@
               </div>
             </div>
 
+            <!-- 格式化文件名 (仅电脑壁纸) -->
+            <div v-if="result.primary === 'desktop'" class="formatted-filename-section">
+              <div class="section-label">格式化文件名</div>
+              <div class="filename-chips">
+                <div
+                  v-for="(name, index) in formattedFilenames"
+                  :key="`formatted-${index}`"
+                  class="filename-chip formatted"
+                >
+                  <span class="filename-text">{{ name }}</span>
+                  <el-icon class="copy-icon" @click.stop="copyFilename(name)"
+                    ><CopyDocument
+                  /></el-icon>
+                </div>
+              </div>
+            </div>
+
             <!-- 诗意标题 -->
             <div v-if="result.displayTitle" class="title-section">
               <div class="section-label">诗意标题</div>
@@ -491,6 +508,21 @@ const renderedMarkdown = computed(() => {
   return marked(rawResponse)
 })
 
+// 格式化文件名 (仅电脑壁纸)
+const formattedFilenames = computed(() => {
+  if (props.result.primary !== 'desktop') return []
+  
+  return props.result.filenameSuggestions?.map(filename => {
+    // 获取文件名和扩展名
+    const lastDotIndex = filename.lastIndexOf('.')
+    const nameWithoutExt = lastDotIndex > 0 ? filename.substring(0, lastDotIndex) : filename
+    
+    // 格式: {secondary}-{third}-{originalName}.png
+    const formattedName = `${props.result.secondary}-${props.result.third}-${nameWithoutExt}.png`
+    return formattedName
+  }) || []
+})
+
 function formatTime(ts) {
   return new Date(ts).toLocaleTimeString('zh-CN')
 }
@@ -603,6 +635,14 @@ function copyFullInfo() {
       background: linear-gradient(135deg, rgba(102, 126, 234, 0.3), rgba(118, 75, 162, 0.3));
       border-color: #667eea;
     }
+    &.formatted {
+      background: rgba(52, 211, 153, 0.08);
+      border-color: rgba(52, 211, 153, 0.2);
+      &:hover {
+        background: rgba(52, 211, 153, 0.12);
+        border-color: rgba(52, 211, 153, 0.4);
+      }
+    }
     .filename-text {
       font-size: 13px;
       color: rgba(255, 255, 255, 0.9);
@@ -613,6 +653,44 @@ function copyFullInfo() {
       color: rgba(255, 255, 255, 0.5);
       &:hover {
         color: #667eea;
+      }
+    }
+  }
+}
+
+.formatted-filename-section {
+  .filename-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    &.centered {
+      justify-content: center;
+    }
+  }
+  .filename-chip {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
+    background: rgba(52, 211, 153, 0.08);
+    border: 1px solid rgba(52, 211, 153, 0.2);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+    &:hover {
+      background: rgba(52, 211, 153, 0.12);
+      border-color: rgba(52, 211, 153, 0.4);
+    }
+    .filename-text {
+      font-size: 13px;
+      color: rgba(255, 255, 255, 0.9);
+      font-family: 'Monaco', 'Consolas', monospace;
+    }
+    .copy-icon {
+      font-size: 14px;
+      color: rgba(52, 211, 153, 0.6);
+      &:hover {
+        color: rgba(52, 211, 153, 0.8);
       }
     }
   }
