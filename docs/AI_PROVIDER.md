@@ -11,9 +11,8 @@ src/services/ai/
 ├── core/                        # 核心层（共享）
 │   ├── providers/
 │   │   ├── base-provider.js     # Provider 基类，定义统一接口
-│   │   ├── modelscope-provider.js
+│   │   ├── zhipu-provider.js     # 智谱 GLM
 │   │   ├── groq-provider.js
-│   │   ├── nvidia-provider.js
 │   │   ├── cloudflare-provider.js
 │   │   └── index.js             # AIProviderFactory + AI_PROVIDERS + PROVIDER_DISPLAY
 │   ├── image-processor.js       # 图片压缩（compressImage）
@@ -57,7 +56,7 @@ src/services/ai/
 │          AIProviderFactory.create()              │
 │                      │                           │
 │   ┌──────────┬───────┴──────┬──────────────┐    │
-│   │ModelScope│     Groq     │    NVIDIA    │    │
+│   │  Zhipu   │     Groq     │  Cloudflare  │    │
 │   │Provider  │   Provider   │   Provider   │    │
 │   └──────────┴──────────────┴──────────────┘    │
 └─────────────────────────────────────────────────┘
@@ -73,12 +72,11 @@ src/services/ai/
 
 ## 当前支持的 Provider
 
-| Provider | 常量 | 特点 | CORS |
-| -------- | ---- | ---- | ---- |
-| ModelScope | `AI_PROVIDERS.MODELSCOPE` | 免费，国内稳定，模型丰富 | 支持直连 |
-| Groq | `AI_PROVIDERS.GROQ` | 速度极快，免费额度充足 | 支持直连 |
-| NVIDIA NIM | `AI_PROVIDERS.NVIDIA` | 视觉模型选择最多 | 本地需 Vite proxy，线上直连 |
-| Cloudflare | `AI_PROVIDERS.CLOUDFLARE` | 需要 Worker 代理 | 需要 Worker |
+| Provider   | 常量                      | 特点                                | CORS             |
+| ---------- | ------------------------- | ----------------------------------- | ---------------- |
+| 智谱 GLM   | `AI_PROVIDERS.ZHIPU`      | 免费层无限流，国内稳定，OpenAI 兼容 | 支持直连（CORS） |
+| Groq       | `AI_PROVIDERS.GROQ`       | 速度极快，但免费层限额 8000 TPM     | 支持直连         |
+| Cloudflare | `AI_PROVIDERS.CLOUDFLARE` | 需要 Worker 代理                    | 需要 Worker      |
 
 ## 模型配置
 
@@ -86,17 +84,17 @@ src/services/ai/
 
 ```js
 export const CLASSIFIER_MODELS = {
-  'modelscope-qwen3-vl-235b': {
-    id: 'Qwen/Qwen3-VL-235B-A22B-Instruct',
-    name: 'Qwen3 VL 235B',
-    provider: AI_PROVIDERS.MODELSCOPE,
-    speed: 'medium',
+  'zhipu-glm-4v-flash': {
+    id: 'glm-4v-flash',
+    name: 'GLM-4V Flash (免费)',
+    provider: AI_PROVIDERS.ZHIPU,
+    speed: 'fast',
     accuracy: 'high',
     cost: 'low',
-    maxTokens: 2048,
-    temperature: 0.2,
+    maxTokens: 1024,
+    temperature: 0.7,
     recommended: true
-  },
+  }
   // ...
 }
 ```
@@ -202,7 +200,7 @@ case AI_PROVIDERS.MY_PROVIDER:
 
 两个服务的提示词职责不同，不共享：
 
-| 文件 | 用途 |
-| ---- | ---- |
+| 文件                    | 用途                                                                         |
+| ----------------------- | ---------------------------------------------------------------------------- |
 | `classifier/prompts.js` | 分类决策树，针对 desktop/mobile/avatar 三个系列各有专用提示词，输出严格 JSON |
-| `assistant/prompts.js` | 对话式系统提示词，支持 default/creative/technical 三种角色风格 |
+| `assistant/prompts.js`  | 对话式系统提示词，支持 default/creative/technical 三种角色风格               |

@@ -1,14 +1,15 @@
 import { BaseAIProvider } from './base-provider'
 
 /**
- * Groq AI Provider
- * 使用 Groq 的 Llama 4 Scout 视觉模型进行图片分析
+ * 智谱 GLM Provider
+ * 使用智谱 BigModel 平台的 GLM-4V 视觉模型进行图片分析
+ * 免费模型：glm-4v-flash（直接回答）、glm-4.1v-thinking-flash（带推理）
  */
-export class GroqProvider extends BaseAIProvider {
+export class ZhipuProvider extends BaseAIProvider {
   constructor(config = {}) {
     super(config)
-    // Groq 官方 API 支持 CORS，本地和线上都直连
-    this.baseUrl = config.baseUrl || 'https://api.groq.com/openai/v1'
+    // 智谱 BigModel 官方 API，OpenAI 兼容协议，支持 CORS
+    this.baseUrl = config.baseUrl || 'https://open.bigmodel.cn/api/paas/v4'
   }
 
   validateCredentials(credentials) {
@@ -17,7 +18,7 @@ export class GroqProvider extends BaseAIProvider {
 
   async analyze({ imageBase64, prompt, credentials }) {
     if (!this.validateCredentials(credentials)) {
-      throw new Error('Groq credentials are invalid')
+      throw new Error('Zhipu credentials are invalid')
     }
 
     const { apiKey, model } = credentials
@@ -53,27 +54,36 @@ export class GroqProvider extends BaseAIProvider {
             ]
           }
         ],
-        temperature: 1,
-        max_completion_tokens: 1024
+        temperature: 0.7,
+        // glm-4v-flash 免费模型 max_tokens 上限为 1024
+        max_tokens: 1024
       })
     })
 
     if (!response.ok) {
-      let errorMessage = `Groq API error: ${response.status}`
+      let errorMessage = `Zhipu API error: ${response.status}`
+      let errorData = null
       try {
-        const error = await response.json()
-        errorMessage = error.error?.message || error.message || errorMessage
-        console.error('Groq API Error Details:', error)
+        errorData = await response.json()
+        errorMessage = errorData.error?.message || errorData.message || errorMessage
+        console.error('Zhipu API Error Details:', errorData)
       } catch {
         const text = await response.text().catch(() => '')
-        console.error('Groq API Error Text:', text)
+        console.error('Zhipu API Error Text:', text)
         if (text) errorMessage += ` - ${text}`
       }
 
-      if (response.status === 403 || response.status === 401) {
-        errorMessage = 'Groq API Key 无效或已过期。请检查您的 API Key 是否正确配置。'
-      } else if (response.status === 429) {
-        // 保留原始 errorMessage（含 "try again in Xs"），让 RateLimiter.parseRetryAfter 能解析
+      // 智谱特定错误码处理
+      const errorCode = errorData?.error?.code
+      if (response.status === 401 || errorCode === '1001') {
+        errorMessage = '智谱 API Key 无效或已过期。请检查您的 API Key 是否正确配置。'
+      } else if (errorCode === '1113') {
+        errorMessage =
+          '智谱账户余额不足或无可用资源包。免费模型请使用 glm-4v-flash / glm-4.1v-thinking-flash。'
+      } else if (errorCode === '1210') {
+        errorMessage = '智谱图片解析失败：图片格式不支持或文件损坏。'
+      } else if (response.status === 429 || errorCode === '1302') {
+        // 保留原始 errorMessage（含重试提示），让 RateLimiter 能解析
         errorMessage = `API 请求频率超限: ${errorMessage}`
       }
 
@@ -88,21 +98,29 @@ export class GroqProvider extends BaseAIProvider {
     let aiText = data.choices?.[0]?.message?.content || ''
 
     if (!aiText) {
-      throw new Error('No content in Groq response')
+      throw new Error('No content in Zhipu response')
     }
 
-    // Qwen3.6 等 reasoning 模型会输出 <think>...</think> 块，先剥离避免干扰 JSON 提取
-    aiText = aiText.replace(/<think>[\s\S]*?<\/think>/g, '').trim()
+    // glm-4.1v-thinking-flash 会输出 <think>...</think><answer>...</answer>
+    // glm-4v-flash 直接输出 JSON
+    // 优先提取 <answer> 标签内的内容
+    const answerMatch = aiText.match(/<answer>([\s\S]*?)<\/answer>/)
+    if (answerMatch) {
+      aiText = answerMatch[1].trim()
+    } else {
+      // 没有 answer 标签时，剥离 think 标签
+      aiText = aiText.replace(/<think>[\s\S]*?<\/think>/g, '').trim()
+    }
 
-    // 尝试提取 JSON（从最后一个 { 开始匹配，避免 think 残留或前言中的花括号干扰）
+    // 尝试提取 JSON
     const jsonMatch = aiText.match(/\{[\s\S]*\}/)
     if (!jsonMatch) {
-      throw new Error('No JSON found in Groq response')
+      throw new Error('No JSON found in Zhipu response')
     }
 
     const parsed = JSON.parse(jsonMatch[0])
 
-    console.log('[Groq] 原始 AI 返回:', { secondary: parsed.secondary, third: parsed.third })
+    console.log('[Zhipu] 原始 AI 返回:', { secondary: parsed.secondary, third: parsed.third })
 
     // 直接使用 AI 返回的文件名数组
     let filenameSuggestions = parsed.filenames || []
@@ -130,7 +148,7 @@ export class GroqProvider extends BaseAIProvider {
     if (cleanThird.includes('/')) {
       const parts = cleanThird.split('/')
       cleanThird = parts[parts.length - 1].trim()
-      console.log('[Groq] 清理 third 字段: "%s" → "%s"', parsed.third, cleanThird)
+      console.log('[Zhipu] 清理 third 字段: "%s" → "%s"', parsed.third, cleanThird)
     }
 
     const result = {
@@ -147,7 +165,7 @@ export class GroqProvider extends BaseAIProvider {
       raw: data
     }
 
-    console.log('[Groq] 清理后返回:', { secondary: result.secondary, third: result.third })
+    console.log('[Zhipu] 清理后返回:', { secondary: result.secondary, third: result.third })
 
     return result
   }

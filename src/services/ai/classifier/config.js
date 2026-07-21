@@ -9,96 +9,48 @@ import { AI_PROVIDERS } from '../core'
  * 分类服务的模型配置
  */
 export const CLASSIFIER_MODELS = {
-  // ModelScope AI 模型（默认推荐，精确分类优先）
-  'modelscope-qwen3-vl-235b': {
-    id: 'Qwen/Qwen3-VL-235B-A22B-Instruct',
-    name: 'Qwen3 VL 235B',
-    provider: AI_PROVIDERS.MODELSCOPE,
-    description: 'Qwen3 最强视觉模型，分析能力最强',
-    speed: 'medium',
-    accuracy: 'high',
-    cost: 'low',
-    maxTokens: 2048,
-    temperature: 0.2,
-    recommended: true
-  },
-
-  'modelscope-qwen3-vl-8b-thinking': {
-    id: 'Qwen/Qwen3-VL-8B-Thinking',
-    name: 'Qwen3 VL 8B Thinking',
-    provider: AI_PROVIDERS.MODELSCOPE,
-    description: 'Qwen3 推理模型，深度思考分析',
-    speed: 'medium',
-    accuracy: 'high',
-    cost: 'low',
-    maxTokens: 2048,
-    temperature: 0.2,
-    recommended: false
-  },
-
-  'modelscope-internvl3-241b': {
-    id: 'OpenGVLab/InternVL3_5-241B-A28B',
-    name: 'InternVL3.5 241B',
-    provider: AI_PROVIDERS.MODELSCOPE,
-    description: 'InternVL3.5 视觉模型，备选方案',
-    speed: 'medium',
-    accuracy: 'high',
-    cost: 'low',
-    maxTokens: 2048,
-    temperature: 0.2,
-    recommended: false
-  },
-
-  'modelscope-qvq-72b': {
-    id: 'Qwen/QVQ-72B-Preview',
-    name: 'QVQ 72B Preview',
-    provider: AI_PROVIDERS.MODELSCOPE,
-    description: 'QVQ 视觉问答模型，72B 参数',
-    speed: 'medium',
-    accuracy: 'high',
-    cost: 'low',
-    maxTokens: 2048,
-    temperature: 0.2,
-    recommended: false
-  },
-
-  'modelscope-qwen3-vl-8b': {
-    id: 'Qwen/Qwen3-VL-8B-Instruct',
-    name: 'Qwen3 VL 8B',
-    provider: AI_PROVIDERS.MODELSCOPE,
-    description: 'Qwen3 视觉模型，速度快，分类准确',
+  // Groq AI 模型
+  // 注：Groq 已下线 llama-4-scout / llama-4-maverick（2026-07），
+  // 目前唯一在线的视觉模型是 qwen/qwen3.6-27b
+  // 免费层限额 8000 TPM，约 1.7 张图/分钟
+  'groq-qwen3.6-27b': {
+    id: 'qwen/qwen3.6-27b',
+    name: 'Qwen3.6 27B Vision (Groq)',
+    provider: AI_PROVIDERS.GROQ,
+    description: 'Groq 视觉模型，131K 上下文。免费层每分钟仅 ~1.7 张图',
     speed: 'fast',
     accuracy: 'high',
     cost: 'low',
-    maxTokens: 2048,
-    temperature: 0.2,
+    maxTokens: 4096,
+    temperature: 0.7,
     recommended: false
   },
 
-  // Groq AI 模型
-  'groq-llama-4-scout': {
-    id: 'meta-llama/llama-4-scout-17b-16e-instruct',
-    name: 'Llama 4 Scout Vision',
-    provider: AI_PROVIDERS.GROQ,
-    description: 'Groq 最新视觉模型，速度极快，准确度高',
+  // 智谱 GLM 视觉模型（免费层可用，推荐）
+  // 注意：glm-4v-flash 免费模型 max_tokens 上限为 1024
+  'zhipu-glm-4v-flash': {
+    id: 'glm-4v-flash',
+    name: 'GLM-4V Flash (免费)',
+    provider: AI_PROVIDERS.ZHIPU,
+    description: '智谱免费视觉模型，直接回答无推理，速度快',
     speed: 'fast',
     accuracy: 'high',
     cost: 'low',
     maxTokens: 1024,
-    temperature: 1,
-    recommended: false
+    temperature: 0.7,
+    recommended: true
   },
 
-  'groq-llama-4-maverick': {
-    id: 'meta-llama/llama-4-maverick-17b-128e-instruct',
-    name: 'Llama 4 Maverick Vision',
-    provider: AI_PROVIDERS.GROQ,
-    description: 'Groq 超长上下文模型（128K），分析更深入',
-    speed: 'fast',
+  'zhipu-glm-4.1v-thinking-flash': {
+    id: 'glm-4.1v-thinking-flash',
+    name: 'GLM-4.1V Thinking Flash (免费)',
+    provider: AI_PROVIDERS.ZHIPU,
+    description: '智谱免费推理视觉模型，带 <think> 推理过程，分析更深入',
+    speed: 'medium',
     accuracy: 'high',
     cost: 'low',
-    maxTokens: 2048,
-    temperature: 1,
+    maxTokens: 1024,
+    temperature: 0.7,
     recommended: false
   },
 
@@ -134,11 +86,11 @@ export const CLASSIFIER_MODELS = {
  * 分类服务默认配置
  */
 export const CLASSIFIER_CONFIG = {
-  // 默认 Provider
-  defaultProvider: AI_PROVIDERS.GROQ,
+  // 默认 Provider（智谱 GLM 免费层无限流，优先于 Groq）
+  defaultProvider: AI_PROVIDERS.ZHIPU,
 
   // 默认模型
-  defaultModel: 'groq-llama-4-scout',
+  defaultModel: 'zhipu-glm-4v-flash',
 
   // 默认提示词模板
   defaultPromptTemplate: 'default',
@@ -155,8 +107,8 @@ export const CLASSIFIER_CONFIG = {
  * AI 助手默认配置（与分类服务共享模型列表）
  */
 export const ASSISTANT_CONFIG = {
-  defaultProvider: AI_PROVIDERS.MODELSCOPE,
-  defaultModel: 'modelscope-qwen3-vl-235b',
+  defaultProvider: AI_PROVIDERS.ZHIPU,
+  defaultModel: 'zhipu-glm-4v-flash',
   defaultSystemPrompt: 'default',
   conversation: {
     maxHistory: 20

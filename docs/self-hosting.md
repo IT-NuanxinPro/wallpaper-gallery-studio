@@ -171,24 +171,18 @@ VITE_OAUTH_WORKER_URL=https://wallpaper-oauth.your-subdomain.workers.dev
 
 ## 第四步：获取 AI API Key
 
-至少配置一个 AI Provider，推荐 ModelScope 或 Groq（均免费）。
+至少配置一个 AI Provider，推荐 智谱 GLM 或 Groq（均免费）。
 
-### ModelScope 魔搭（推荐，免费）
+### 智谱 GLM（推荐，免费）
 
-1. 注册 [modelscope.cn](https://modelscope.cn)
-2. 进入 **个人中心 → 访问令牌**
-3. 创建新 Token，复制保存
+1. 注册 [open.bigmodel.cn](https://open.bigmodel.cn)
+2. 进入 **用户中心 → API Keys**
+3. 创建新 Key，复制保存
 
-### Groq AI（推荐，速度极快，免费）
+### Groq AI（备选，速度极快但免费层限流）
 
 1. 注册 [console.groq.com](https://console.groq.com)
 2. 进入 **API Keys → Create API Key**
-3. 复制保存
-
-### NVIDIA NIM（可选）
-
-1. 注册 [build.nvidia.com](https://build.nvidia.com)
-2. 点击任意模型 → **Get API Key**
 3. 复制保存
 
 ### Cloudflare Workers AI（可选）
@@ -224,9 +218,8 @@ wrangler deploy worker/ai-proxy.js --name ai-proxy --compatibility-date 2026-03-
 | 变量名                       | 说明                           | 必填              |
 | ---------------------------- | ------------------------------ | ----------------- |
 | `VITE_OAUTH_WORKER_URL`      | OAuth Worker URL（第三步获取） | ✅                |
-| `VITE_MODELSCOPE_API_KEY`    | ModelScope API Key             | 至少填一个 AI Key |
+| `VITE_ZHIPU_API_KEY`         | 智谱 GLM API Key               | 至少填一个 AI Key |
 | `VITE_GROQ_API_KEY`          | Groq API Key                   | 至少填一个 AI Key |
-| `VITE_NVIDIA_API_KEY`        | NVIDIA NIM API Key             | 可选              |
 | `VITE_CLOUDFLARE_ACCOUNT_ID` | Cloudflare Account ID          | 使用 CF AI 时必填 |
 | `VITE_CLOUDFLARE_API_TOKEN`  | Cloudflare API Token           | 使用 CF AI 时必填 |
 | `VITE_WORKER_URL`            | AI Proxy Worker URL            | 使用 CF AI 时必填 |
@@ -366,9 +359,8 @@ cp .env.example .env.local
 VITE_OAUTH_WORKER_URL=https://wallpaper-oauth.your-subdomain.workers.dev
 
 # AI Provider（至少填一个）
-VITE_MODELSCOPE_API_KEY=ms-xxxxxxxxxxxxxxxxxxxxxxxx
+VITE_ZHIPU_API_KEY=your_zhipu_api_key
 VITE_GROQ_API_KEY=gsk_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-VITE_NVIDIA_API_KEY=nvapi-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
 # Cloudflare AI（可选）
 VITE_CLOUDFLARE_ACCOUNT_ID=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
@@ -383,7 +375,7 @@ pnpm install
 pnpm dev
 ```
 
-> NVIDIA API 在本地会通过 Vite dev proxy 转发（`/nvidia-api` → `integrate.api.nvidia.com`），无需额外配置。
+> 智谱 GLM 与 Groq 均支持浏览器直连（CORS），本地开发无需额外代理。
 
 ### 本地登录说明
 

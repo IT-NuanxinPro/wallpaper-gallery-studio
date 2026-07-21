@@ -19,7 +19,7 @@
 
 ### 🤖 AI 智能分类
 
-- **多 AI Provider** - ModelScope（推荐）、Groq、NVIDIA NIM、Cloudflare Workers AI
+- **多 AI Provider** - 智谱 GLM（推荐）、Groq、Cloudflare Workers AI
 - **自动分类** - 上传图片后自动识别类型并推荐三级分类
 - **智能命名** - AI 生成 2 个中文文件名建议（8-15 汉字）
 - **关键词提取** - 自动提取图片关键词和描述
@@ -69,16 +69,16 @@
 
 ## 🛠️ 技术栈
 
-| 类别 | 技术                                                   |
-| ---- | ------------------------------------------------------ |
-| 框架 | Vue 3 + Composition API                                |
-| 构建 | Vite 7                                                 |
-| UI   | Element Plus                                           |
-| 状态 | Pinia                                                  |
-| 动画 | GSAP                                                   |
-| 样式 | SCSS + CSS Variables                                   |
-| AI   | ModelScope / Groq / NVIDIA NIM / Cloudflare Workers AI |
-| 规范 | ESLint + Prettier + Husky                              |
+| 类别 | 技术                                    |
+| ---- | --------------------------------------- |
+| 框架 | Vue 3 + Composition API                 |
+| 构建 | Vite 7                                  |
+| UI   | Element Plus                            |
+| 状态 | Pinia                                   |
+| 动画 | GSAP                                    |
+| 样式 | SCSS + CSS Variables                    |
+| AI   | 智谱 GLM / Groq / Cloudflare Workers AI |
+| 规范 | ESLint + Prettier + Husky               |
 
 ## 🚀 快速开始
 
@@ -114,7 +114,7 @@ pnpm dev
 ### 常用命令
 
 ```bash
-pnpm dev      # 启动开发服务器（含 NVIDIA API 本地代理）
+pnpm dev      # 启动开发服务器
 pnpm build    # 构建生产版本
 pnpm lint     # 代码检查
 pnpm format   # 代码格式化
@@ -170,8 +170,7 @@ wallpaper-gallery-studio/
 │   │   │   │   │   ├── base-provider.js        # Provider 基类
 │   │   │   │   │   ├── cloudflare-provider.js  # Cloudflare Workers AI
 │   │   │   │   │   ├── groq-provider.js        # Groq AI
-│   │   │   │   │   ├── nvidia-provider.js      # NVIDIA NIM
-│   │   │   │   │   ├── modelscope-provider.js  # ModelScope
+│   │   │   │   │   ├── zhipu-provider.js       # 智谱 GLM
 │   │   │   │   │   └── index.js                # Provider 工厂
 │   │   │   │   ├── image-processor.js          # 图片压缩处理
 │   │   │   │   └── index.js
@@ -232,42 +231,31 @@ VITE_CLOUDFLARE_ACCOUNT_ID=your_cloudflare_account_id
 VITE_CLOUDFLARE_API_TOKEN=your_cloudflare_api_token
 VITE_WORKER_URL=https://your-worker.your-subdomain.workers.dev
 
-# ModelScope 魔搭社区（推荐，免费）
-# 获取地址：https://modelscope.cn → 个人中心 → API Token
-VITE_MODELSCOPE_API_KEY=your_modelscope_api_key
+# 智谱 GLM（推荐，免费视觉模型）
+# 获取地址：https://open.bigmodel.cn/usercenter/apikeys
+VITE_ZHIPU_API_KEY=your_zhipu_api_key
 
-# Groq AI（推荐，速度极快）
+# Groq AI（备选，速度极快但免费层限流）
 # 获取地址：https://console.groq.com/keys
 VITE_GROQ_API_KEY=your_groq_api_key
-
-# NVIDIA NIM（可选，视觉模型丰富）
-# 获取地址：https://build.nvidia.com → Get API Key
-VITE_NVIDIA_API_KEY=your_nvidia_api_key
 ```
 
 ## 🤖 AI Provider 说明
 
-模型列表统一在 `src/services/ai/classifier/config.js` 中维护，classifier 和 assistant 两个服务共享同一份配置。
+模型列表统一在 `src/services/ai/classifier/config.js` 中维护，classifier 和 assistant 两个服务共享同一份配置。默认使用**智谱 GLM** 免费层（无限流），其次 Groq，最后 Cloudflare。
 
-### ModelScope 魔搭（推荐）
+### 智谱 GLM（推荐，免费）
 
-- 免费额度充足，国内访问稳定
-- 推荐模型：**Qwen3 VL 235B**（精度最高）、**Qwen3 VL 8B**（速度快）
-- 获取 Key：[modelscope.cn](https://modelscope.cn) → 个人中心 → API Token
+- 智谱 BigModel 平台 GLM-4V 视觉模型，免费层无限流，OpenAI 兼容协议且支持 CORS
+- 推荐模型：**GLM-4V Flash**（直接回答、速度快）、**GLM-4.1V Thinking Flash**（带推理、分析更深入）
+- 获取 Key：[open.bigmodel.cn/usercenter/apikeys](https://open.bigmodel.cn/usercenter/apikeys)
 
-### Groq AI
+### Groq AI（备选）
 
-- 推理速度极快，免费额度充足
-- 推荐模型：**Llama 4 Scout Vision**、**Llama 4 Maverick Vision**
+- 推理速度极快，但免费层限额 8000 TPM（约 1.7 张图/分钟），需串行限速
+- 推荐模型：**Qwen3.6 27B Vision**（`qwen/qwen3.6-27b`）
 - 获取 Key：[console.groq.com/keys](https://console.groq.com/keys)
 - 本地和线上均直连（Groq 官方支持 CORS）
-
-### NVIDIA NIM
-
-- 视觉模型选择最丰富
-- 推荐模型：**Llama 3.2 90B Vision**（精度最高）
-- 获取 Key：[build.nvidia.com](https://build.nvidia.com) → Get API Key
-- 本地开发走 Vite dev proxy（`/nvidia-api`），线上直连
 
 ### Cloudflare Workers AI
 

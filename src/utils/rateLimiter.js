@@ -64,8 +64,14 @@ export class RateLimiter {
       if (this.isRateLimitError(error) && task.attempts < this.retryAttempts) {
         // 重试
         task.attempts++
+
+        // 尝试从错误消息中解析 Groq 提示的重试等待时间（如 "Please try again in 15.014s"）
+        const suggestedDelay = this.parseRetryAfter(error)
+        // 优先用服务器建议的等待时间，否则用指数退避
+        const delay = suggestedDelay > 0 ? suggestedDelay : this.retryDelay * task.attempts
+
         console.warn(
-          `[RateLimiter] 速率限制，重试 ${task.attempts}/${this.retryAttempts}:`,
+          `[RateLimiter] 速率限制，${(delay / 1000).toFixed(1)}s 后重试 ${task.attempts}/${this.retryAttempts}:`,
           task.context
         )
 
@@ -73,7 +79,7 @@ export class RateLimiter {
         setTimeout(() => {
           this.queue.unshift(task) // 放回队列开头
           this.processQueue()
-        }, this.retryDelay * task.attempts) // 指数退避
+        }, delay)
       } else {
         task.reject(error)
       }
@@ -95,11 +101,30 @@ export class RateLimiter {
 
     return (
       message.includes('rate limit') ||
+      message.includes('Rate limit reached') ||
       message.includes('429') ||
       message.includes('too many requests') ||
       message.includes('频率超限') ||
       errorStr.includes('rate_limit_exceeded')
     )
+  }
+
+  /**
+   * 从错误消息中解析 Groq 建议的重试等待时间
+   * 例如："Please try again in 15.014999999s" → 16000ms（多等 1s 留余量）
+   * @param {Error} error - 错误对象
+   * @returns {number} 毫秒数，未识别时返回 0
+   */
+  parseRetryAfter(error) {
+    const message = error.message || ''
+    const match = message.match(/try again in\s+([\d.]+)\s*s/i)
+    if (match) {
+      const seconds = parseFloat(match[1])
+      if (!isNaN(seconds) && seconds > 0) {
+        return Math.ceil(seconds * 1000) + 1000 // 多等 1 秒保险
+      }
+    }
+    return 0
   }
 
   /**
@@ -125,13 +150,15 @@ export class RateLimiter {
 
 /**
  * 创建 Groq 专用的速率限制器
- * 根据 Groq 免费版限制：30000 TPM, 14400 RPD
+ * qwen/qwen3.6-27b 免费层限额：8000 TPM
+ * 单次请求约 4500 tokens（图片+长提示词），约 1.7 req/min
+ * 配置为：并发 1，间隔 35 秒，刚好压在 TPM 内
  */
 export function createGroqRateLimiter() {
   return new RateLimiter({
-    maxRequests: 3, // 最多 3 个并发请求
-    minInterval: 2000, // 每个请求间隔 2 秒
-    retryAttempts: 3, // 重试 3 次
-    retryDelay: 3000 // 重试延迟 3 秒
+    maxRequests: 1, // 严格串行，避免 tokens 叠加
+    minInterval: 35000, // 35 秒/请求（8000 TPM ÷ 4600 tokens/req ≈ 1.7 req/min）
+    retryAttempts: 5, // 多给几次重试机会
+    retryDelay: 16000 // 基础重试延迟 16 秒（Groq 通常提示 15s 后重试）
   })
 }

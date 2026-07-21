@@ -25,14 +25,11 @@ export const useCredentialsStore = defineStore('credentials', () => {
   const apiToken = ref('')
   const workerUrl = ref(AI_CONFIG.workerUrl)
 
-  // 豆包凭证（已下架）
-  // const doubaoApiKey = ref('')
-
-  // ModelScope 凭证
-  const modelScopeApiKey = ref('')
-
   // Groq 凭证
   const groqApiKey = ref('')
+
+  // 智谱 GLM 凭证
+  const zhipuApiKey = ref('')
 
   const encrypted = ref(true)
   const lastVerified = ref(null)
@@ -52,21 +49,15 @@ export const useCredentialsStore = defineStore('credentials', () => {
     return !!(envAccountId && envApiToken)
   })
 
-  // 环境变量中是否有豆包凭证（已下架）
-  // const hasDoubaoEnvCredentials = computed(() => {
-  //   const envApiKey = import.meta.env.VITE_DOUBAO_API_KEY
-  //   return !!envApiKey
-  // })
-
-  // 环境变量中是否有 ModelScope 凭证
-  const hasModelScopeEnvCredentials = computed(() => {
-    const envApiKey = import.meta.env.VITE_MODELSCOPE_API_KEY
-    return !!envApiKey
-  })
-
   // 环境变量中是否有 Groq 凭证
   const hasGroqEnvCredentials = computed(() => {
     const envApiKey = import.meta.env.VITE_GROQ_API_KEY
+    return !!envApiKey
+  })
+
+  // 环境变量中是否有智谱 GLM 凭证
+  const hasZhipuEnvCredentials = computed(() => {
+    const envApiKey = import.meta.env.VITE_ZHIPU_API_KEY
     return !!envApiKey
   })
 
@@ -74,11 +65,11 @@ export const useCredentialsStore = defineStore('credentials', () => {
   const hasCredentials = computed(() => {
     return (
       hasCloudflareEnvCredentials.value ||
-      hasModelScopeEnvCredentials.value ||
       hasGroqEnvCredentials.value ||
+      hasZhipuEnvCredentials.value ||
       !!(accountId.value && apiToken.value) ||
-      !!modelScopeApiKey.value ||
-      !!groqApiKey.value
+      !!groqApiKey.value ||
+      !!zhipuApiKey.value
     )
   })
 
@@ -100,28 +91,6 @@ export const useCredentialsStore = defineStore('credentials', () => {
     }
   })
 
-  // 获取豆包凭证（已下架）
-  // const doubaoCredentials = computed(() => {
-  //   if (hasDoubaoEnvCredentials.value) {
-  //     return { apiKey: import.meta.env.VITE_DOUBAO_API_KEY }
-  //   }
-  //   return { apiKey: doubaoApiKey.value }
-  // })
-
-  // 获取 ModelScope 凭证
-  const modelScopeCredentials = computed(() => {
-    // 优先使用环境变量
-    if (hasModelScopeEnvCredentials.value) {
-      return {
-        apiKey: import.meta.env.VITE_MODELSCOPE_API_KEY
-      }
-    }
-    // 否则使用手动输入的
-    return {
-      apiKey: modelScopeApiKey.value
-    }
-  })
-
   // 获取 Groq 凭证
   const groqCredentials = computed(() => {
     // 优先使用环境变量
@@ -136,14 +105,28 @@ export const useCredentialsStore = defineStore('credentials', () => {
     }
   })
 
+  // 获取智谱 GLM 凭证
+  const zhipuCredentials = computed(() => {
+    // 优先使用环境变量
+    if (hasZhipuEnvCredentials.value) {
+      return {
+        apiKey: import.meta.env.VITE_ZHIPU_API_KEY
+      }
+    }
+    // 否则使用手动输入的
+    return {
+      apiKey: zhipuApiKey.value
+    }
+  })
+
   // 根据 Provider 获取凭证
   function getCredentialsByProvider(provider) {
     if (provider === AI_PROVIDERS.CLOUDFLARE) {
       return cloudflareCredentials.value
-    } else if (provider === AI_PROVIDERS.MODELSCOPE) {
-      return modelScopeCredentials.value
     } else if (provider === AI_PROVIDERS.GROQ) {
       return groqCredentials.value
+    } else if (provider === AI_PROVIDERS.ZHIPU) {
+      return zhipuCredentials.value
     }
     return null
   }
@@ -151,18 +134,18 @@ export const useCredentialsStore = defineStore('credentials', () => {
   const credentialsSource = computed(() => {
     if (
       hasCloudflareEnvCredentials.value ||
-      hasModelScopeEnvCredentials.value ||
-      hasGroqEnvCredentials.value
+      hasGroqEnvCredentials.value ||
+      hasZhipuEnvCredentials.value
     ) {
       return '环境变量'
     }
     return '手动输入'
   })
 
-  // 默认 Provider（优先使用 ModelScope，其次 Groq，最后 Cloudflare）
+  // 默认 Provider（优先使用智谱 GLM 免费层，其次 Groq，最后 Cloudflare）
   const defaultProvider = computed(() => {
-    if (hasModelScopeEnvCredentials.value || modelScopeApiKey.value) {
-      return AI_PROVIDERS.MODELSCOPE
+    if (hasZhipuEnvCredentials.value || zhipuApiKey.value) {
+      return AI_PROVIDERS.ZHIPU
     }
     if (hasGroqEnvCredentials.value || groqApiKey.value) {
       return AI_PROVIDERS.GROQ
@@ -170,18 +153,18 @@ export const useCredentialsStore = defineStore('credentials', () => {
     if (hasCloudflareEnvCredentials.value || (accountId.value && apiToken.value)) {
       return AI_PROVIDERS.CLOUDFLARE
     }
-    return AI_PROVIDERS.MODELSCOPE
+    return AI_PROVIDERS.ZHIPU
   })
 
   // 可用的 Provider 列表
   const availableProviders = computed(() => {
     const providers = []
-    if (hasModelScopeEnvCredentials.value || modelScopeApiKey.value) {
+    if (hasZhipuEnvCredentials.value || zhipuApiKey.value) {
       providers.push({
-        key: AI_PROVIDERS.MODELSCOPE,
-        name: 'ModelScope AI',
-        icon: '🔬',
-        source: hasModelScopeEnvCredentials.value ? '环境变量' : '手动配置'
+        key: AI_PROVIDERS.ZHIPU,
+        name: '智谱 GLM',
+        icon: '🧠',
+        source: hasZhipuEnvCredentials.value ? '环境变量' : '手动配置'
       })
     }
     if (hasGroqEnvCredentials.value || groqApiKey.value) {
@@ -331,13 +314,14 @@ export const useCredentialsStore = defineStore('credentials', () => {
    * @param {string} credentials.accountId - Cloudflare Account ID
    * @param {string} credentials.apiToken - Cloudflare API Token
    * @param {string} credentials.groqApiKey - Groq API Key
+   * @param {string} credentials.zhipuApiKey - 智谱 GLM API Key
    */
   async function saveCredentials(credentials) {
     try {
       if (credentials.accountId) accountId.value = credentials.accountId
       if (credentials.apiToken) apiToken.value = credentials.apiToken
-      if (credentials.modelScopeApiKey) modelScopeApiKey.value = credentials.modelScopeApiKey
       if (credentials.groqApiKey) groqApiKey.value = credentials.groqApiKey
+      if (credentials.zhipuApiKey) zhipuApiKey.value = credentials.zhipuApiKey
 
       const encryptedData = {}
 
@@ -347,11 +331,11 @@ export const useCredentialsStore = defineStore('credentials', () => {
       if (credentials.apiToken) {
         encryptedData.apiToken = await encryptData(credentials.apiToken)
       }
-      if (credentials.modelScopeApiKey) {
-        encryptedData.modelScopeApiKey = await encryptData(credentials.modelScopeApiKey)
-      }
       if (credentials.groqApiKey) {
         encryptedData.groqApiKey = await encryptData(credentials.groqApiKey)
+      }
+      if (credentials.zhipuApiKey) {
+        encryptedData.zhipuApiKey = await encryptData(credentials.zhipuApiKey)
       }
 
       const encryptedCredentials = {
@@ -387,8 +371,8 @@ export const useCredentialsStore = defineStore('credentials', () => {
       const envCloudflareAccountId = import.meta.env.VITE_CLOUDFLARE_ACCOUNT_ID
       const envCloudflareApiToken = import.meta.env.VITE_CLOUDFLARE_API_TOKEN
       const envWorkerUrl = import.meta.env.VITE_WORKER_URL
-      const envModelScopeApiKey = import.meta.env.VITE_MODELSCOPE_API_KEY
       const envGroqApiKey = import.meta.env.VITE_GROQ_API_KEY
+      const envZhipuApiKey = import.meta.env.VITE_ZHIPU_API_KEY
 
       if (envCloudflareAccountId && envCloudflareApiToken) {
         console.log('[Credentials] Loading Cloudflare credentials from environment')
@@ -398,23 +382,23 @@ export const useCredentialsStore = defineStore('credentials', () => {
         mode.value = 'env'
       }
 
-      if (envModelScopeApiKey) {
-        console.log('[Credentials] Loading ModelScope credentials from environment')
-        modelScopeApiKey.value = envModelScopeApiKey
-        mode.value = 'env'
-      }
-
       if (envGroqApiKey) {
         console.log('[Credentials] Loading Groq credentials from environment')
         groqApiKey.value = envGroqApiKey
         mode.value = 'env'
       }
 
+      if (envZhipuApiKey) {
+        console.log('[Credentials] Loading Zhipu credentials from environment')
+        zhipuApiKey.value = envZhipuApiKey
+        mode.value = 'env'
+      }
+
       // 如果环境变量中有凭证，直接返回
       if (
         hasCloudflareEnvCredentials.value ||
-        hasModelScopeEnvCredentials.value ||
-        hasGroqEnvCredentials.value
+        hasGroqEnvCredentials.value ||
+        hasZhipuEnvCredentials.value
       ) {
         encrypted.value = false
         loaded.value = true
@@ -440,18 +424,18 @@ export const useCredentialsStore = defineStore('credentials', () => {
         if (credentials.apiToken) {
           apiToken.value = await decryptData(credentials.apiToken)
         }
-        if (credentials.modelScopeApiKey) {
-          modelScopeApiKey.value = await decryptData(credentials.modelScopeApiKey)
-        }
         if (credentials.groqApiKey) {
           groqApiKey.value = await decryptData(credentials.groqApiKey)
+        }
+        if (credentials.zhipuApiKey) {
+          zhipuApiKey.value = await decryptData(credentials.zhipuApiKey)
         }
       } else {
         // 兼容旧版本未加密的数据
         if (credentials.accountId) accountId.value = credentials.accountId
         if (credentials.apiToken) apiToken.value = credentials.apiToken
-        if (credentials.modelScopeApiKey) modelScopeApiKey.value = credentials.modelScopeApiKey
         if (credentials.groqApiKey) groqApiKey.value = credentials.groqApiKey
+        if (credentials.zhipuApiKey) zhipuApiKey.value = credentials.zhipuApiKey
       }
 
       mode.value = 'manual'
@@ -549,8 +533,8 @@ export const useCredentialsStore = defineStore('credentials', () => {
   function clearCredentials() {
     accountId.value = ''
     apiToken.value = ''
-    modelScopeApiKey.value = ''
     groqApiKey.value = ''
+    zhipuApiKey.value = ''
     mode.value = 'manual'
     lastVerified.value = null
     loaded.value = false
@@ -584,8 +568,8 @@ export const useCredentialsStore = defineStore('credentials', () => {
     mode,
     accountId,
     apiToken,
-    modelScopeApiKey,
     groqApiKey,
+    zhipuApiKey,
     workerUrl,
     encrypted,
     lastVerified,
@@ -595,11 +579,11 @@ export const useCredentialsStore = defineStore('credentials', () => {
     // Computed
     hasCredentials,
     hasCloudflareEnvCredentials,
-    hasModelScopeEnvCredentials,
     hasGroqEnvCredentials,
+    hasZhipuEnvCredentials,
     cloudflareCredentials,
-    modelScopeCredentials,
     groqCredentials,
+    zhipuCredentials,
     credentialsSource,
     defaultProvider,
     availableProviders,

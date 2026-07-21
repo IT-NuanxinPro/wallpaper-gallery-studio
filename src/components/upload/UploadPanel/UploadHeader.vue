@@ -197,8 +197,8 @@
                           {{
                             model.provider === 'groq'
                               ? 'Groq'
-                              : model.provider === 'modelscope'
-                                ? 'ModelScope'
+                              : model.provider === 'zhipu'
+                                ? '智谱 GLM'
                                 : 'Cloudflare'
                           }}
                         </span>
@@ -270,8 +270,8 @@ const seriesOptions = [
 
 const sortedModels = computed(() => {
   const providerPriority = {
-    groq: 0,
-    modelscope: 1,
+    zhipu: 0,
+    groq: 1,
     cloudflare: 2
   }
 
@@ -295,39 +295,22 @@ function getModelBadges(model) {
 
   const badges = []
 
-  if (model.key === 'groq-llama-4-scout') {
-    badges.push({ label: '默认', tone: 'primary' })
+  if (model.key === 'zhipu-glm-4v-flash') {
+    badges.push({ label: '推荐', tone: 'primary' })
+    badges.push({ label: '免费', tone: 'success' })
     badges.push({ label: '极速', tone: 'success' })
   }
 
-  if (model.key === 'groq-llama-4-maverick') {
-    badges.push({ label: '长上下文', tone: 'warning' })
-    badges.push({ label: '深分析', tone: 'info' })
-  }
-
-  if (model.key === 'modelscope-qwen3-vl-235b') {
-    badges.push({ label: '推荐', tone: 'primary' })
-    badges.push({ label: '高精度', tone: 'success' })
-  }
-
-  if (model.key === 'modelscope-qwen3-vl-8b-thinking') {
+  if (model.key === 'zhipu-glm-4.1v-thinking-flash') {
+    badges.push({ label: '免费', tone: 'success' })
     badges.push({ label: '推理', tone: 'warning' })
     badges.push({ label: '深分析', tone: 'info' })
   }
 
-  if (model.key === 'modelscope-internvl3-241b') {
-    badges.push({ label: '备选', tone: 'info' })
-    badges.push({ label: '多模态', tone: 'primary' })
-  }
-
-  if (model.key === 'modelscope-qvq-72b') {
-    badges.push({ label: '问答', tone: 'warning' })
-    badges.push({ label: '视觉', tone: 'info' })
-  }
-
-  if (model.key === 'modelscope-qwen3-vl-8b') {
-    badges.push({ label: '轻量', tone: 'success' })
-    badges.push({ label: '快速', tone: 'primary' })
+  if (model.key === 'groq-qwen3.6-27b') {
+    badges.push({ label: '极速', tone: 'success' })
+    badges.push({ label: '长上下文', tone: 'warning' })
+    badges.push({ label: '限流', tone: 'danger' })
   }
 
   if (model.key === 'cloudflare-llama-3.2') {
@@ -347,13 +330,9 @@ function getCompactModelDescription(model) {
   if (!model) return ''
 
   const descriptionMap = {
-    'groq-llama-4-scout': '默认极速，适合高频批量分类',
-    'groq-llama-4-maverick': '长上下文，适合复杂分析',
-    'modelscope-qwen3-vl-235b': '高精度推荐，适合稳妥分类',
-    'modelscope-qwen3-vl-8b-thinking': '推理增强，适合深度判断',
-    'modelscope-internvl3-241b': '多模态备选，适合兼容场景',
-    'modelscope-qvq-72b': '视觉问答向，适合问答分析',
-    'modelscope-qwen3-vl-8b': '轻量快速，适合基础识别',
+    'zhipu-glm-4v-flash': '智谱免费视觉模型，速度快，推荐日常使用',
+    'zhipu-glm-4.1v-thinking-flash': '智谱免费推理模型，带思考过程，适合深度分析',
+    'groq-qwen3.6-27b': '极速但免费层每分钟仅 ~1.7 张图，适合低频使用',
     'cloudflare-llama-3.2': 'Workers 托管，适合私有部署',
     'cloudflare-llava-1.5': '轻量兼容，适合基础兜底'
   }

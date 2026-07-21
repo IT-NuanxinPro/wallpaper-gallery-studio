@@ -80,7 +80,7 @@ function getModelsByProvider(provider) {
 const emit = defineEmits(['update:provider', 'update:model', 'update:credentials'])
 
 // 状态
-const selectedProvider = ref(AI_PROVIDERS.DOUBAO)
+const selectedProvider = ref(AI_PROVIDERS.ZHIPU)
 const selectedModel = ref('')
 const credentials = ref({})
 const testing = ref(false)

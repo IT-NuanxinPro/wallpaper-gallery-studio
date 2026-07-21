@@ -87,13 +87,15 @@ export const useUploadStore = defineStore('upload', () => {
   // 计算属性
   function getUploadModelList(credentialsStore = useCredentialsStore()) {
     const providerPriority = {
-      [AI_PROVIDERS.GROQ]: 0,
-      [AI_PROVIDERS.MODELSCOPE]: 1
+      [AI_PROVIDERS.ZHIPU]: 0,
+      [AI_PROVIDERS.GROQ]: 1
     }
+
+    const supportedProviders = [AI_PROVIDERS.ZHIPU, AI_PROVIDERS.GROQ]
 
     const availableProviderKeys = credentialsStore.availableProviders
       .map(provider => provider.key)
-      .filter(provider => [AI_PROVIDERS.GROQ, AI_PROVIDERS.MODELSCOPE].includes(provider))
+      .filter(provider => supportedProviders.includes(provider))
 
     return getModelList()
       .filter(model => {
@@ -101,7 +103,7 @@ export const useUploadStore = defineStore('upload', () => {
           return availableProviderKeys.includes(model.provider)
         }
 
-        return [AI_PROVIDERS.GROQ, AI_PROVIDERS.MODELSCOPE].includes(model.provider)
+        return supportedProviders.includes(model.provider)
       })
       .sort((a, b) => {
         const providerDiff =
@@ -114,7 +116,7 @@ export const useUploadStore = defineStore('upload', () => {
 
   function getPreferredUploadModel(credentialsStore = useCredentialsStore()) {
     const availableModels = getUploadModelList(credentialsStore)
-    return availableModels[0] || getRecommendedModel(AI_PROVIDERS.GROQ)
+    return availableModels[0] || getRecommendedModel(AI_PROVIDERS.ZHIPU)
   }
 
   // 生成唯一 ID
@@ -547,7 +549,7 @@ export const useUploadStore = defineStore('upload', () => {
 
     const providerDisplay = {
       groq: { name: 'Groq AI', icon: '⚡' },
-      modelscope: { name: 'ModelScope AI', icon: '🔬' },
+      zhipu: { name: '智谱 GLM', icon: '🧠' },
       cloudflare: { name: 'Cloudflare AI', icon: '☁️' }
     }
     const display = providerDisplay[provider] || { name: provider, icon: '🤖' }
