@@ -65,7 +65,7 @@ export class RateLimiter {
         // 重试
         task.attempts++
 
-        // 尝试从错误消息中解析 Groq 提示的重试等待时间（如 "Please try again in 15.014s"）
+        // 尝试从错误消息中解析服务端提示的重试等待时间（如 "Please try again in 15.014s"）
         const suggestedDelay = this.parseRetryAfter(error)
         // 优先用服务器建议的等待时间，否则用指数退避
         const delay = suggestedDelay > 0 ? suggestedDelay : this.retryDelay * task.attempts
@@ -110,7 +110,7 @@ export class RateLimiter {
   }
 
   /**
-   * 从错误消息中解析 Groq 建议的重试等待时间
+   * 从错误消息中解析服务端建议的等待时间
    * 例如："Please try again in 15.014999999s" → 16000ms（多等 1s 留余量）
    * @param {Error} error - 错误对象
    * @returns {number} 毫秒数，未识别时返回 0
@@ -160,5 +160,19 @@ export function createGroqRateLimiter() {
     minInterval: 35000, // 35 秒/请求（8000 TPM ÷ 4600 tokens/req ≈ 1.7 req/min）
     retryAttempts: 5, // 多给几次重试机会
     retryDelay: 16000 // 基础重试延迟 16 秒（Groq 通常提示 15s 后重试）
+  })
+}
+
+/**
+ * 创建智谱 GLM 视觉请求专用队列。
+ * GLM 图片分析在上传工作台中按单请求串行执行，用户可以一次选择很多张图片，
+ * 后续请求会在本地排队；若触发 429/1302，则自动退避后重试。
+ */
+export function createZhipuRateLimiter() {
+  return new RateLimiter({
+    maxRequests: 1,
+    minInterval: 1500,
+    retryAttempts: 5,
+    retryDelay: 5000
   })
 }
