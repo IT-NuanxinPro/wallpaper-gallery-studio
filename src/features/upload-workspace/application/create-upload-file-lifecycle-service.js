@@ -10,7 +10,6 @@ function buildTargetPath(series, l1, l2 = '') {
 
 export function createUploadFileLifecycleService({
   sessionCache,
-  classifierAnalyze,
   imageCompressor,
   previewManager,
   hashComputer
