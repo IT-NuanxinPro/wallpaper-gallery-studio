@@ -132,6 +132,20 @@ export const useUploadSessionStore = defineStore('upload-session', () => {
     return restored
   }
 
+  Promise.resolve().then(async () => {
+    try {
+      const restored = await restoreAiTaskFiles()
+      if (restored.some(file => !file.aiMetadata)) {
+        const { resumeAiTaskQueue } = await import('@/services/ai/task-runner')
+        resumeAiTaskQueue().catch(error => {
+          console.warn('[UploadSession] AI 任务自动续跑失败:', error)
+        })
+      }
+    } catch (error) {
+      console.warn('[UploadSession] AI 任务恢复失败:', error)
+    }
+  })
+
   return {
     files,
     uploading,
