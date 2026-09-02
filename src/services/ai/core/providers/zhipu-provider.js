@@ -1,4 +1,7 @@
 import { BaseAIProvider } from './base-provider'
+import { createZhipuRateLimiter } from '@/utils/rateLimiter'
+
+const zhipuRateLimiter = createZhipuRateLimiter()
 
 /**
  * 智谱 GLM Provider
@@ -23,6 +26,13 @@ export class ZhipuProvider extends BaseAIProvider {
 
     const { apiKey, model } = credentials
 
+    return zhipuRateLimiter.execute(
+      () => this.requestAnalysis({ imageBase64, prompt, apiKey, model }),
+      { provider: 'zhipu', model }
+    )
+  }
+
+  async requestAnalysis({ imageBase64, prompt, apiKey, model }) {
     // 处理 base64 数据：如果已经包含 data URL 前缀，直接使用；否则添加前缀
     let imageUrl = imageBase64
     if (!imageBase64.startsWith('data:')) {
@@ -83,7 +93,7 @@ export class ZhipuProvider extends BaseAIProvider {
       } else if (errorCode === '1210') {
         errorMessage = '智谱图片解析失败：图片格式不支持或文件损坏。'
       } else if (response.status === 429 || errorCode === '1302') {
-        // 保留原始 errorMessage（含重试提示），让 RateLimiter 能解析
+        // 保留原始 errorMessage（含重试提示），让 RateLimiter 能解析并自动重试
         errorMessage = `API 请求频率超限: ${errorMessage}`
       }
 
