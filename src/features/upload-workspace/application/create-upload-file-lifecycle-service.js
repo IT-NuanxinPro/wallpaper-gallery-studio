@@ -1,4 +1,4 @@
-import { AI_TASK_STATUS, useAiTasksStore } from '@/stores/ai-tasks'
+import { useAiTasksStore } from '@/stores/ai-tasks'
 
 function buildTargetPath(series, l1, l2 = '') {
   const parts = ['wallpaper', series, l1]
@@ -6,28 +6,6 @@ function buildTargetPath(series, l1, l2 = '') {
     parts.push(l2)
   }
   return parts.join('/')
-}
-
-function buildAiMetadata(series, result, error = null) {
-  return {
-    series,
-    category: result?.secondary || '通用',
-    subcategory: result?.third || '',
-    primary: series,
-    secondary: result?.secondary || '通用',
-    third: result?.third || '',
-    keywords: result?.keywords || [],
-    description: result?.description || '',
-    filenameSuggestions: result?.filenameSuggestions || [],
-    displayTitle: result?.displayTitle || null,
-    confidence: result?.confidence || 0,
-    reasoning: result?.reasoning || null,
-    ...(error ? { error } : {})
-  }
-}
-
-function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms))
 }
 
 export function createUploadFileLifecycleService({
@@ -99,7 +77,7 @@ export function createUploadFileLifecycleService({
           targetL2: target.l2,
           aiMetadata: cachedAiMetadata,
           aiTaskId: null,
-          aiTaskStatus: cachedAiMetadata ? AI_TASK_STATUS.COMPLETED : null,
+          aiTaskStatus: cachedAiMetadata ? 'completed' : null,
           aiTaskAttempts: 0
         })
       }
@@ -172,13 +150,11 @@ export function createUploadFileLifecycleService({
       return pendingFiles.length
     },
 
-    async analyzeFiles(uploadFiles, { series, provider, credentials, modelKey }) {
+    async analyzeFiles(uploadFiles, { series, provider, modelKey }) {
       const taskStore = useAiTasksStore()
       await taskStore.initialize()
 
       const queue = uploadFiles.filter(file => !file.aiMetadata)
-      let analyzedCount = 0
-
       for (const uploadFile of queue) {
         let task = taskStore.getTaskByFileId(uploadFile.id)
         if (!task) {
@@ -196,83 +172,9 @@ export function createUploadFileLifecycleService({
         uploadFile.aiTaskAttempts = task.attempts || 0
       }
 
-      // 任务中心统一串行执行。Provider 自身仍保留底层限流保护。
-      for (const uploadFile of queue) {
-        const task = taskStore.getTaskByFileId(uploadFile.id)
-        if (!task || task.status === AI_TASK_STATUS.COMPLETED) {
-          continue
-        }
-
-        const maxAttempts = task.maxAttempts || 3
-        let completed = false
-        let lastError = null
-
-        for (let attempt = task.attempts || 0; attempt < maxAttempts && !completed; attempt++) {
-          uploadFile.aiTaskStatus = AI_TASK_STATUS.ANALYZING
-          uploadFile.aiTaskAttempts = attempt + 1
-          await taskStore.updateTask(task.id, {
-            status: AI_TASK_STATUS.ANALYZING,
-            attempts: attempt + 1,
-            startedAt: task.startedAt || Date.now(),
-            retryAt: null,
-            error: null
-          })
-
-          try {
-            const result = await classifierAnalyze({
-              file: uploadFile.file,
-              series: task.series || series,
-              providerType: task.provider || provider,
-              credentials,
-              modelKey: task.modelKey || modelKey
-            })
-
-            const aiMetadata = buildAiMetadata(task.series || series, result)
-            this.applyAiMetadata(uploadFile, aiMetadata)
-            uploadFile.aiTaskStatus = AI_TASK_STATUS.COMPLETED
-
-            await taskStore.updateTask(task.id, {
-              status: AI_TASK_STATUS.COMPLETED,
-              result: aiMetadata,
-              error: null,
-              retryAt: null,
-              finishedAt: Date.now()
-            })
-            completed = true
-          } catch (error) {
-            lastError = error
-            const isLastAttempt = attempt + 1 >= maxAttempts
-
-            if (!isLastAttempt) {
-              const retryDelay = Math.min(30000, 2000 * 2 ** attempt)
-              const retryAt = Date.now() + retryDelay
-              uploadFile.aiTaskStatus = AI_TASK_STATUS.RETRYING
-              await taskStore.updateTask(task.id, {
-                status: AI_TASK_STATUS.RETRYING,
-                error: error.message,
-                retryAt
-              })
-              await sleep(retryDelay)
-            }
-          }
-        }
-
-        if (!completed) {
-          const message = lastError?.message || 'AI 分析失败'
-          uploadFile.aiTaskStatus = AI_TASK_STATUS.FAILED
-          this.applyAiMetadata(uploadFile, buildAiMetadata(task.series || series, null, message), false)
-          await taskStore.updateTask(task.id, {
-            status: AI_TASK_STATUS.FAILED,
-            error: message,
-            retryAt: null,
-            finishedAt: Date.now()
-          })
-        }
-
-        analyzedCount += 1
-      }
-
-      return { analyzedCount }
+      const { resumeAiTaskQueue } = await import('@/services/ai/task-runner')
+      await resumeAiTaskQueue()
+      return { analyzedCount: queue.length }
     }
   }
 }
