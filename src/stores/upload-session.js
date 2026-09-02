@@ -86,20 +86,29 @@ export const useUploadSessionStore = defineStore('upload-session', () => {
     const index = files.value.findIndex(file => file.id === id)
     if (index > -1) {
       files.value.splice(index, 1)
+      useAiTasksStore().removeTasksByFileIds([id])
     }
   }
 
   function removeFiles(ids) {
     files.value = files.value.filter(file => !ids.includes(file.id))
+    useAiTasksStore().removeTasksByFileIds(ids)
   }
 
   function clearFiles() {
+    const fileIds = files.value.map(file => file.id)
     files.value = []
+    if (fileIds.length > 0) {
+      useAiTasksStore().removeTasksByFileIds(fileIds)
+    }
   }
 
   function clearSuccessFiles() {
     const successIds = files.value.filter(file => file.status === 'success').map(file => file.id)
     files.value = files.value.filter(file => file.status !== 'success')
+    if (successIds.length > 0) {
+      useAiTasksStore().removeTasksByFileIds(successIds)
+    }
     return successIds.length
   }
 
