@@ -1,0 +1,67 @@
+name: Publish v1.1.0
+
+on:
+  push:
+    branches:
+      - feature/glm-analysis-queue
+    paths:
+      - .github/workflows/publish-v1.1.0.yml
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view v1.1.0 --repo IT-NuanxinPro/wallpaper-gallery-studio >/dev/null 2>&1; then
+            echo "v1.1.0 already exists, skipping"
+            exit 0
+          fi
+
+          cat > release-notes.md <<'EOF'
+          ## 🚀 版本概览
+
+          `v1.1.0` 引入了新的 AI 任务中心，重点优化智谱 GLM 多图分析体验。现在可以一次加入多张图片，由任务中心持久化排队并逐张分析。
+
+          ## ✨ 新功能
+
+          - 新增 AI Task Center，统一展示排队中、分析中、等待重试、已完成和失败状态
+          - 支持一次选择多张图片或文件夹进入 AI 分析队列
+          - 图片卡片展示“排队第 N 位 / 分析中 / 重试中 / 分析失败”状态徽标
+          - 失败任务支持手动重试
+          - 页面刷新后可恢复图片、任务状态和已完成 AI 结果
+
+          ## ⚙️ AI 分析优化
+
+          - 智谱 GLM 视觉请求改为全局单并发，避免同时发送多个请求
+          - 429 / 1302 限流自动退避重试
+          - 队列任务与图片 Blob 使用 IndexedDB 持久化
+          - 刷新后 queued / retrying / analyzing 任务会重新进入队列继续执行
+          - API Key 不写入 IndexedDB，续跑时仍从现有凭据配置读取
+
+          ## 🧹 任务生命周期
+
+          - 删除单张或批量图片时同步清理对应 AI 任务
+          - 上传完成并清理文件后同步清理任务记录
+          - 已完成任务结果会自动回填到上传文件卡片
+
+          ## 🛠 工程调整
+
+          - 项目版本更新至 `1.1.0`
+          - 为未来切换智谱 Batch API 预留可复用任务状态模型和 UI
+
+          ## 📌 关联
+
+          - 合并 PR #3
+          EOF
+
+          gh release create v1.1.0 \
+            --repo IT-NuanxinPro/wallpaper-gallery-studio \
+            --target 888e493a0cdb598b4de373e95f5e74d1d6eabac6 \
+            --title "v1.1.0" \
+            --notes-file release-notes.md
