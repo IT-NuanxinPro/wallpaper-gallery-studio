@@ -1,6 +1,5 @@
 <template>
   <div class="upload-dropzone">
-    <!-- 隐藏的文件输入 -->
     <input
       ref="fileInputRef"
       type="file"
@@ -17,7 +16,6 @@
       @change="handleFolderSelect"
     />
 
-    <!-- 拖拽区域 -->
     <div
       class="upload-dropzone__area"
       :class="{
@@ -58,7 +56,7 @@ const props = defineProps({
   aiConfig: { type: Object, default: null },
   icon: { type: String, default: '📁' },
   text: { type: String, default: '拖拽图片或文件夹到此处' },
-  canUpload: { type: Boolean, default: true } // 新增：是否有上传权限
+  canUpload: { type: Boolean, default: true }
 })
 
 const emit = defineEmits(['add-files'])
@@ -67,31 +65,11 @@ const fileInputRef = ref(null)
 const folderInputRef = ref(null)
 const isDragging = ref(false)
 
-function getBatchLimit() {
-  if (props.uploadMode !== 'ai') return Infinity
-  return props.aiConfig?.provider === 'groq' ? 10 : 1
-}
-
-function getLimitMessage(limit) {
-  if (limit === 10) {
-    return '当前 Groq 模型单次最多上传 10 张图片，请分批上传'
-  }
-
-  return '当前所选模型单次仅支持上传 1 张图片'
-}
-
-function validateBatchLimit(files) {
-  const limit = getBatchLimit()
-
-  if (files.length > limit) {
-    ElMessage.warning(getLimitMessage(limit))
-    return false
-  }
-
+function validateBatchLimit() {
+  // AI 模式现在使用持久化任务队列，允许一次选择多张图片。
   return true
 }
 
-// 触发文件选择
 function triggerInput() {
   if (!props.canUpload) {
     ElMessage.error('🔒 您没有上传权限')
@@ -104,7 +82,6 @@ function triggerInput() {
   if (!props.uploading) fileInputRef.value?.click()
 }
 
-// 触发文件夹选择
 function triggerFolderInput() {
   if (!props.canUpload) {
     ElMessage.error('🔒 您没有上传权限')
@@ -117,15 +94,12 @@ function triggerFolderInput() {
   if (!props.uploading) folderInputRef.value?.click()
 }
 
-// 递归读取文件夹中的文件
 async function readEntriesRecursively(entry) {
   const files = []
 
   if (entry.isFile) {
     const file = await new Promise(resolve => entry.file(resolve))
-    if (file.type.startsWith('image/')) {
-      files.push(file)
-    }
+    if (file.type.startsWith('image/')) files.push(file)
   } else if (entry.isDirectory) {
     const reader = entry.createReader()
     const entries = await new Promise(resolve => reader.readEntries(resolve))
@@ -138,7 +112,14 @@ async function readEntriesRecursively(entry) {
   return files
 }
 
-// 处理拖拽（支持文件夹）
+function showSelectedMessage(count) {
+  ElMessage({
+    message: `📂 已加入 ${count} 张图片，AI 将在任务中心逐张处理`,
+    type: 'success',
+    duration: 3000
+  })
+}
+
 async function handleDrop(e) {
   isDragging.value = false
 
@@ -154,9 +135,8 @@ async function handleDrop(e) {
 
   const items = e.dataTransfer.items
   const allFiles = []
-
-  // 检查是否有文件夹
   const entries = []
+
   for (const item of items) {
     if (item.webkitGetAsEntry) {
       const entry = item.webkitGetAsEntry()
@@ -165,7 +145,6 @@ async function handleDrop(e) {
   }
 
   if (entries.length > 0) {
-    // 显示处理中提示
     const loadingMsg = ElMessage({
       message: '📂 正在读取文件夹...',
       type: 'info',
@@ -173,15 +152,12 @@ async function handleDrop(e) {
     })
 
     try {
-      // 使用 Entry API 递归读取
       for (const entry of entries) {
         const files = await readEntriesRecursively(entry)
         allFiles.push(...files)
       }
 
       loadingMsg.close()
-
-      // 过滤出图片文件
       const imageFiles = allFiles.filter(f => f.type.startsWith('image/'))
 
       if (imageFiles.length === 0) {
@@ -189,25 +165,8 @@ async function handleDrop(e) {
         return
       }
 
-      if (!validateBatchLimit(imageFiles)) {
-        return
-      }
-
-      // 大批量文件警告
-      if (props.uploadMode !== 'ai' && imageFiles.length > 50) {
-        ElMessage({
-          message: `📂 检测到 ${imageFiles.length} 张图片，建议分批上传以获得更好的体验`,
-          type: 'warning',
-          duration: 5000
-        })
-      } else {
-        ElMessage({
-          message: `📂 已选择 ${imageFiles.length} 张图片`,
-          type: 'success',
-          duration: 3000
-        })
-      }
-
+      if (!validateBatchLimit(imageFiles)) return
+      showSelectedMessage(imageFiles.length)
       emit('add-files', imageFiles)
     } catch (error) {
       loadingMsg.close()
@@ -215,24 +174,23 @@ async function handleDrop(e) {
       console.error('读取文件夹错误:', error)
     }
   } else {
-    // 降级：直接使用 files
     const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'))
     if (files.length > 0 && validateBatchLimit(files)) {
+      showSelectedMessage(files.length)
       emit('add-files', files)
     }
   }
 }
 
-// 处理文件选择
 function handleFileSelect(e) {
   const files = Array.from(e.target.files)
   if (files.length > 0 && validateBatchLimit(files)) {
+    showSelectedMessage(files.length)
     emit('add-files', files)
   }
   e.target.value = ''
 }
 
-// 处理文件夹选择
 function handleFolderSelect(e) {
   const allFiles = Array.from(e.target.files)
   const files = allFiles.filter(f => f.type.startsWith('image/'))
@@ -243,27 +201,10 @@ function handleFolderSelect(e) {
     return
   }
 
-  if (!validateBatchLimit(files)) {
-    e.target.value = ''
-    return
+  if (validateBatchLimit(files)) {
+    showSelectedMessage(files.length)
+    emit('add-files', files)
   }
-
-  // 大批量文件警告
-  if (props.uploadMode !== 'ai' && files.length > 50) {
-    ElMessage({
-      message: `📂 检测到 ${files.length} 张图片，建议分批上传以获得更好的体验`,
-      type: 'warning',
-      duration: 5000
-    })
-  } else {
-    ElMessage({
-      message: `📂 已选择 ${files.length} 张图片`,
-      type: 'success',
-      duration: 3000
-    })
-  }
-
-  emit('add-files', files)
   e.target.value = ''
 }
 </script>

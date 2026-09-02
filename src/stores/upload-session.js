@@ -1,5 +1,55 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
+import { AI_TASK_STATUS, useAiTasksStore } from './ai-tasks'
+import { previewManager } from '@/utils/previewManager'
+
+function buildTargetPath(task) {
+  const metadata = task.result
+  if (!metadata || metadata.error) return ''
+
+  const category = metadata.category || metadata.secondary
+  const subcategory = metadata.subcategory || metadata.third || ''
+  if (!task.series || !category) return ''
+
+  return ['wallpaper', task.series, category, subcategory].filter(Boolean).join('/')
+}
+
+function restoreFileFromTask(task) {
+  if (!task.blob) return null
+
+  const restoredFile =
+    task.blob instanceof File
+      ? task.blob
+      : new File([task.blob], task.fileName, {
+          type: task.fileType || task.blob.type || 'image/jpeg',
+          lastModified: task.fileLastModified || Date.now()
+        })
+
+  const metadata = task.status === AI_TASK_STATUS.COMPLETED ? task.result : null
+
+  return {
+    id: task.fileId,
+    file: restoredFile,
+    fileHash: null,
+    name: task.fileName,
+    size: restoredFile.size,
+    originalSize: restoredFile.size,
+    compressed: false,
+    preview: previewManager.createPreview(task.fileId, restoredFile),
+    status: 'pending',
+    progress: 0,
+    error: null,
+    targetPath: buildTargetPath(task),
+    targetSeries: task.series,
+    targetL1: metadata?.category || metadata?.secondary || '',
+    targetL2: metadata?.subcategory || metadata?.third || '',
+    aiMetadata: metadata,
+    aiTaskId: task.id,
+    aiTaskStatus: task.status,
+    aiTaskAttempts: task.attempts || 0,
+    restoredFromTask: true
+  }
+}
 
 export const useUploadSessionStore = defineStore('upload-session', () => {
   const files = ref([])
@@ -11,6 +61,7 @@ export const useUploadSessionStore = defineStore('upload-session', () => {
   const metadataError = ref(null)
   const metadataPendingPath = ref('')
   const metadataRetryFileIds = ref([])
+  const tasksRestored = ref(false)
 
   const totalProgress = computed(() => {
     if (files.value.length === 0) return 0
@@ -35,22 +86,65 @@ export const useUploadSessionStore = defineStore('upload-session', () => {
     const index = files.value.findIndex(file => file.id === id)
     if (index > -1) {
       files.value.splice(index, 1)
+      useAiTasksStore().removeTasksByFileIds([id])
     }
   }
 
   function removeFiles(ids) {
     files.value = files.value.filter(file => !ids.includes(file.id))
+    useAiTasksStore().removeTasksByFileIds(ids)
   }
 
   function clearFiles() {
+    const fileIds = files.value.map(file => file.id)
     files.value = []
+    if (fileIds.length > 0) {
+      useAiTasksStore().removeTasksByFileIds(fileIds)
+    }
   }
 
   function clearSuccessFiles() {
     const successIds = files.value.filter(file => file.status === 'success').map(file => file.id)
     files.value = files.value.filter(file => file.status !== 'success')
+    if (successIds.length > 0) {
+      useAiTasksStore().removeTasksByFileIds(successIds)
+    }
     return successIds.length
   }
+
+  async function restoreAiTaskFiles() {
+    if (tasksRestored.value) return []
+
+    const taskStore = useAiTasksStore()
+    await taskStore.initialize()
+
+    const restored = []
+    for (const task of taskStore.tasks) {
+      if (!task.fileId || files.value.some(file => file.id === task.fileId)) continue
+
+      const uploadFile = restoreFileFromTask(task)
+      if (!uploadFile) continue
+      files.value.push(uploadFile)
+      restored.push(uploadFile)
+    }
+
+    tasksRestored.value = true
+    return restored
+  }
+
+  Promise.resolve().then(async () => {
+    try {
+      const restored = await restoreAiTaskFiles()
+      if (restored.some(file => !file.aiMetadata)) {
+        const { resumeAiTaskQueue } = await import('@/services/ai/task-runner')
+        resumeAiTaskQueue().catch(error => {
+          console.warn('[UploadSession] AI 任务自动续跑失败:', error)
+        })
+      }
+    } catch (error) {
+      console.warn('[UploadSession] AI 任务恢复失败:', error)
+    }
+  })
 
   return {
     files,
@@ -62,6 +156,7 @@ export const useUploadSessionStore = defineStore('upload-session', () => {
     metadataError,
     metadataPendingPath,
     metadataRetryFileIds,
+    tasksRestored,
     totalProgress,
     pendingFiles,
     uploadingFiles,
@@ -72,6 +167,7 @@ export const useUploadSessionStore = defineStore('upload-session', () => {
     removeFile,
     removeFiles,
     clearFiles,
-    clearSuccessFiles
+    clearSuccessFiles,
+    restoreAiTaskFiles
   }
 })

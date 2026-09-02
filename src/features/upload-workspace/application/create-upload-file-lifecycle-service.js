@@ -1,3 +1,5 @@
+import { useAiTasksStore } from '@/stores/ai-tasks'
+
 function buildTargetPath(series, l1, l2 = '') {
   const parts = ['wallpaper', series, l1]
   if (l2) {
@@ -8,7 +10,6 @@ function buildTargetPath(series, l1, l2 = '') {
 
 export function createUploadFileLifecycleService({
   sessionCache,
-  classifierAnalyze,
   imageCompressor,
   previewManager,
   hashComputer
@@ -73,7 +74,10 @@ export function createUploadFileLifecycleService({
           targetSeries: target.series,
           targetL1: target.l1,
           targetL2: target.l2,
-          aiMetadata: cachedAiMetadata
+          aiMetadata: cachedAiMetadata,
+          aiTaskId: null,
+          aiTaskStatus: cachedAiMetadata ? 'completed' : null,
+          aiTaskAttempts: 0
         })
       }
 
@@ -95,7 +99,7 @@ export function createUploadFileLifecycleService({
       const category = aiMetadata.category || aiMetadata.secondary
       const subcategory = aiMetadata.subcategory || aiMetadata.third || ''
 
-      if (aiSeries && category) {
+      if (aiSeries && category && !aiMetadata.error) {
         uploadFile.targetSeries = aiSeries
         uploadFile.targetL1 = category
         uploadFile.targetL2 = subcategory
@@ -145,69 +149,31 @@ export function createUploadFileLifecycleService({
       return pendingFiles.length
     },
 
-    async analyzeFiles(uploadFiles, { series, provider, credentials, modelKey, concurrency = 3 }) {
+    async analyzeFiles(uploadFiles, { series, provider, modelKey }) {
+      const taskStore = useAiTasksStore()
+      await taskStore.initialize()
+
       const queue = uploadFiles.filter(file => !file.aiMetadata)
-      let analyzedCount = 0
-
-      async function processNext() {
-        while (queue.length > 0) {
-          const uploadFile = queue.shift()
-          if (!uploadFile) break
-
-          try {
-            const result = await classifierAnalyze({
-              file: uploadFile.file,
-              series,
-              providerType: provider,
-              credentials,
-              modelKey
-            })
-
-            const aiMetadata = {
-              series,
-              category: result.secondary || '通用',
-              subcategory: result.third || '',
-              primary: series,
-              secondary: result.secondary || '通用',
-              third: result.third || '',
-              keywords: result.keywords || [],
-              description: result.description || '',
-              filenameSuggestions: result.filenameSuggestions || [],
-              displayTitle: result.displayTitle || null,
-              confidence: result.confidence || 0,
-              reasoning: result.reasoning || null
-            }
-
-            this.applyAiMetadata(uploadFile, aiMetadata)
-          } catch (error) {
-            this.applyAiMetadata(uploadFile, {
-              series,
-              category: '通用',
-              subcategory: '',
-              primary: series,
-              secondary: '通用',
-              third: '',
-              keywords: [],
-              description: '',
-              filenameSuggestions: [],
-              displayTitle: null,
-              confidence: 0,
-              reasoning: null,
-              error: error.message
-            })
-          }
-
-          analyzedCount += 1
+      for (const uploadFile of queue) {
+        let task = taskStore.getTaskByFileId(uploadFile.id)
+        if (!task) {
+          task = await taskStore.createTask({
+            fileId: uploadFile.id,
+            file: uploadFile.file,
+            series,
+            provider,
+            modelKey
+          })
         }
+
+        uploadFile.aiTaskId = task.id
+        uploadFile.aiTaskStatus = task.status
+        uploadFile.aiTaskAttempts = task.attempts || 0
       }
 
-      const workers = []
-      for (let i = 0; i < Math.min(concurrency, queue.length); i++) {
-        workers.push(processNext.call(this))
-      }
-      await Promise.all(workers)
-
-      return { analyzedCount }
+      const { resumeAiTaskQueue } = await import('@/services/ai/task-runner')
+      await resumeAiTaskQueue()
+      return { analyzedCount: queue.length }
     }
   }
 }

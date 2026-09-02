@@ -1,6 +1,5 @@
 <template>
   <div class="upload-panel">
-    <!-- 头部区域 -->
     <UploadHeader
       :upload-mode="uploadMode"
       :current-series="currentSeries"
@@ -25,9 +24,7 @@
       @upload="$emit('upload')"
     />
 
-    <!-- 主内容区 -->
     <div class="upload-panel__main">
-      <!-- 拖拽上传区域 -->
       <UploadDropzone
         :disabled="dropzoneDisabled"
         :compact="files.length > 0"
@@ -41,7 +38,8 @@
         @add-files="handleAddFiles"
       />
 
-      <!-- 文件网格 -->
+      <AITaskCenter v-if="uploadMode === 'ai' && files.length > 0" />
+
       <UploadFileGrid
         ref="fileGridRef"
         :files="files"
@@ -66,6 +64,7 @@ import { useAuthStore } from '@/stores/auth'
 import UploadHeader from './UploadPanel/UploadHeader.vue'
 import UploadDropzone from './UploadPanel/UploadDropzone.vue'
 import UploadFileGrid from './UploadPanel/UploadFileGrid.vue'
+import AITaskCenter from './AITaskCenter.vue'
 
 const authStore = useAuthStore()
 
@@ -84,7 +83,7 @@ const props = defineProps({
   aiAnalyzingCount: { type: Number, default: 0 },
   metadataStatus: { type: String, default: 'idle' },
   metadataError: { type: String, default: '' },
-  canUpload: { type: Boolean, default: true } // 新增：是否有上传权限
+  canUpload: { type: Boolean, default: true }
 })
 
 const emit = defineEmits([
@@ -106,48 +105,35 @@ const emit = defineEmits([
 
 const fileGridRef = ref(null)
 
-// 是否可以添加文件
 const canAddFiles = computed(() => {
-  if (props.uploadMode === 'ai') {
-    return true
-  }
+  if (props.uploadMode === 'ai') return true
   return !!props.targetPath
 })
 
-// 拖拽区域是否禁用
 const dropzoneDisabled = computed(() => {
   if (props.uploading) return true
   if (props.uploadMode === 'ai') return false
   return !props.targetPath
 })
 
-// 拖拽区域图标
 const dropzoneIcon = computed(() => {
   if (props.uploadMode === 'ai') return '🤖'
   return props.targetPath ? '📁' : '🔒'
 })
 
-// 拖拽区域文本
 const dropzoneText = computed(() => {
   if (props.uploadMode === 'ai') {
-    return props.aiConfig?.provider === 'groq'
-      ? '拖拽图片到此处，AI 将自动分类（当前最多 10 张）'
-      : '拖拽图片到此处，AI 将自动分类（当前仅支持 1 张）'
+    return '拖拽多张图片到此处，AI 将进入任务队列逐张分析'
   }
   return props.targetPath ? '拖拽图片或文件夹到此处' : '请先选择分类'
 })
 
-// 是否可以开始上传（所有文件都有目标路径）
 const canStartUpload = computed(() => {
   if (props.uploading) return false
   if (props.pendingCount === 0) return false
-
-  const hasFilesWithoutTarget = props.files.some(f => f.status === 'pending' && !f.targetPath)
-
-  return !hasFilesWithoutTarget
+  return !props.files.some(f => f.status === 'pending' && !f.targetPath)
 })
 
-// 全局阻止拖拽默认行为
 function preventDefaultDrag(e) {
   e.preventDefault()
 }
@@ -162,20 +148,15 @@ onUnmounted(() => {
   document.removeEventListener('drop', preventDefaultDrag)
 })
 
-// 处理添加文件
 function handleAddFiles(files) {
-  if (!props.canUpload) {
-    return // 已经在 UploadDropzone 中提示过了
-  }
+  if (!props.canUpload) return
   emit('add-files', files)
 }
 
-// 处理模式切换
 function handleModeChange(mode) {
   emit('mode-change', mode)
 }
 
-// 批量删除确认
 async function handleBatchDelete(ids) {
   try {
     await ElMessageBox.confirm(`确定要删除选中的 ${ids.length} 个文件吗？`, '确认删除', {
@@ -190,7 +171,6 @@ async function handleBatchDelete(ids) {
   }
 }
 
-// 全部删除确认
 async function handleClear() {
   try {
     await ElMessageBox.confirm(`确定要删除全部 ${props.files.length} 个文件吗？`, '确认删除', {
