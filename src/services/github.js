@@ -7,6 +7,13 @@ const API_BASE = 'https://api.github.com'
 const MAX_RETRIES = 3
 const RETRY_DELAY = 1000
 
+export function encodeGitHubContentPath(path = '') {
+  return String(path)
+    .split('/')
+    .map(segment => encodeURIComponent(segment))
+    .join('/')
+}
+
 /**
  * GitHub 服务类
  */
@@ -246,7 +253,7 @@ class GitHubService {
    * 获取目录内容
    */
   async getContents(owner, repo, path = '', branch = 'main', options = {}) {
-    const endpoint = `/repos/${owner}/${repo}/contents/${path}`
+    const endpoint = `/repos/${owner}/${repo}/contents/${encodeGitHubContentPath(path)}`
     const searchParams = new URLSearchParams()
 
     if (branch) {
@@ -275,7 +282,8 @@ class GitHubService {
    */
   async checkFileExists(owner, repo, path, branch = 'main') {
     try {
-      await this.request(`/repos/${owner}/${repo}/contents/${path}?ref=${branch}`)
+      const endpoint = `/repos/${owner}/${repo}/contents/${encodeGitHubContentPath(path)}`
+      await this.request(`${endpoint}?ref=${branch}`)
       return true
     } catch (error) {
       if (error.status === 404) {
@@ -291,7 +299,7 @@ class GitHubService {
    * 创建或更新文件
    */
   async createFile(owner, repo, path, content, message, branch = 'main', sha = null) {
-    const endpoint = `/repos/${owner}/${repo}/contents/${path}`
+    const endpoint = `/repos/${owner}/${repo}/contents/${encodeGitHubContentPath(path)}`
 
     const body = {
       message,
@@ -318,6 +326,7 @@ class GitHubService {
    */
   async uploadImage(owner, repo, path, file, message, branch = 'main') {
     const content = await this.fileToBase64(file)
+    const endpoint = `/repos/${owner}/${repo}/contents/${encodeGitHubContentPath(path)}`
 
     // 检查并创建目录结构
     await this.ensureDirectoryExists(owner, repo, path, branch)
@@ -325,13 +334,12 @@ class GitHubService {
     // 检查文件是否存在
     let sha = null
     try {
-      const existing = await this.request(`/repos/${owner}/${repo}/contents/${path}?ref=${branch}`)
+      const existing = await this.request(`${endpoint}?ref=${branch}`)
       sha = existing.sha
     } catch {
       // 文件不存在，正常创建
     }
 
-    const endpoint = `/repos/${owner}/${repo}/contents/${path}`
     const body = {
       message,
       content,
@@ -342,10 +350,22 @@ class GitHubService {
       body.sha = sha
     }
 
-    return this.request(endpoint, {
+    const result = await this.request(endpoint, {
       method: 'PUT',
       body: JSON.stringify(body)
     })
+
+    const uploadedPath = result?.content?.path
+    if (uploadedPath !== path) {
+      throw {
+        type: 'UPLOAD_PATH_MISMATCH',
+        message: `上传路径异常：期望 ${path}，实际 ${uploadedPath || '未知'}`,
+        expectedPath: path,
+        actualPath: uploadedPath || null
+      }
+    }
+
+    return result
   }
 
   /**
@@ -378,7 +398,8 @@ class GitHubService {
 
     try {
       // 检查目录是否存在
-      await this.request(`/repos/${owner}/${repo}/contents/${dirPath}?ref=${branch}`)
+      const endpoint = `/repos/${owner}/${repo}/contents/${encodeGitHubContentPath(dirPath)}`
+      await this.request(`${endpoint}?ref=${branch}`)
       // 目录存在，缓存结果
       this.directoryCache.set(cacheKey, { exists: true, timestamp: Date.now() })
       return
@@ -417,7 +438,7 @@ class GitHubService {
    * 删除文件
    */
   async deleteFile(owner, repo, path, sha, message, branch = 'main') {
-    const endpoint = `/repos/${owner}/${repo}/contents/${path}`
+    const endpoint = `/repos/${owner}/${repo}/contents/${encodeGitHubContentPath(path)}`
 
     const result = await this.request(endpoint, {
       method: 'DELETE',
