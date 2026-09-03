@@ -1,6 +1,7 @@
 import { CloudflareProvider } from './cloudflare-provider'
 import { GroqProvider } from './groq-provider'
 import { ZhipuProvider } from './zhipu-provider'
+import { Sub2apiProvider } from './openai-compatible-provider'
 
 /**
  * AI Provider 类型
@@ -8,7 +9,8 @@ import { ZhipuProvider } from './zhipu-provider'
 export const AI_PROVIDERS = {
   CLOUDFLARE: 'cloudflare',
   GROQ: 'groq',
-  ZHIPU: 'zhipu'
+  ZHIPU: 'zhipu',
+  SUB2API: 'sub2api'
 }
 
 /**
@@ -19,7 +21,8 @@ export class AIProviderFactory {
   static providers = {
     cloudflare: CloudflareProvider,
     groq: GroqProvider,
-    zhipu: ZhipuProvider
+    zhipu: ZhipuProvider,
+    sub2api: Sub2apiProvider
   }
 
   /**
@@ -82,8 +85,16 @@ export const PROVIDER_DISPLAY = {
       { key: 'accountId', label: 'Account ID', type: 'text', required: true },
       { key: 'apiToken', label: 'API Token', type: 'password', required: true }
     ]
+  },
+  [AI_PROVIDERS.SUB2API]: {
+    name: 'Grok',
+    icon: '🤖',
+    color: '#13C2C2',
+    description: 'Grok 视觉模型，支持图片分类与元数据生成',
+    credentialFields: [{ key: 'apiKey', label: 'API Key', type: 'password', required: true }]
   }
 }
 
 export { BaseAIProvider } from './base-provider'
 export { CloudflareProvider, GroqProvider, ZhipuProvider }
+export { Sub2apiProvider, OpenAICompatibleProvider } from './openai-compatible-provider'

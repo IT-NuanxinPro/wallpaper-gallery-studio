@@ -194,13 +194,7 @@
                           }}</span>
                         </span>
                         <span class="upload-header__ai-dropdown-source">
-                          {{
-                            model.provider === 'groq'
-                              ? 'Groq'
-                              : model.provider === 'zhipu'
-                                ? '智谱 GLM'
-                                : 'Cloudflare'
-                          }}
+                          {{ getProviderLabel(model.provider) }}
                         </span>
                       </button>
                     </div>
@@ -272,7 +266,8 @@ const sortedModels = computed(() => {
   const providerPriority = {
     zhipu: 0,
     groq: 1,
-    cloudflare: 2
+    sub2api: 2,
+    cloudflare: 3
   }
 
   return [...(props.aiConfig?.availableModels || [])].sort((first, second) => {
@@ -294,6 +289,16 @@ function getModelBadges(model) {
   if (!model) return []
 
   const badges = []
+
+  if (model.key === 'sub2api-grok-4.6') {
+    badges.push({ label: '推荐', tone: 'primary' })
+    badges.push({ label: '视觉', tone: 'success' })
+  }
+
+  if (model.key === 'sub2api-grok-4.5') {
+    badges.push({ label: '视觉', tone: 'success' })
+    badges.push({ label: '稳定', tone: 'info' })
+  }
 
   if (model.key === 'zhipu-glm-4v-flash') {
     badges.push({ label: '推荐', tone: 'primary' })
@@ -330,6 +335,8 @@ function getCompactModelDescription(model) {
   if (!model) return ''
 
   const descriptionMap = {
+    'sub2api-grok-4.6': '新版 Grok 视觉模型，推荐用于壁纸分类与元数据生成',
+    'sub2api-grok-4.5': '稳定的 Grok 视觉模型，支持壁纸分类与元数据生成',
     'zhipu-glm-4v-flash': '智谱免费视觉模型，速度快，推荐日常使用',
     'zhipu-glm-4.1v-thinking-flash': '智谱免费推理模型，带思考过程，适合深度分析',
     'groq-qwen3.6-27b': '极速但免费层每分钟仅 ~1.7 张图，适合低频使用',
@@ -338,6 +345,17 @@ function getCompactModelDescription(model) {
   }
 
   return descriptionMap[model.key] || model.description || ''
+}
+
+function getProviderLabel(provider) {
+  const labels = {
+    sub2api: 'Grok',
+    groq: 'Groq',
+    zhipu: '智谱 GLM',
+    cloudflare: 'Cloudflare'
+  }
+
+  return labels[provider] || provider
 }
 
 const isSwitching = ref(false)

@@ -11,7 +11,9 @@ export {
   BaseAIProvider,
   CloudflareProvider,
   GroqProvider,
-  ZhipuProvider
+  ZhipuProvider,
+  Sub2apiProvider,
+  OpenAICompatibleProvider
 } from './providers'
 
 // 导出图片处理相关

@@ -28,6 +28,16 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src', import.meta.url))
     }
   },
+  server: {
+    proxy: {
+      // 开发环境通过同源代理固定访问本地 Docker，避免依赖外部 Tunnel。
+      '/sub2api': {
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true,
+        rewrite: path => path.replace(/^\/sub2api/, '')
+      }
+    }
+  },
   build: {
     rollupOptions: {
       output: {

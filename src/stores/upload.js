@@ -88,21 +88,21 @@ export const useUploadStore = defineStore('upload', () => {
   function getUploadModelList(credentialsStore = useCredentialsStore()) {
     const providerPriority = {
       [AI_PROVIDERS.ZHIPU]: 0,
-      [AI_PROVIDERS.GROQ]: 1
+      [AI_PROVIDERS.GROQ]: 1,
+      [AI_PROVIDERS.SUB2API]: 2
     }
 
-    const supportedProviders = [AI_PROVIDERS.ZHIPU, AI_PROVIDERS.GROQ]
-
+    const supportedProviders = [AI_PROVIDERS.SUB2API, AI_PROVIDERS.ZHIPU, AI_PROVIDERS.GROQ]
     const availableProviderKeys = credentialsStore.availableProviders
       .map(provider => provider.key)
       .filter(provider => supportedProviders.includes(provider))
+    const visibleProviderKeys = new Set([AI_PROVIDERS.SUB2API, ...availableProviderKeys])
 
     return getModelList()
       .filter(model => {
         if (availableProviderKeys.length > 0) {
-          return availableProviderKeys.includes(model.provider)
+          return visibleProviderKeys.has(model.provider)
         }
-
         return supportedProviders.includes(model.provider)
       })
       .sort((a, b) => {
@@ -209,6 +209,9 @@ export const useUploadStore = defineStore('upload', () => {
 
     const modelKey = selectedModel?.key || CLASSIFIER_CONFIG.defaultModel
 
+    // sub2api 由账号池调度，适度提高并发以减少批量识图总耗时。
+    const concurrency = provider === AI_PROVIDERS.SUB2API ? 4 : 3
+
     const filesNeedingAnalysis = filesToAnalyze
       .map(file => files.value.find(candidate => candidate.id === file.id))
       .filter(file => file && !file.aiMetadata)
@@ -226,7 +229,8 @@ export const useUploadStore = defineStore('upload', () => {
         series: series.value,
         provider,
         credentials,
-        modelKey
+        modelKey,
+        concurrency
       })
     } finally {
       aiAnalyzingCount.value = 0
@@ -550,7 +554,8 @@ export const useUploadStore = defineStore('upload', () => {
     const providerDisplay = {
       groq: { name: 'Groq AI', icon: '⚡' },
       zhipu: { name: '智谱 GLM', icon: '🧠' },
-      cloudflare: { name: 'Cloudflare AI', icon: '☁️' }
+      cloudflare: { name: 'Cloudflare AI', icon: '☁️' },
+      sub2api: { name: 'Grok', icon: '🤖' }
     }
     const display = providerDisplay[provider] || { name: provider, icon: '🤖' }
 

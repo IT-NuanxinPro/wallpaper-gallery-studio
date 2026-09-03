@@ -9,6 +9,33 @@ import { AI_PROVIDERS } from '../core'
  * 分类服务的模型配置
  */
 export const CLASSIFIER_MODELS = {
+  // sub2api Grok 视觉模型（本地 Docker 与远程 API 共用模型标识）
+  'sub2api-grok-4.6': {
+    id: 'grok-4.6',
+    name: 'Grok 4.6',
+    provider: AI_PROVIDERS.SUB2API,
+    description: '新版 Grok 视觉模型，适合壁纸分类与元数据生成',
+    speed: 'fast',
+    accuracy: 'high',
+    cost: 'low',
+    maxTokens: 2048,
+    temperature: 0.7,
+    recommended: true
+  },
+
+  'sub2api-grok-4.5': {
+    id: 'grok-4.5',
+    name: 'Grok 4.5',
+    provider: AI_PROVIDERS.SUB2API,
+    description: '稳定的 Grok 视觉模型，支持壁纸分类与元数据生成',
+    speed: 'fast',
+    accuracy: 'high',
+    cost: 'low',
+    maxTokens: 2048,
+    temperature: 0.7,
+    recommended: false
+  },
+
   // Groq AI 模型
   // 注：Groq 已下线 llama-4-scout / llama-4-maverick（2026-07），
   // 目前唯一在线的视觉模型是 qwen/qwen3.6-27b
