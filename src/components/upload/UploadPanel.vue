@@ -38,8 +38,6 @@
         @add-files="handleAddFiles"
       />
 
-      <AITaskCenter v-if="uploadMode === 'ai' && files.length > 0" />
-
       <UploadFileGrid
         ref="fileGridRef"
         :files="files"
@@ -64,7 +62,6 @@ import { useAuthStore } from '@/stores/auth'
 import UploadHeader from './UploadPanel/UploadHeader.vue'
 import UploadDropzone from './UploadPanel/UploadDropzone.vue'
 import UploadFileGrid from './UploadPanel/UploadFileGrid.vue'
-import AITaskCenter from './AITaskCenter.vue'
 
 const authStore = useAuthStore()
 
@@ -204,7 +201,7 @@ async function handleClear() {
     backdrop-filter: blur($glass-blur);
     border: 1px solid $glass-border;
     border-radius: $radius-xl;
-    padding: $spacing-4;
+    padding: $spacing-3;
     overflow: hidden;
     min-height: 0;
     height: 100%;

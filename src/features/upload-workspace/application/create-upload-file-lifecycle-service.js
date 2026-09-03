@@ -74,6 +74,7 @@ export function createUploadFileLifecycleService({
           targetSeries: target.series,
           targetL1: target.l1,
           targetL2: target.l2,
+          targetSource: target.l1 ? (uploadMode === 'manual' ? 'manual' : 'selected') : null,
           aiMetadata: cachedAiMetadata,
           aiTaskId: null,
           aiTaskStatus: cachedAiMetadata ? 'completed' : null,
@@ -91,7 +92,12 @@ export function createUploadFileLifecycleService({
         sessionCache.setCachedAiMetadata(uploadFile.fileHash, aiMetadata)
       }
 
-      if (!autoApply || !aiMetadata || uploadFile.status !== 'pending') {
+      if (
+        !autoApply ||
+        !aiMetadata ||
+        uploadFile.status !== 'pending' ||
+        uploadFile.targetSource === 'manual'
+      ) {
         return uploadFile
       }
 
@@ -104,6 +110,7 @@ export function createUploadFileLifecycleService({
         uploadFile.targetL1 = category
         uploadFile.targetL2 = subcategory
         uploadFile.targetPath = buildTargetPath(aiSeries, category, subcategory)
+        uploadFile.targetSource = 'ai'
 
         if (!aiMetadata.series) aiMetadata.series = aiSeries
         if (!aiMetadata.category) aiMetadata.category = category
@@ -123,6 +130,7 @@ export function createUploadFileLifecycleService({
       file.targetL1 = l1
       file.targetL2 = l2
       file.targetPath = buildTargetPath(newSeries, l1, l2)
+      file.targetSource = 'manual'
       return file
     },
 
@@ -138,11 +146,14 @@ export function createUploadFileLifecycleService({
         return null
       }
 
+      file.targetSource = null
       return this.applyAiMetadata(file, file.aiMetadata, true)
     },
 
     applyAllAiRecommendations(uploadFiles) {
-      const pendingFiles = uploadFiles.filter(file => file.status === 'pending' && file.aiMetadata)
+      const pendingFiles = uploadFiles.filter(
+        file => file.status === 'pending' && file.aiMetadata && file.targetSource !== 'manual'
+      )
       pendingFiles.forEach(file => {
         this.applyAiMetadata(file, file.aiMetadata, true)
       })
@@ -154,17 +165,26 @@ export function createUploadFileLifecycleService({
       await taskStore.initialize()
 
       const queue = uploadFiles.filter(file => !file.aiMetadata)
-      for (const uploadFile of queue) {
-        let task = taskStore.getTaskByFileId(uploadFile.id)
-        if (!task) {
-          task = await taskStore.createTask({
+      const newUploadFiles = queue.filter(uploadFile => !taskStore.getTaskByFileId(uploadFile.id))
+      const hasNewTasks = newUploadFiles.length > 0
+      const batchId = hasNewTasks ? taskStore.startBatch() : taskStore.currentBatchId
+      if (hasNewTasks) {
+        await taskStore.createTasks(
+          newUploadFiles.map(uploadFile => ({
             fileId: uploadFile.id,
             file: uploadFile.file,
             series,
             provider,
-            modelKey
-          })
-        }
+            modelKey,
+            batchId
+          })),
+          batchId
+        )
+      }
+
+      for (const uploadFile of queue) {
+        const task = taskStore.getTaskByFileId(uploadFile.id)
+        if (!task) continue
 
         uploadFile.aiTaskId = task.id
         uploadFile.aiTaskStatus = task.status
@@ -172,8 +192,8 @@ export function createUploadFileLifecycleService({
       }
 
       const { resumeAiTaskQueue } = await import('@/services/ai/task-runner')
-      await resumeAiTaskQueue()
-      return { analyzedCount: queue.length }
+      const completion = resumeAiTaskQueue()
+      return { analyzedCount: queue.length, completion }
     }
   }
 }

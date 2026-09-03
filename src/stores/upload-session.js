@@ -4,6 +4,8 @@ import { AI_TASK_STATUS, useAiTasksStore } from './ai-tasks'
 import { previewManager } from '@/utils/previewManager'
 
 function buildTargetPath(task) {
+  if (task.manualTarget?.path) return task.manualTarget.path
+
   const metadata = task.result
   if (!metadata || metadata.error) return ''
 
@@ -14,18 +16,19 @@ function buildTargetPath(task) {
   return ['wallpaper', task.series, category, subcategory].filter(Boolean).join('/')
 }
 
-function restoreFileFromTask(task) {
-  if (!task.blob) return null
+export function restoreFileFromTask(task) {
+  if (!task.blob || typeof globalThis.File !== 'function') return null
 
   const restoredFile =
-    task.blob instanceof File
+    task.blob instanceof globalThis.File
       ? task.blob
-      : new File([task.blob], task.fileName, {
+      : new globalThis.File([task.blob], task.fileName, {
           type: task.fileType || task.blob.type || 'image/jpeg',
           lastModified: task.fileLastModified || Date.now()
         })
 
   const metadata = task.status === AI_TASK_STATUS.COMPLETED ? task.result : null
+  const manualTarget = task.manualTarget || null
 
   return {
     id: task.fileId,
@@ -40,9 +43,10 @@ function restoreFileFromTask(task) {
     progress: 0,
     error: null,
     targetPath: buildTargetPath(task),
-    targetSeries: task.series,
-    targetL1: metadata?.category || metadata?.secondary || '',
-    targetL2: metadata?.subcategory || metadata?.third || '',
+    targetSeries: manualTarget?.series || task.series,
+    targetL1: manualTarget?.l1 || metadata?.category || metadata?.secondary || '',
+    targetL2: manualTarget?.l2 || metadata?.subcategory || metadata?.third || '',
+    targetSource: manualTarget ? 'manual' : metadata ? 'ai' : null,
     aiMetadata: metadata,
     aiTaskId: task.id,
     aiTaskStatus: task.status,
@@ -82,33 +86,38 @@ export const useUploadSessionStore = defineStore('upload-session', () => {
     files.value.push(...nextFiles)
   }
 
-  function removeFile(id) {
+  async function removeFile(id) {
     const index = files.value.findIndex(file => file.id === id)
-    if (index > -1) {
-      files.value.splice(index, 1)
-      useAiTasksStore().removeTasksByFileIds([id])
-    }
+    if (index < 0) return false
+
+    await useAiTasksStore().removeTasksByFileIds([id])
+    const currentIndex = files.value.findIndex(file => file.id === id)
+    if (currentIndex > -1) files.value.splice(currentIndex, 1)
+    return true
   }
 
-  function removeFiles(ids) {
+  async function removeFiles(ids) {
+    if (!ids.length) return 0
+    await useAiTasksStore().removeTasksByFileIds(ids)
     files.value = files.value.filter(file => !ids.includes(file.id))
-    useAiTasksStore().removeTasksByFileIds(ids)
+    return ids.length
   }
 
-  function clearFiles() {
+  async function clearFiles() {
     const fileIds = files.value.map(file => file.id)
+    if (!fileIds.length) return 0
+
+    await useAiTasksStore().removeTasksByFileIds(fileIds)
     files.value = []
-    if (fileIds.length > 0) {
-      useAiTasksStore().removeTasksByFileIds(fileIds)
-    }
+    return fileIds.length
   }
 
-  function clearSuccessFiles() {
+  async function clearSuccessFiles() {
     const successIds = files.value.filter(file => file.status === 'success').map(file => file.id)
+    if (!successIds.length) return 0
+
+    await useAiTasksStore().removeTasksByFileIds(successIds)
     files.value = files.value.filter(file => file.status !== 'success')
-    if (successIds.length > 0) {
-      useAiTasksStore().removeTasksByFileIds(successIds)
-    }
     return successIds.length
   }
 
@@ -117,6 +126,7 @@ export const useUploadSessionStore = defineStore('upload-session', () => {
 
     const taskStore = useAiTasksStore()
     await taskStore.initialize()
+    if (!taskStore.initialized) return []
 
     const restored = []
     for (const task of taskStore.tasks) {

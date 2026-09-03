@@ -22,43 +22,88 @@
       </el-alert>
 
       <div class="upload-view__header">
-        <div class="upload-view__title-area">
-          <div class="upload-view__title-main">
-            <div class="upload-view__title-badge">🎨 Upload Workspace</div>
+        <div class="upload-view__title-main">
+          <span class="upload-view__title-icon">↥</span>
+          <div>
             <h1 class="upload-view__title">上传中心</h1>
+            <p class="upload-view__subtitle">批量整理、AI 分类并发布图片</p>
           </div>
-          <!-- <p class="upload-view__subtitle">让上传列表成为主角，预览与工作流作为辅助区常驻右侧。</p> -->
         </div>
 
         <div class="upload-view__meta">
           <span class="upload-view__meta-chip">{{ currentModeLabel }}</span>
           <span class="upload-view__meta-chip">{{ currentSeriesLabel }}</span>
-          <span
-            class="upload-view__meta-chip upload-view__meta-chip--highlight"
-            :title="currentContextLabel"
-          >
-            {{ currentContextLabel }}
-          </span>
+          <el-popover placement="bottom-end" :width="320" trigger="click">
+            <template #reference>
+              <button class="upload-view__overview-trigger">概览 <span>⌄</span></button>
+            </template>
+            <div class="upload-view__overview-popover">
+              <div class="upload-view__overview-popover-head">
+                <div>
+                  <strong>仓库概览</strong>
+                  <span>分类数量与 GitHub API 配额</span>
+                </div>
+                <button @click="refreshStats">刷新</button>
+              </div>
+              <div class="upload-view__overview-grid">
+                <div
+                  v-for="item in overviewItems"
+                  :key="item.label"
+                  class="upload-view__overview-item"
+                >
+                  <span>{{ item.icon }}</span>
+                  <small>{{ item.label }}</small>
+                  <strong>{{ item.value }}</strong>
+                </div>
+              </div>
+              <div class="upload-view__quota">
+                <div class="upload-view__quota-bar">
+                  <div class="upload-view__quota-fill" :style="{ width: quotaPercent + '%' }"></div>
+                </div>
+                <span>API 可用 {{ quotaPercent }}%</span>
+              </div>
+              <button class="upload-view__history-btn" @click="showHistoryModal = true">
+                查看发布历史
+              </button>
+            </div>
+          </el-popover>
         </div>
       </div>
 
       <!-- 工作区布局 -->
-      <div class="upload-view__content">
-        <CategorySidebar
-          :key="treeKey"
-          :series="series"
-          :tree-data="treeData"
-          :loading="loading"
-          :syncing="syncingCategories"
-          :target-path="uploadStore.targetPath"
-          :load-node="loadNode"
-          class="upload-view__categories"
-          @select-series="selectSeries"
-          @select-category="handleCategorySelect"
-          @create="showModal = true"
-          @delete="handleDeleteCategory"
-          @refresh="handleRefreshCategories"
-        />
+      <div
+        class="upload-view__content"
+        :class="{ 'upload-view__content--categories-collapsed': categoryCollapsed }"
+      >
+        <section class="upload-view__category-shell">
+          <button
+            class="upload-view__category-toggle"
+            :title="categoryCollapsed ? '展开分类目录' : '收起分类目录'"
+            @click="categoryCollapsed = !categoryCollapsed"
+          >
+            <span>{{ categoryCollapsed ? '›' : '‹' }}</span>
+          </button>
+          <div v-if="categoryCollapsed" class="upload-view__category-rail">
+            <span>📁</span>
+            <small>分类</small>
+          </div>
+          <CategorySidebar
+            v-else
+            :key="treeKey"
+            :series="series"
+            :tree-data="treeData"
+            :loading="loading"
+            :syncing="syncingCategories"
+            :target-path="uploadStore.targetPath"
+            :load-node="loadNode"
+            class="upload-view__categories"
+            @select-series="selectSeries"
+            @select-category="handleCategorySelect"
+            @create="showModal = true"
+            @delete="handleDeleteCategory"
+            @refresh="handleRefreshCategories"
+          />
+        </section>
 
         <div class="upload-view__center">
           <UploadPanel
@@ -78,10 +123,10 @@
             :metadata-error="uploadStore.metadataError"
             :can-upload="authStore.canUpload"
             @add-files="addFiles"
-            @remove="uploadStore.removeFile"
-            @remove-batch="uploadStore.removeFiles"
-            @clear="uploadStore.clearFiles"
-            @retry="uploadStore.retryFailed"
+            @remove="handleRemoveFile"
+            @remove-batch="handleRemoveFiles"
+            @clear="handleClearFiles"
+            @retry="handleRetry"
             @upload="handleUpload"
             @select="selectPreview"
             @change-target="handleChangeTarget"
@@ -94,65 +139,17 @@
           />
         </div>
 
-        <aside ref="sidebarRef" class="upload-view__sidebar">
-          <section ref="overviewRef" class="upload-view__overview">
-            <div class="upload-view__overview-header">
-              <div>
-                <p class="upload-view__overview-label">概览</p>
-                <h2 class="upload-view__overview-title">统计与配额</h2>
-              </div>
-              <div class="upload-view__overview-actions">
-                <button class="upload-view__overview-btn" @click="refreshStats">刷新</button>
-                <button class="upload-view__overview-btn" @click="showHistoryModal = true">
-                  历史
-                </button>
-              </div>
-            </div>
-
-            <div class="upload-view__overview-grid">
-              <div class="upload-view__overview-item">
-                <span class="upload-view__overview-item-icon">🖥️</span>
-                <div>
-                  <span class="upload-view__overview-item-label">电脑</span>
-                  <strong class="upload-view__overview-item-value">{{ stats.desktop }}</strong>
-                </div>
-              </div>
-              <div class="upload-view__overview-item">
-                <span class="upload-view__overview-item-icon">📱</span>
-                <div>
-                  <span class="upload-view__overview-item-label">手机</span>
-                  <strong class="upload-view__overview-item-value">{{ stats.mobile }}</strong>
-                </div>
-              </div>
-              <div class="upload-view__overview-item">
-                <span class="upload-view__overview-item-icon">👤</span>
-                <div>
-                  <span class="upload-view__overview-item-label">头像</span>
-                  <strong class="upload-view__overview-item-value">{{ stats.avatar }}</strong>
-                </div>
-              </div>
-              <div class="upload-view__overview-item upload-view__overview-item--api">
-                <span class="upload-view__overview-item-icon">⚡</span>
-                <div>
-                  <span class="upload-view__overview-item-label">API 剩余</span>
-                  <strong class="upload-view__overview-item-value">
-                    {{ rateLimit.remaining }}/{{ rateLimit.limit }}
-                  </strong>
-                </div>
-              </div>
-            </div>
-
-            <div class="upload-view__quota">
-              <div class="upload-view__quota-bar">
-                <div class="upload-view__quota-fill" :style="{ width: quotaPercent + '%' }"></div>
-              </div>
-              <span class="upload-view__quota-text">当前可用额度 {{ quotaPercent }}%</span>
-            </div>
-          </section>
+        <aside class="upload-view__sidebar">
+          <AITaskCenter
+            v-if="
+              uploadStore.uploadMode === 'ai' &&
+              (aiTasksStore.tasks.length > 0 || aiTasksStore.persistenceWarning)
+            "
+          />
 
           <div
-            ref="previewPanelRef"
             class="upload-view__accordion-panel upload-view__preview-panel"
+            :class="{ 'upload-view__accordion-panel--active': activeSidebarPanel === 'preview' }"
           >
             <ImagePreview
               :file="previewFile"
@@ -162,8 +159,8 @@
             />
           </div>
           <div
-            ref="workflowPanelRef"
             class="upload-view__accordion-panel upload-view__workflow-panel"
+            :class="{ 'upload-view__accordion-panel--active': activeSidebarPanel === 'workflow' }"
           >
             <WorkflowPanel
               :collapsed="activeSidebarPanel !== 'workflow'"
@@ -234,12 +231,12 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, reactive, computed, watch, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { gsap } from 'gsap'
 import MainLayout from '@/components/MainLayout.vue'
 import CategorySidebar from '@/components/upload/CategorySidebar.vue'
 import UploadPanel from '@/components/upload/UploadPanel.vue'
+import AITaskCenter from '@/components/upload/AITaskCenter.vue'
 import ImagePreview from '@/components/upload/ImagePreview.vue'
 import WorkflowPanel from '@/components/upload/WorkflowPanel.vue'
 import ReleaseHistoryModal from '@/components/upload/ReleaseHistoryModal.vue'
@@ -255,6 +252,7 @@ import { useConfigStore } from '@/stores/config'
 import { useUploadStore } from '@/stores/upload'
 import { useAuthStore } from '@/stores/auth'
 import { useWorkflowStore } from '@/stores/workflow'
+import { useAiTasksStore } from '@/stores/ai-tasks'
 import { debounce } from '@/utils/debounce'
 import { detectBatchImageTypes, getDetectionStats } from '@/utils/image-detector'
 
@@ -262,12 +260,9 @@ const configStore = useConfigStore()
 const uploadStore = useUploadStore()
 const authStore = useAuthStore()
 const workflowStore = useWorkflowStore()
+const aiTasksStore = useAiTasksStore()
 
 const viewRef = ref(null)
-const sidebarRef = ref(null)
-const overviewRef = ref(null)
-const previewPanelRef = ref(null)
-const workflowPanelRef = ref(null)
 const forceCategoryFetch = ref(false)
 const pageLoading = ref(false) // 页面加载状态，默认不显示 loading
 const series = ref('desktop')
@@ -279,6 +274,7 @@ const loadingStats = ref(false)
 const selectedL1 = ref('')
 const previewFile = ref(null)
 const activeSidebarPanel = ref('workflow')
+const categoryCollapsed = ref(false)
 const showModal = ref(false)
 const showProgressModal = ref(false)
 const showHistoryModal = ref(false)
@@ -314,61 +310,16 @@ const currentSeriesLabel = computed(() => {
 
   return labels[series.value] || '未选择'
 })
-const currentContextLabel = computed(() => {
-  if (uploadStore.uploadMode === 'manual') {
-    return uploadStore.targetPath ? `目录 · ${uploadStore.targetPath}` : '目录 · 待选择'
+const overviewItems = computed(() => [
+  { label: '电脑分类', icon: '🖥️', value: stats.desktop },
+  { label: '手机分类', icon: '📱', value: stats.mobile },
+  { label: '头像分类', icon: '👤', value: stats.avatar },
+  {
+    label: 'API 剩余',
+    icon: '⚡',
+    value: `${rateLimit.value.remaining}/${rateLimit.value.limit}`
   }
-
-  return `模型 · ${aiConfig.value?.modelName || 'AI 自动分类'}`
-})
-
-const SIDEBAR_COLLAPSED_HEIGHT = 52
-
-function getSidebarGap() {
-  const sidebarEl = sidebarRef.value
-  if (!sidebarEl) return 16
-  const styles = window.getComputedStyle(sidebarEl)
-  return Number.parseFloat(styles.gap || styles.rowGap || '16') || 16
-}
-
-function getExpandedSidebarHeight() {
-  const sidebarEl = sidebarRef.value
-  const overviewEl = overviewRef.value
-
-  if (!sidebarEl || !overviewEl) return 320
-
-  const gap = getSidebarGap()
-  const available =
-    sidebarEl.clientHeight - overviewEl.offsetHeight - gap * 2 - SIDEBAR_COLLAPSED_HEIGHT
-
-  return Math.max(available, 320)
-}
-
-async function syncSidebarAccordion(animated = true) {
-  await nextTick()
-
-  const previewEl = previewPanelRef.value
-  const workflowEl = workflowPanelRef.value
-  if (!previewEl || !workflowEl) return
-
-  const expandedHeight = getExpandedSidebarHeight()
-  const duration = animated ? 0.68 : 0
-  const ease = 'expo.inOut'
-
-  gsap.killTweensOf([previewEl, workflowEl])
-
-  if (activeSidebarPanel.value === 'preview') {
-    gsap.to(previewEl, { height: expandedHeight, duration, ease })
-    gsap.to(workflowEl, { height: SIDEBAR_COLLAPSED_HEIGHT, duration, ease })
-  } else {
-    gsap.to(previewEl, { height: SIDEBAR_COLLAPSED_HEIGHT, duration, ease })
-    gsap.to(workflowEl, { height: expandedHeight, duration, ease })
-  }
-}
-
-function handleSidebarResize() {
-  syncSidebarAccordion(false)
-}
+])
 
 const categoryCache = new Map()
 const CACHE_TTL = 5 * 60 * 1000
@@ -584,8 +535,40 @@ async function addFiles(files) {
     ElMessage.warning(`${imgs.length - added.length} 个文件不符合要求`)
 }
 
+async function handleRemoveFile(fileId) {
+  try {
+    await uploadStore.removeFile(fileId)
+  } catch (error) {
+    ElMessage.error(error.message || '删除失败，任务与图片均未移除')
+  }
+}
+
+async function handleRemoveFiles(fileIds) {
+  try {
+    await uploadStore.removeFiles(fileIds)
+  } catch (error) {
+    ElMessage.error(error.message || '批量删除失败，任务与图片均未移除')
+  }
+}
+
+async function handleClearFiles() {
+  try {
+    await uploadStore.clearFiles()
+  } catch (error) {
+    ElMessage.error(error.message || '清空失败，任务与图片均未移除')
+  }
+}
+
+async function clearSuccessfulFilesSafely() {
+  try {
+    await uploadStore.clearSuccessFiles()
+  } catch (error) {
+    ElMessage.warning(error.message || '上传已完成，但本地任务清理失败，可稍后手动清理')
+  }
+}
+
 // 处理上传结果（handleUpload 和 handleRetry 公共逻辑）
-function handleUploadResults(results, messagePrefix = '上传') {
+async function handleUploadResults(results, messagePrefix = '上传') {
   const ok = results.results.filter(r => r.success).length
   const fail = results.results.length - ok
   const reused = results.results.filter(r => r.reusedExisting).length
@@ -623,7 +606,7 @@ function handleUploadResults(results, messagePrefix = '上传') {
     }
     // 清理成功上传的文件（释放内存）
     if (ok > 0 && results.metadataResult?.success !== false) {
-      uploadStore.clearSuccessFiles()
+      await clearSuccessfulFilesSafely()
     }
   } else {
     ElMessage[fail ? 'warning' : 'success'](
@@ -631,7 +614,7 @@ function handleUploadResults(results, messagePrefix = '上传') {
     )
     // 清理成功上传的文件
     if (ok > 0) {
-      uploadStore.clearSuccessFiles()
+      await clearSuccessfulFilesSafely()
     }
   }
 
@@ -664,7 +647,7 @@ async function handleUpload() {
 
   try {
     const results = await uploadStore.uploadAll()
-    handleUploadResults(results, '上传')
+    await handleUploadResults(results, '上传')
   } catch (e) {
     ElMessage.error(e.message || '上传失败')
   }
@@ -677,7 +660,7 @@ async function handleRetryMetadata() {
 
     if (result.success) {
       ElMessage.success('元数据已重新生成并提交')
-      uploadStore.clearSuccessFiles()
+      await clearSuccessfulFilesSafely()
 
       const { owner, repo, branch } = configStore.config
       await workflowStore.refreshPendingInfo(owner, repo, branch)
@@ -698,26 +681,27 @@ function openSidebarPanel(panel) {
   activeSidebarPanel.value = panel
 }
 
-watch(activeSidebarPanel, () => {
-  syncSidebarAccordion(true)
-})
-
 function handleChangeTarget(file) {
   targetEditFile.value = file
   showTargetModal.value = true
 }
 
-function handleTargetConfirm({ series: newSeries, l1, l2 }) {
-  if (targetEditFile.value) {
-    uploadStore.updateFileTarget(targetEditFile.value.id, newSeries, l1, l2)
+async function handleTargetConfirm({ series: newSeries, l1, l2 }) {
+  try {
+    if (targetEditFile.value) {
+      await uploadStore.updateFileTarget(targetEditFile.value.id, newSeries, l1, l2)
+    }
+    showTargetModal.value = false
+    targetEditFile.value = null
+  } catch (error) {
+    ElMessage.error(error.message || '分类保存失败，请重试')
   }
-  showTargetModal.value = false
-  targetEditFile.value = null
 }
 
 // 上传模式切换
 function handleModeChange(mode) {
   uploadStore.setUploadMode(mode)
+  categoryCollapsed.value = mode === 'ai' && uploadStore.files.length > 0
   // 切换到手动模式时，如果没有选择目录，清空新添加的文件的目标路径
   if (mode === 'manual' && !uploadStore.targetPath) {
     ElMessage.info('请在左侧选择上传目录')
@@ -736,12 +720,16 @@ function handleSeriesChange(newSeries) {
 }
 
 // 应用所有 AI 推荐
-function handleApplyAllAi() {
-  const count = uploadStore.applyAllAiRecommendations()
-  if (count > 0) {
-    ElMessage.success(`已应用 ${count} 个 AI 推荐分类`)
-  } else {
-    ElMessage.info('没有待应用的 AI 推荐')
+async function handleApplyAllAi() {
+  try {
+    const count = await uploadStore.applyAllAiRecommendations()
+    if (count > 0) {
+      ElMessage.success(`已应用 ${count} 个 AI 推荐分类`)
+    } else {
+      ElMessage.info('没有待应用的 AI 推荐')
+    }
+  } catch (error) {
+    ElMessage.error(error.message || '应用 AI 推荐失败')
   }
 }
 
@@ -767,7 +755,7 @@ async function handleSaveAIResult({ fileId, aiMetadata }) {
   savingAI.value = true
   try {
     // 更新文件的 AI 元数据
-    uploadStore.setFileAiMetadata(fileId, aiMetadata, true)
+    await uploadStore.setFileAiMetadata(fileId, aiMetadata, true)
 
     ElMessage.success('AI 分析结果已更新')
     closeEditAIModal()
@@ -782,7 +770,7 @@ async function handleRetry() {
   try {
     const results = await uploadStore.retryFailed()
     if (!results) return
-    handleUploadResults(results, '重试')
+    await handleUploadResults(results, '重试')
   } catch (e) {
     ElMessage.error(e.message || '重试失败')
   }
@@ -977,6 +965,11 @@ const refreshStats = debounce(_refreshStats, 2000)
 
 onMounted(async () => {
   try {
+    if (uploadStore.files.length > 0) {
+      previewFile.value = uploadStore.files[0]
+      categoryCollapsed.value = uploadStore.uploadMode === 'ai'
+    }
+
     // 1. 检查权限（如果需要的话）
     if (authStore.isAuthenticated && !authStore.permissionChecked) {
       const { owner, repo } = configStore.config
@@ -1000,9 +993,6 @@ onMounted(async () => {
     // 2. 加载数据（并行执行）
     await Promise.all([loadRootCategories(), refreshStats()])
 
-    await syncSidebarAccordion(false)
-    window.addEventListener('resize', handleSidebarResize)
-
     console.log('[UploadView] 数据加载完成')
   } catch (err) {
     console.error('加载失败:', err)
@@ -1021,9 +1011,6 @@ onUnmounted(() => {
 
   // 清理分类缓存
   clearCategoryCaches()
-
-  window.removeEventListener('resize', handleSidebarResize)
-  gsap.killTweensOf([previewPanelRef.value, workflowPanelRef.value])
 })
 
 watch(series, () => {
@@ -1032,8 +1019,14 @@ watch(series, () => {
 watch(
   () => uploadStore.files,
   files => {
-    if (files.length > 0 && !previewFile.value) previewFile.value = files[0]
-    else if (files.length === 0) previewFile.value = null
+    if (files.length === 0) {
+      previewFile.value = null
+      return
+    }
+
+    if (!previewFile.value || !files.some(file => file.id === previewFile.value.id)) {
+      previewFile.value = files[0]
+    }
   },
   { deep: true }
 )
@@ -1472,6 +1465,304 @@ watch(
 
     &__overview-grid {
       grid-template-columns: 1fr;
+    }
+  }
+}
+</style>
+
+<style scoped lang="scss">
+@use '@/styles/variables' as *;
+
+.upload-view {
+  height: 100%;
+  gap: 12px;
+  padding: 16px 18px 18px;
+
+  &__header {
+    align-items: center;
+    min-height: 46px;
+  }
+
+  &__title-main {
+    flex-wrap: nowrap;
+    gap: 10px;
+  }
+
+  &__title-icon {
+    display: grid;
+    place-items: center;
+    width: 34px;
+    height: 34px;
+    border: 1px solid rgba($primary-start, 0.24);
+    border-radius: 11px;
+    background: rgba($primary-start, 0.13);
+    color: #cdb8ff;
+    font-size: 18px;
+  }
+
+  &__title {
+    color: $white;
+    font-size: 20px;
+    -webkit-text-fill-color: initial;
+    background: none;
+  }
+
+  &__subtitle {
+    margin-top: 2px;
+    color: $gray-500;
+    font-size: 10px;
+  }
+
+  &__meta {
+    align-items: center;
+    max-width: none;
+  }
+
+  &__meta-chip,
+  &__overview-trigger {
+    min-height: 30px;
+    padding: 0 10px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: $radius-full;
+    background: rgba(255, 255, 255, 0.045);
+    color: $gray-400;
+    font-size: 10px;
+  }
+
+  &__overview-trigger {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+
+    &:hover {
+      border-color: rgba($primary-start, 0.28);
+      color: $white;
+    }
+  }
+
+  &__content {
+    grid-template-columns: 230px minmax(0, 1fr) 310px;
+    gap: 12px;
+    transition: grid-template-columns 0.22s ease;
+
+    &--categories-collapsed {
+      grid-template-columns: 48px minmax(0, 1fr) 310px;
+    }
+  }
+
+  &__category-shell {
+    position: relative;
+    height: 100%;
+    min-height: 0;
+    overflow: visible !important;
+  }
+
+  &__category-toggle {
+    position: absolute;
+    top: 14px;
+    right: -8px;
+    z-index: 6;
+    display: grid;
+    place-items: center;
+    width: 22px;
+    height: 30px;
+    padding: 0;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 8px;
+    background: #151a2a;
+    color: $gray-400;
+    cursor: pointer;
+
+    &:hover {
+      border-color: rgba($primary-start, 0.4);
+      color: $white;
+    }
+  }
+
+  &__category-rail {
+    display: flex;
+    align-items: center;
+    flex-direction: column;
+    gap: 8px;
+    height: 100%;
+    padding-top: 58px;
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    border-radius: $radius-xl;
+    background: rgba(255, 255, 255, 0.035);
+    color: $gray-500;
+
+    small {
+      font-size: 9px;
+      letter-spacing: 0.2em;
+      writing-mode: vertical-rl;
+    }
+  }
+
+  &__sidebar {
+    gap: 10px;
+  }
+
+  &__accordion-panel {
+    flex: 0 0 52px;
+    height: 52px !important;
+    transition:
+      flex 0.26s ease,
+      height 0.26s ease;
+
+    &--active {
+      flex: 1 1 260px;
+      height: auto !important;
+    }
+  }
+
+  &__overview-popover {
+    color: $gray-300;
+  }
+
+  &__overview-popover-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 10px;
+
+    div {
+      display: flex;
+      flex-direction: column;
+    }
+
+    strong {
+      color: $white;
+      font-size: 13px;
+    }
+
+    span {
+      color: $gray-500;
+      font-size: 9px;
+    }
+
+    button {
+      padding: 5px 8px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 7px;
+      background: rgba(255, 255, 255, 0.04);
+      color: $gray-400;
+      font-size: 9px;
+      cursor: pointer;
+    }
+  }
+
+  &__overview-grid {
+    gap: 7px;
+  }
+
+  &__overview-item {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0 7px;
+    padding: 8px;
+    border-radius: 10px;
+
+    > span {
+      grid-row: 1 / 3;
+      align-self: center;
+    }
+
+    small {
+      color: $gray-500;
+      font-size: 8px;
+    }
+
+    strong {
+      color: $white;
+      font-size: 11px;
+    }
+  }
+
+  &__quota {
+    margin-top: 10px;
+    gap: 5px;
+
+    span {
+      color: $gray-500;
+      font-size: 8px;
+    }
+  }
+
+  &__quota-bar {
+    height: 5px;
+  }
+
+  &__history-btn {
+    width: 100%;
+    margin-top: 10px;
+    padding: 7px;
+    border: 1px solid rgba($primary-start, 0.22);
+    border-radius: 9px;
+    background: rgba($primary-start, 0.09);
+    color: #cdb8ff;
+    font-size: 10px;
+    cursor: pointer;
+  }
+}
+
+@media (max-width: 1380px) {
+  .upload-view {
+    &__content {
+      grid-template-columns: 210px minmax(0, 1fr) 290px;
+
+      &--categories-collapsed {
+        grid-template-columns: 48px minmax(0, 1fr) 290px;
+      }
+    }
+  }
+}
+
+@media (max-width: 1080px) {
+  .upload-view {
+    overflow: auto;
+
+    &__content,
+    &__content--categories-collapsed {
+      grid-template-columns: 220px minmax(0, 1fr);
+      grid-template-rows: minmax(560px, 1fr) auto;
+      overflow: visible;
+    }
+
+    &__sidebar {
+      grid-column: 1 / -1;
+      min-height: 420px;
+      overflow: visible;
+    }
+  }
+}
+
+@media (max-width: 760px) {
+  .upload-view {
+    padding: 12px;
+
+    &__header {
+      align-items: stretch;
+    }
+
+    &__meta {
+      width: 100%;
+      justify-content: flex-start;
+    }
+
+    &__content,
+    &__content--categories-collapsed {
+      grid-template-columns: 1fr;
+      grid-template-rows: 240px minmax(620px, 1fr) auto;
+    }
+
+    &__category-toggle {
+      display: none;
+    }
+
+    &__category-rail {
+      display: none;
     }
   }
 }

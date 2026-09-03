@@ -10,6 +10,7 @@ import { useHistoryStore } from './history'
 import { useUploadSessionStore } from './upload-session'
 import { useUploadWorkspaceStore } from './upload-workspace'
 import { useCredentialsStore } from './credentials'
+import { useAiTasksStore } from './ai-tasks'
 import { AI_PROVIDERS } from '@/services/ai/core'
 import { previewManager } from '@/utils/previewManager'
 import { hashWorker } from '@/utils/hashWorker'
@@ -165,15 +166,16 @@ export const useUploadStore = defineStore('upload', () => {
 
     sessionStore.appendFiles(validFiles)
 
-    validFiles.forEach(file => {
-      if (file.aiMetadata) {
-        setFileAiMetadata(file.id, file.aiMetadata)
-      }
-    })
+    await Promise.all(
+      validFiles.map(file =>
+        file.aiMetadata ? setFileAiMetadata(file.id, file.aiMetadata) : Promise.resolve()
+      )
+    )
 
     // AI 模式下自动触发分析
     if (uploadMode.value === 'ai' && validFiles.length > 0) {
-      triggerAiAnalysis(validFiles)
+      // 等任务记录落盘后再返回，实际 AI 队列继续在后台运行。
+      await triggerAiAnalysis(validFiles)
     }
 
     return validFiles
@@ -182,12 +184,6 @@ export const useUploadStore = defineStore('upload', () => {
   // AI 智能分析：为文件自动生成分类
   async function triggerAiAnalysis(filesToAnalyze) {
     const credentialsStore = useCredentialsStore()
-
-    // 检查是否有 AI 凭证
-    if (!credentialsStore.hasCredentials) {
-      console.warn('AI 分析：未配置 AI 凭证')
-      return
-    }
 
     const availableModels = getUploadModelList(credentialsStore)
     let selectedModel = availableModels.find(model => model.key === selectedModelKey.value)
@@ -201,10 +197,13 @@ export const useUploadStore = defineStore('upload', () => {
 
     const provider = selectedModel?.provider || credentialsStore.defaultProvider
     const credentials = credentialsStore.getCredentialsByProvider(provider)
+    const hasProviderCredentials = credentialsStore.availableProviders.some(
+      availableProvider => availableProvider.key === provider
+    )
 
-    if (!credentials) {
-      console.warn(`AI 分析：未找到 ${provider} 的凭证`)
-      return
+    if (!hasProviderCredentials) {
+      // 仍然创建并持久化 queued 任务；配置凭证后可直接续跑。
+      console.warn(`AI 分析：未找到 ${provider} 的凭证，任务将保留在队列中`)
     }
 
     const modelKey = selectedModel?.key || CLASSIFIER_CONFIG.defaultModel
@@ -225,81 +224,123 @@ export const useUploadStore = defineStore('upload', () => {
     aiAnalyzing.value = true
     aiAnalyzingCount.value = filesNeedingAnalysis.length
     try {
-      await uploadFileLifecycleService.analyzeFiles(filesNeedingAnalysis, {
+      const result = await uploadFileLifecycleService.analyzeFiles(filesNeedingAnalysis, {
         series: series.value,
         provider,
         credentials,
         modelKey,
         concurrency
       })
-    } finally {
+      result.completion.then(
+        () => {
+          aiAnalyzingCount.value = 0
+          aiAnalyzing.value = false
+        },
+        error => {
+          console.warn('[UploadStore] AI 任务队列执行失败:', error)
+          aiAnalyzingCount.value = 0
+          aiAnalyzing.value = false
+        }
+      )
+      return result
+    } catch (error) {
       aiAnalyzingCount.value = 0
       aiAnalyzing.value = false
+      throw error
     }
   }
 
   // 更新单个文件的目标路径
-  function updateFileTarget(fileId, newSeries, l1, l2 = '') {
-    uploadFileLifecycleService.updateFileTarget(files.value, fileId, newSeries, l1, l2)
+  async function updateFileTarget(fileId, newSeries, l1, l2 = '') {
+    const file = uploadFileLifecycleService.updateFileTarget(files.value, fileId, newSeries, l1, l2)
+    if (!file) return null
+
+    await useAiTasksStore().saveManualTarget(fileId, {
+      series: newSeries,
+      l1,
+      l2,
+      path: file.targetPath
+    })
+    return file
   }
 
   // 批量更新文件目标路径（选中的文件）
-  function updateFilesTarget(fileIds, newSeries, l1, l2 = '') {
-    uploadFileLifecycleService.updateFilesTarget(files.value, fileIds, newSeries, l1, l2)
+  async function updateFilesTarget(fileIds, newSeries, l1, l2 = '') {
+    const updatedFiles = fileIds
+      .map(fileId =>
+        uploadFileLifecycleService.updateFileTarget(files.value, fileId, newSeries, l1, l2)
+      )
+      .filter(Boolean)
+
+    await Promise.all(
+      updatedFiles.map(file =>
+        useAiTasksStore().saveManualTarget(file.id, {
+          series: newSeries,
+          l1,
+          l2,
+          path: file.targetPath
+        })
+      )
+    )
+    return updatedFiles
   }
 
   // 设置单个文件的 AI 元数据
   // autoApply: 是否自动应用 AI 推荐的分类到文件的 targetPath（默认 true）
-  function setFileAiMetadata(fileId, aiMetadata, autoApply = true) {
+  async function setFileAiMetadata(fileId, aiMetadata, autoApply = true) {
     const file = files.value.find(f => f.id === fileId)
     if (file) {
       uploadFileLifecycleService.applyAiMetadata(file, aiMetadata, autoApply)
+      await useAiTasksStore().updateTaskByFileId(fileId, { result: aiMetadata })
     }
+    return file || null
   }
 
   // 批量设置文件的 AI 元数据
-  function setFilesAiMetadata(metadataMap) {
-    for (const [fileId, aiMetadata] of Object.entries(metadataMap)) {
-      setFileAiMetadata(fileId, aiMetadata)
-    }
+  async function setFilesAiMetadata(metadataMap) {
+    await Promise.all(
+      Object.entries(metadataMap).map(([fileId, aiMetadata]) =>
+        setFileAiMetadata(fileId, aiMetadata)
+      )
+    )
   }
 
   // 移除文件
-  function removeFile(id) {
+  async function removeFile(id) {
     const index = files.value.findIndex(f => f.id === id)
     if (index > -1) {
+      await sessionStore.removeFile(id)
       // 释放预览 URL（使用PreviewManager）
       previewManager.revokePreview(id)
-      // 从数组中移除（包括 aiMetadata 等所有数据）
-      sessionStore.removeFile(id)
-      // 注意：file 对象被移除后，其 aiMetadata 也会被垃圾回收
+      return true
     }
+    return false
   }
 
   // 批量移除文件
-  function removeFiles(ids) {
+  async function removeFiles(ids) {
+    const removedCount = await sessionStore.removeFiles(ids)
     // 批量释放预览URL
     previewManager.revokePreviews(ids)
-    // 从数组中移除（包括 aiMetadata 等所有数据）
-    sessionStore.removeFiles(ids)
-    // 注意：被过滤掉的 file 对象及其 aiMetadata 会被垃圾回收
+    return removedCount
   }
 
   // 清空所有文件
-  function clearFiles() {
+  async function clearFiles() {
+    const fileIds = files.value.map(file => file.id)
+    const removedCount = await sessionStore.clearFiles()
     // 释放所有预览URL
-    previewManager.revokeAll()
-    // 清空数组（包括所有 aiMetadata）
-    sessionStore.clearFiles()
+    previewManager.revokePreviews(fileIds)
+    return removedCount
   }
 
   // 清理成功上传的文件（释放内存）
-  function clearSuccessFiles() {
+  async function clearSuccessFiles() {
     const successIds = files.value.filter(f => f.status === 'success').map(f => f.id)
+    const removedCount = await sessionStore.clearSuccessFiles()
     // 批量释放预览URL
     previewManager.revokePreviews(successIds)
-    // 从数组中移除
-    return sessionStore.clearSuccessFiles()
+    return removedCount
   }
 
   // 检查文件是否存在
@@ -515,13 +556,22 @@ export const useUploadStore = defineStore('upload', () => {
   }
 
   // 应用 AI 推荐的分类到文件
-  function applyAiRecommendation(fileId) {
-    return uploadFileLifecycleService.applyAiRecommendation(files.value, fileId)
+  async function applyAiRecommendation(fileId) {
+    const file = uploadFileLifecycleService.applyAiRecommendation(files.value, fileId)
+    if (file) await useAiTasksStore().saveManualTarget(fileId, null)
+    return file
   }
 
   // 批量应用 AI 推荐
-  function applyAllAiRecommendations() {
-    return uploadFileLifecycleService.applyAllAiRecommendations(files.value)
+  async function applyAllAiRecommendations() {
+    const fileIds = files.value
+      .filter(
+        file => file.status === 'pending' && file.aiMetadata && file.targetSource !== 'manual'
+      )
+      .map(file => file.id)
+    const count = uploadFileLifecycleService.applyAllAiRecommendations(files.value)
+    await Promise.all(fileIds.map(fileId => useAiTasksStore().saveManualTarget(fileId, null)))
+    return count
   }
 
   // 检查是否所有待上传文件都已设置目标路径（AI模式下需要等AI分析完成）
@@ -571,13 +621,8 @@ export const useUploadStore = defineStore('upload', () => {
 
   // ✅ P1优化：添加清理方法，释放所有资源
   function cleanup() {
-    // 释放所有预览URL
-    previewManager.revokeAll()
-    // 终止Hash Worker
-    hashWorker.terminate()
+    // 路由离开只刷新缓存；文件、预览、哈希任务与 AI 队列继续保留。
     sessionCache.cleanup()
-    // 清空文件列表
-    sessionStore.clearFiles()
   }
 
   return {

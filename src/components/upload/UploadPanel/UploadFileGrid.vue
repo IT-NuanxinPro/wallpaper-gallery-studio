@@ -9,12 +9,12 @@
           :disabled="pendingFiles.length === 0"
           @update:model-value="handleSelectAll"
         >
-          全选（用于批量删除）
+          全选
         </el-checkbox>
 
         <!-- 文件数量提示 -->
         <span class="upload-file-grid__count">
-          共 {{ files.length }} 个文件
+          {{ files.length }} 张图片
           <template v-if="pendingFiles.length !== files.length">
             （{{ pendingFiles.length }} 待上传）
           </template>
@@ -154,7 +154,7 @@ defineExpose({
 
 .upload-file-grid {
   flex: 1;
-  margin-top: $spacing-3;
+  margin-top: $spacing-2;
   overflow: hidden;
   min-height: 0;
   display: flex;
@@ -164,9 +164,10 @@ defineExpose({
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: $spacing-3;
-    margin-bottom: $spacing-3;
-    padding-bottom: $spacing-2;
+    gap: $spacing-2;
+    min-height: 36px;
+    margin-bottom: $spacing-2;
+    padding: 0 2px $spacing-2;
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
     flex-wrap: wrap;
 
@@ -174,7 +175,7 @@ defineExpose({
     &-right {
       display: flex;
       align-items: center;
-      gap: $spacing-3;
+      gap: $spacing-2;
     }
 
     :deep(.el-checkbox__label) {
@@ -236,13 +237,11 @@ defineExpose({
   }
 
   &__grid {
-    --upload-grid-item-size: 144px;
-
     flex: 1;
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(var(--upload-grid-item-size), 1fr));
-    grid-auto-rows: var(--upload-grid-item-size);
-    gap: $spacing-5;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-auto-rows: 94px;
+    gap: $spacing-3;
     overflow-y: auto;
     padding-right: $spacing-2;
     padding-bottom: $spacing-4;
@@ -252,12 +251,8 @@ defineExpose({
     min-height: 0;
     scrollbar-gutter: stable;
 
-    @media (min-width: 1400px) {
-      --upload-grid-item-size: 156px;
-    }
-
-    @media (min-width: 1600px) {
-      --upload-grid-item-size: 168px;
+    @media (min-width: 1760px) {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
     }
 
     &::-webkit-scrollbar {
@@ -304,6 +299,12 @@ defineExpose({
       font-size: $font-size-xs !important;
       color: $gray-600;
     }
+  }
+}
+
+@media (max-width: 720px) {
+  .upload-file-grid__grid {
+    grid-template-columns: 1fr;
   }
 }
 

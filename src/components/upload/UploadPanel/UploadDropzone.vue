@@ -29,8 +29,8 @@
       @drop.prevent="handleDrop"
     >
       <div class="upload-dropzone__content">
-        <span class="upload-dropzone__icon">{{ icon }}</span>
-        <span class="upload-dropzone__text">{{ text }}</span>
+        <span class="upload-dropzone__icon">{{ compact ? '＋' : icon }}</span>
+        <span class="upload-dropzone__text">{{ compact ? '添加更多图片或文件夹' : text }}</span>
         <div v-if="canAddFiles && !uploading && canUpload" class="upload-dropzone__btns">
           <button class="upload-dropzone__btn" @click="triggerInput">🖼️ 选择图片</button>
           <button class="upload-dropzone__btn" @click="triggerFolderInput">📂 选择文件夹</button>
@@ -46,6 +46,7 @@
 <script setup>
 import { ref } from 'vue'
 import { ElMessage } from 'element-plus'
+import { readDroppedImageEntries } from '@/utils/readDroppedImageEntries'
 
 const props = defineProps({
   disabled: { type: Boolean, default: false },
@@ -94,27 +95,12 @@ function triggerFolderInput() {
   if (!props.uploading) folderInputRef.value?.click()
 }
 
-async function readEntriesRecursively(entry) {
-  const files = []
-
-  if (entry.isFile) {
-    const file = await new Promise(resolve => entry.file(resolve))
-    if (file.type.startsWith('image/')) files.push(file)
-  } else if (entry.isDirectory) {
-    const reader = entry.createReader()
-    const entries = await new Promise(resolve => reader.readEntries(resolve))
-    for (const subEntry of entries) {
-      const subFiles = await readEntriesRecursively(subEntry)
-      files.push(...subFiles)
-    }
-  }
-
-  return files
-}
-
 function showSelectedMessage(count) {
   ElMessage({
-    message: `📂 已加入 ${count} 张图片，AI 将在任务中心逐张处理`,
+    message:
+      props.uploadMode === 'ai'
+        ? `📂 已加入 ${count} 张图片，AI 将在任务中心逐张处理`
+        : `📂 已加入 ${count} 张图片`,
     type: 'success',
     duration: 3000
   })
@@ -153,7 +139,7 @@ async function handleDrop(e) {
 
     try {
       for (const entry of entries) {
-        const files = await readEntriesRecursively(entry)
+        const files = await readDroppedImageEntries(entry)
         allFiles.push(...files)
       }
 
@@ -243,8 +229,28 @@ function handleFolderSelect(e) {
     }
 
     &--compact {
-      padding: $spacing-3 $spacing-4;
-      min-height: 80px;
+      min-height: 48px;
+      padding: 6px $spacing-3;
+
+      .upload-dropzone__icon {
+        display: grid;
+        place-items: center;
+        width: 24px;
+        height: 24px;
+        border-radius: 8px;
+        background: rgba($primary-start, 0.14);
+        color: $primary-start;
+      }
+
+      .upload-dropzone__text {
+        color: $gray-200;
+        font-weight: 600;
+      }
+
+      .upload-dropzone__btn {
+        padding: 5px $spacing-3;
+        font-size: 11px;
+      }
     }
   }
 
