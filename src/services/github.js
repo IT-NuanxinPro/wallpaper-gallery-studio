@@ -272,7 +272,7 @@ class GitHubService {
    * 获取完整目录树
    */
   async getTree(owner, repo, sha, recursive = true) {
-    const endpoint = `/repos/${owner}/${repo}/git/trees/${sha}`
+    const endpoint = `/repos/${owner}/${repo}/git/trees/${encodeURIComponent(sha)}`
     const params = recursive ? '?recursive=1' : ''
     return this.request(endpoint + params)
   }

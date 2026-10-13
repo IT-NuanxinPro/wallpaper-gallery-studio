@@ -25,6 +25,7 @@ export {
   PROMPT_TEMPLATES,
   SERIES_TEMPLATES,
   buildPrompt,
+  buildPromptWithLatestCategories,
   buildVariables,
   replaceVariables,
   validatePrompt,

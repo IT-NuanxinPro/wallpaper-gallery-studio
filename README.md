@@ -84,7 +84,7 @@
 
 > **Fork 本项目？** 请先阅读 [自托管部署指南](./docs/self-hosting.md)，了解如何配置自己的图床仓库、GitHub OAuth 和 AI API Key。
 
-> **上传页分类怎么自定义？** 当前上传页优先读取目标仓库中的远端 manifest。请参考 [自托管部署指南](./docs/self-hosting.md#第七步配置远端-manifest) 和示例文件 [upload-workspace.manifest.example.json](./docs/examples/upload-workspace.manifest.example.json)。
+> **上传页分类怎么自定义？** 上传页、AI 分析和分类预览共用远端分类：合并 manifest 预设与实际目录，新建目录会自动成为候选。请参考 [自托管部署指南](./docs/self-hosting.md#第七步配置远端-manifest) 和示例文件 [upload-workspace.manifest.example.json](./docs/examples/upload-workspace.manifest.example.json)。
 
 > **配置原则**：优先使用环境变量、运行时设置页配置和目标仓库中的远端 manifest；不建议 fork 后直接改源码里的默认值。
 

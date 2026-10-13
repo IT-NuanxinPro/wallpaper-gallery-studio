@@ -50,7 +50,9 @@ export function createGitHubUploadWorkspaceRepository({
       try {
         const file = await githubClient.getContents(owner, repo, manifestPath, branch, options)
         const raw = typeof file.content === 'string' ? file.content.replace(/\n/g, '') : ''
-        return normalizeUploadWorkspaceManifest(JSON.parse(atob(raw)))
+        const bytes = Uint8Array.from(atob(raw), character => character.charCodeAt(0))
+        const content = new globalThis.TextDecoder().decode(bytes)
+        return normalizeUploadWorkspaceManifest(JSON.parse(content))
       } catch (error) {
         if (error.status === 404 || error.type === 'NOT_FOUND') {
           return null

@@ -127,7 +127,7 @@ export class OpenAICompatibleProvider extends BaseAIProvider {
     }
 
     // 清理 third 字段：包含路径分隔符时只保留最后一级
-    let cleanThird = parsed.third || '通用'
+    let cleanThird = parsed.third ?? ''
     if (cleanThird.includes('/')) {
       cleanThird = cleanThird.split('/').pop().trim()
     }

@@ -154,7 +154,7 @@ export class ZhipuProvider extends BaseAIProvider {
     }
 
     // 清理 third 字段：如果包含路径分隔符，只保留最后一级
-    let cleanThird = parsed.third || '通用'
+    let cleanThird = parsed.third ?? ''
     if (cleanThird.includes('/')) {
       const parts = cleanThird.split('/')
       cleanThird = parts[parts.length - 1].trim()

@@ -86,6 +86,7 @@
             v-model="aiStore.promptTemplate"
             :custom-prompt="customPrompt"
             :primary-category="primaryCategory"
+            :provider="aiStore.currentProvider"
             @update:custom-prompt="val => (customPrompt = val)"
           />
         </div>

@@ -43,6 +43,12 @@
             @update:model-value="handleCustomPromptChange"
           />
           <div class="form-tip">提示词长度：{{ customPrompt.length }} 字符</div>
+          <div
+            class="form-tip"
+            v-text="
+              '动态变量：{{primaryCategory}} 主分类、{{secondaryList}} 最新二级分类、{{thirdHints}} 最新三级分类。'
+            "
+          />
         </el-form-item>
 
         <!-- 实时预览 -->
@@ -50,10 +56,18 @@
           <el-button size="small" @click="togglePreview">
             {{ previewExpanded ? '收起预览' : '展开预览' }}
           </el-button>
+          <el-button
+            v-if="previewExpanded"
+            size="small"
+            :loading="previewLoading"
+            @click="loadPreview(true)"
+          >
+            刷新分类与预览
+          </el-button>
         </el-form-item>
 
         <el-collapse-transition>
-          <div v-if="previewExpanded && preview.success" class="preview-box">
+          <div v-if="previewExpanded && !previewLoading && preview.success" class="preview-box">
             <div class="preview-header">
               <el-text type="info"> {{ preview.lines }} 行 / {{ preview.length }} 字符 </el-text>
               <div class="preview-actions">
@@ -68,7 +82,7 @@
         </el-collapse-transition>
 
         <el-alert
-          v-if="previewExpanded && !preview.success"
+          v-if="previewExpanded && !previewLoading && !preview.success"
           type="error"
           :title="preview.error"
           :closable="false"
@@ -100,6 +114,10 @@ const props = defineProps({
   showPreview: {
     type: Boolean,
     default: true
+  },
+  provider: {
+    type: String,
+    default: null
   }
 })
 
@@ -115,9 +133,24 @@ const currentTemplateName = computed(() => {
   return template?.name || '未选择'
 })
 
-const preview = computed(() => {
-  return previewPrompt(props.modelValue, props.primaryCategory, props.customPrompt)
-})
+const preview = ref({ success: false, error: '' })
+const previewLoading = ref(false)
+let previewRequest = 0
+
+async function loadPreview(force = false) {
+  const request = ++previewRequest
+  previewLoading.value = true
+  const result = await previewPrompt(
+    props.modelValue,
+    props.primaryCategory,
+    props.customPrompt,
+    props.provider,
+    { force }
+  )
+  if (request !== previewRequest) return
+  preview.value = result
+  previewLoading.value = false
+}
 
 // Methods
 function handleTemplateChange(templateId) {
@@ -145,10 +178,16 @@ async function copyPrompt() {
 
 // Watch
 watch(
-  () => props.primaryCategory,
+  () => [
+    previewExpanded.value,
+    props.modelValue,
+    props.primaryCategory,
+    props.customPrompt,
+    props.provider
+  ],
   () => {
-    // 主分类变化时，如果预览已展开，保持展开状态
-    // 这样用户可以看到变量替换的效果
+    if (previewExpanded.value) loadPreview()
+    else previewRequest++
   }
 )
 </script>

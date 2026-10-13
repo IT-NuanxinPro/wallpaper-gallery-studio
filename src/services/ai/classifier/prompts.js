@@ -7,6 +7,32 @@ import { CATEGORIES } from '@/config/categories'
 import { getThirdLevelCategories } from '@/config/subcategories'
 import { getUploadCategoryTree } from '@/services/upload/category-directory'
 
+const CLASSIFICATION_RULES = `## 分类约束（优先于下文的风格示例）
+
+1. 本次提供的分类列表是唯一归档依据；分类名称必须原样使用，不能根据旧知识补造目录。
+2. 先识别主体、作品/IP、人物和场景，再遍历当前列表选择最具体且有视觉依据的分类。游戏、影视、IP形象等已有具体分类优先于泛化的动漫、插画、人像风格；无法确认身份时不要猜测具体作品或人物。
+3. secondary 必须来自当前二级列表；third 必须属于选中的 secondary，禁止跨父分类拼接。该二级没有三级选项时，third 返回空字符串。
+4. 风格规则仅在对应分类存在时适用；“通用”“二次元”等兜底名称也必须实际存在，不能自动补出。
+5. 新增分类和原有分类同等参与匹配。不要因为示例没有提到某个分类就忽略它。
+6. 没有精确匹配时，选择现有目录中语义最接近的合法分类，is_perfect_match 为 false；缺失类别只放入 new_category_proposal，不作为实际归档路径。
+7. 目录已包含对应分类时，不要重复提案；无提案时 new_category_proposal 返回 null。描述、标题、文件名以图片中可见内容为依据，不虚构人物身份或画面细节。`
+
+const CLOUDFLARE_RESULT = `## 供上传归档读取的结构化结果
+
+Markdown 分析结束后，必须附上且只附上一个 JSON 代码块。填入本次实际分析结果，不要照抄占位文字：
+{
+  "secondary": "当前列表中的二级分类",
+  "third": "属于该二级的三级分类，没有则为空字符串",
+  "is_perfect_match": false,
+  "new_category_proposal": null,
+  "displayTitle": "中文标题",
+  "filenames": ["具体画面描述.jpg", "另一角度的描述.jpg"],
+  "keywords": ["主体", "风格", "场景"],
+  "description": "图片描述",
+  "reasoning": "简述分类依据"
+}
+精确匹配时 is_perfect_match 为 true。有缺失分类提案时，new_category_proposal 为包含 suggested_secondary、suggested_third、reason 的对象；否则为 null。`
+
 /**
  * 提示词模板配置
  */
@@ -166,8 +192,8 @@ export const SERIES_TEMPLATES = {
 ### 6️⃣ 详细描述
 
 用 30-60 字详细描述这张图片，**禁止重复**前面的句子：
-- 重点描述：人物的衣着材质（如毛衣）、背景颜色（如绿色）、发型和神态。
-- 尤其是光影是如何打在人物身上的。
+- 按实际主体描述材质、色彩、场景和细节；非人像图片不要虚构人物。
+- 描述画面中的光影与构图。
 
 ---
 
@@ -191,74 +217,22 @@ export const SERIES_TEMPLATES = {
 **三级分类 (Third)**：
 {{thirdHints}}
 
-## 2. 🧠 核心判定逻辑 (优先级由高到低)
+## 2. 桌面壁纸分析重点
 
-请严格按照以下**决策树**进行判断，一旦命中上层规则，即停止向下匹配：
-
-### A. 人像分类决策树 (Portrait Logic)
-
-1. **特定明星**：
-   - 如果识别出具体明星，并且现有目录中已有对应子类，优先归入对应分类。
-
-2. **【魅力】(Glamour)**：
-   - **定义**：强调身材曲线、成熟美、吸引力。
-   - **特征**：丝袜、紧身衣、露背/露肩、姿态撩人、夜景霓虹、御姐风。
-   - **判定**：只要包含丝袜或明显的身材展示，优先选此项。
-
-3. **【国风】(Chinese Style)**：
-   - **定义**：中国传统美学、古典韵味。
-   - **特征**：汉服、旗袍、古建筑、水墨画风、传统配饰。
-
-4. **【氛围感】(Atmosphere)**：
-   - **特征**：不露脸（背影/遮挡/模糊）、重光影意境、看不清具体五官。
-
-5. **【清新】(Fresh)**：
-   - **定义**：明亮、治愈、氧气感。
-   - **特征**：高明度、色彩鲜艳自然、笑容甜美、构图干净。
-
-### B. 动漫与插画决策树 (Anime Logic)
-
-1. **特定 IP**：
-   - 认出具体角色或作品，且现有目录中已有对应子类时，必须优先归入对应 IP 子类。
-
-2. **【动漫】(Anime)**：
-   - **特征**：典型的日式动画风格（赛璐璐涂色、大眼睛、动画感）。
-   - **子类判断**：
-     - 能识别具体作品 -> 动漫/[作品名]
-     - 无法识别具体作品 -> 动漫/二次元
-   - **注意**：只要是动画风格，就应该归入"动漫"类，而不是"通用"
-
-3. **【插画】(Illustration)**：
-   - **特征**：绘画感强（水彩、厚涂、手绘风格），非动画截图感。
-   - **子类判断**：
-     - 国风元素 -> 插画/国风
-     - 卡通风格 -> 插画/卡通
-     - 创意设计 -> 插画/创意
-     - 场景为主 -> 插画/场景
-   - **区别**：插画更偏向艺术创作，动漫更偏向动画风格
-
-### C. 风景分类决策树 (Landscape Logic)
-
-1. **具体场景优先**：
-   - 雪山 -> 风景/雪山
-   - 城市建筑 -> 风景/城市 或 风景/建筑
-   - 星空银河 -> 风景/星空
-   - 海边沙滩 -> 风景/海滨
-   - 湖泊倒影 -> 风景/湖泊
-   - 日落黄昏 -> 风景/日落
-
-2. **通用**：
-   - 只有在无法明确归类到具体场景时才选择"通用"。
+- 区分写实摄影、动画风格、绘画插画、游戏画面与影视剧照，再结合现有目录判断。
+- 风景根据主体场景、季节、光线和建筑特征匹配具体分类。
+- 人像根据服饰、构图、光影和整体风格判断；单一服饰元素不能覆盖明确的作品、人物或传统风格分类。
+- 保留横向画面的环境与构图信息，避免只描述局部人物。
 
 ## 3. 任务规则
 
 ### 任务一：归类与提案
 
-- **必须**从现有列表中选择 \`secondary\` 和 \`third\`。
+- **必须**从现有列表中选择 \`secondary\` 和 \`third\`；没有三级选项时 third 返回空字符串。
 - **新分类提案 (Proposal)**：
   - 如果图片是**现有库中缺失**的知名IP、明星或特定风格。
-  - 请在 \`new_category_proposal\` 中填写建议。
-  - 示例：归类选 \`动漫/二次元\`，提案写 \`动漫/[具体作品名]\`。
+  - 请在 \`new_category_proposal\` 中填写对象：suggested_secondary（建议二级）、suggested_third（建议三级）、reason（理由）。没有提案时返回 null。
+  - 实际归类必须使用当前存在的路径，缺失的具体作品名仅用于提案。
 
 ### 任务二：文案生成
 
@@ -287,17 +261,13 @@ export const SERIES_TEMPLATES = {
 {
   "secondary": "从现有列表中选择",
   "third": "从现有列表中选择",
-  "is_perfect_match": true/false,
-  "new_category_proposal": {
-    "suggested_secondary": "建议二级(无则null)",
-    "suggested_third": "建议三级(如具体IP名)",
-    "reason": "提案理由"
-  },
+  "is_perfect_match": false,
+  "new_category_proposal": null,
   "displayTitle": "诗意中文标题",
   "filenames": ["阳光下奔跑的治愈系柴犬.jpg", "草地上欢快玩耍的小柴犬.jpg"],
   "keywords": ["关键词1", "关键词2", "关键词3"],
   "description": "20-40字优美描述",
-  "reasoning": "逻辑链说明。例如：'图片为雪山风景，山峰清晰可见，根据规则C1，判定为[风景/雪山]'"
+  "reasoning": "简述可见特征以及选择当前分类的依据"
 }`,
 
   // Cloudflare AI 专用模板 - Mobile（Markdown 友好）
@@ -383,8 +353,8 @@ export const SERIES_TEMPLATES = {
 ### 6️⃣ 详细描述
 
 用 30-60 字详细描述这张图片，**禁止重复**前面的句子：
-- 重点描述：人物的衣着材质（如毛衣）、背景颜色（如绿色）、发型和神态。
-- 尤其是光影是如何打在人物身上的。
+- 按实际主体描述材质、色彩、场景和细节；非人像图片不要虚构人物。
+- 描述画面中的光影与构图。
 
 ---
 
@@ -408,56 +378,22 @@ export const SERIES_TEMPLATES = {
 **三级分类 (Third)**：
 {{thirdHints}}
 
-## 2. 🧠 核心判定逻辑 (优先级由高到低)
+## 2. 手机壁纸分析重点
 
-请严格按照以下**决策树**进行判断，一旦命中上层规则，即停止向下匹配：
-
-### A. 人像分类决策树 (Portrait Logic)
-
-1. **特定明星/古装**：
-   - 如果识别出具体明星，或明确属于现有目录中的细分类风格，优先归入对应分类。
-
-2. **【魅力】(Glamour)**：
-   - **定义**：强调身材曲线、成熟美、吸引力。
-   - **特征**：丝袜（黑/白丝）、紧身衣、露背/露肩、姿态撩人、夜景霓虹、御姐风。
-   - **判定**：只要包含丝袜或明显的身材展示，优先选此项，覆盖日系/清新。
-
-3. **【日系】(Japanese Style)**：
-   - **定义**：胶片摄影风格、情绪片。
-   - **特征**：颗粒感、低对比度、偏青/蓝色调、JK制服(非性感类)、街道/自动贩卖机、抓拍感。
-
-4. **【清新】(Fresh)**：
-   - **定义**：明亮、治愈、氧气感。
-   - **特征**：高明度（画面很亮）、色彩鲜艳自然、笑容甜美、背景通常是草地/蓝天/白墙、构图干净、给人"初恋感"。
-
-5. **【氛围感】(Atmosphere)**：
-   - **特征**：不露脸（背影/遮挡/模糊）、重光影意境、看不清具体五官。
-
-### B. 动漫与插画决策树 (Anime Logic)
-
-1. **特定 IP**：
-   - 认出具体角色，且现有目录中已有对应子类时，必须优先归入对应 IP 子类。
-
-2. **【动漫】(Anime)**：
-   - **特征**：典型的日式动画风格（赛璐璐涂色、大眼睛、动画感）。
-   - **子类判断**：
-     - 能识别具体作品 -> 动漫/[作品名]
-     - 无法识别具体作品 -> 动漫/二次元
-   - **注意**：只要是动画风格，就应该归入"动漫"类，而不是"通用"
-
-3. **【插画】(Illustration)**：
-   - **特征**：绘画感强（水彩、厚涂、手绘风格），非动画截图感。
-   - **区别**：插画更偏向艺术创作，动漫更偏向动画风格
+- 优先识别当前目录中的具体作品、IP、人物、动物、场景或设计主题。
+- 区分摄影、动漫、插画和创意设计；人像结合服饰、光影、色彩与整体氛围判断。
+- 不要仅凭丝袜、制服或单一服饰元素强制归类；明确的身份、作品和整体风格更重要。
+- 描述竖向构图中的主要视觉主体，分类不受旧示例范围限制。
 
 ## 3. 任务规则
 
 ### 任务一：归类与提案
 
-- **必须**从现有列表中选择 \`secondary\` 和 \`third\`。
+- **必须**从现有列表中选择 \`secondary\` 和 \`third\`；没有三级选项时 third 返回空字符串。
 - **新分类提案 (Proposal)**：
   - 如果图片是**现有库中缺失**的知名 IP、明星或特定风格。
-  - 请在 \`new_category_proposal\` 中填写建议。
-  - 示例：归类选 \`动漫/二次元\`，提案写 \`动漫/[具体作品名]\`。
+  - 请在 \`new_category_proposal\` 中填写对象：suggested_secondary（建议二级）、suggested_third（建议三级）、reason（理由）。没有提案时返回 null。
+  - 实际归类必须使用当前存在的路径，缺失的具体作品名仅用于提案。
 
 ### 任务二：文案生成
 
@@ -486,17 +422,13 @@ export const SERIES_TEMPLATES = {
 {
   "secondary": "从现有列表中选择",
   "third": "从现有列表中选择",
-  "is_perfect_match": true/false,
-  "new_category_proposal": {
-    "suggested_secondary": "建议二级(无则null)",
-    "suggested_third": "建议三级(如具体IP名)",
-    "reason": "提案理由"
-  },
+  "is_perfect_match": false,
+  "new_category_proposal": null,
   "displayTitle": "诗意中文标题",
   "filenames": ["身穿黑色长裙的卷发港风少女.jpg", "夜色中优雅漫步的长发女孩.jpg"],
   "keywords": ["关键词1", "关键词2", "关键词3"],
   "description": "20-40字优美描述",
-  "reasoning": "逻辑链说明。例如：'检测到人物穿着JK制服但光线明亮笑容甜美，无胶片感，根据规则A4，判定为[清新]而非[日系]'"
+  "reasoning": "简述可见特征以及选择当前分类的依据"
 }`,
 
   // Cloudflare AI 专用模板 - Avatar（Markdown 友好）
@@ -597,65 +529,22 @@ export const SERIES_TEMPLATES = {
 **三级分类 (Third)**：
 {{thirdHints}}
 
-## 2. 🧠 核心判定逻辑 (优先级由高到低)
+## 2. 头像分析重点
 
-请严格按照以下**决策树**进行判断，一旦命中上层规则，即停止向下匹配：
-
-### A. IP形象与动漫决策树
-
-1. **特定 IP 形象**：
-   - 认出具体IP角色（如Hello Kitty、乌萨奇、水豚噜噜），必须归入对应 IP 子类。
-
-2. **动漫角色**：
-   - 认出具体动漫角色，且现有目录中已有对应子类时，归入对应动漫子类。
-   - 如果是动漫风格但无法识别具体作品 -> 动漫/通用
-
-### B. 人像分类决策树
-
-1. **卡通简笔画**：
-   - **特征**：线条简单、Q版、可爱风格、非写实。
-   - 归类为：人像/卡通简笔画
-
-2. **氛围感**：
-   - **特征**：不露脸（背影/遮挡/模糊）、重光影意境。
-   - 归类为：人像/氛围感
-
-3. **甜妹**：
-   - **特征**：甜美可爱、少女感、清新风格。
-   - 归类为：人像/甜妹
-
-4. **背影**：
-   - **特征**：主要展示背影，看不到正面。
-   - 归类为：人像/背影
-
-### C. 萌宠与表情包决策树
-
-1. **表情包**：
-   - **特征**：搞怪表情、夸张动作、用于聊天表达情绪。
-   - 归类为：表情包/搞怪
-
-2. **萌宠**：
-   - 真实的猫狗照片 -> 萌宠/猫咪 或 萌宠/狗狗
-
-### D. 插画决策树
-
-1. **二次元插画**：
-   - **特征**：动漫风格的插画，但非特定IP。
-   - 归类为：插画/二次元
-
-2. **创意插画**：
-   - **特征**：创意设计、抽象风格、艺术感强。
-   - 归类为：插画/创意
+- 有充分视觉依据时，优先选择当前目录中对应的 IP、动漫作品或人物分类。
+- 无法确认身份时，根据真实可见的摄影、绘画、动物、表情或设计特征匹配现有分类，不猜角色名。
+- 搞怪或聊天表情用途需要画面依据；不能把所有卡通形象都归入表情包。
+- 文件名不要包含“头像”二字。
 
 ## 3. 任务规则
 
 ### 任务一：归类与提案
 
-- **必须**从现有列表中选择 \`secondary\` 和 \`third\`。
+- **必须**从现有列表中选择 \`secondary\` 和 \`third\`；没有三级选项时 third 返回空字符串。
 - **新分类提案 (Proposal)**：
   - 如果图片是**现有库中缺失**的知名IP或角色。
-  - 请在 \`new_category_proposal\` 中填写建议。
-  - 示例：归类选 \`IP形象/通用\`，提案写 \`IP形象/玲娜贝儿\`。
+  - 请在 \`new_category_proposal\` 中填写对象：suggested_secondary（建议二级）、suggested_third（建议三级）、reason（理由）。没有提案时返回 null。
+  - 实际归类必须使用当前存在的路径，缺失的具体角色名仅用于提案。
 
 ### 任务二：文案生成
 
@@ -671,7 +560,7 @@ export const SERIES_TEMPLATES = {
   - ❌拒绝太短（如"女孩.jpg"）、拒绝包含"头像"（如"可爱头像.jpg"）。
   - ✅示例：
     - '可爱粉色系凯蒂猫卡通形象.jpg'
-    - '甜美风格Hello Kitty萌系插画.jpg'
+    - '甜美粉色凯蒂猫卡通插画.jpg'
     - '治愈系柴犬阳光下奔跑.jpg'
 
 - **关键词 (keywords)**：
@@ -684,17 +573,13 @@ export const SERIES_TEMPLATES = {
 {
   "secondary": "从现有列表中选择",
   "third": "从现有列表中选择",
-  "is_perfect_match": true/false,
-  "new_category_proposal": {
-    "suggested_secondary": "建议二级(无则null)",
-    "suggested_third": "建议三级(如具体IP名)",
-    "reason": "提案理由"
-  },
+  "is_perfect_match": false,
+  "new_category_proposal": null,
   "displayTitle": "诗意中文标题",
-  "filenames": ["可爱粉色系凯蒂猫卡通形象.jpg", "甜美风格Hello Kitty萌系插画.jpg"],
+  "filenames": ["可爱粉色系凯蒂猫卡通形象.jpg", "甜美粉色凯蒂猫卡通插画.jpg"],
   "keywords": ["关键词1", "关键词2", "关键词3"],
   "description": "20-40字优美描述",
-  "reasoning": "逻辑链说明。例如：'识别出Hello Kitty角色特征，根据规则A1，判定为[IP形象/Hello Kitty]'"
+  "reasoning": "简述可见特征以及选择当前分类的依据"
 }`
 }
 
@@ -705,14 +590,7 @@ export const SERIES_TEMPLATES = {
  * @returns {string} 替换后的字符串
  */
 export function replaceVariables(template, variables) {
-  let result = template
-
-  Object.entries(variables).forEach(([key, value]) => {
-    const regex = new RegExp(`\\{\\{${key}\\}\\}`, 'g')
-    result = result.replace(regex, value)
-  })
-
-  return result
+  return template.replace(/\{\{\s*(\w+)\s*\}\}/g, (match, key) => variables[key] ?? match)
 }
 
 /**
@@ -733,7 +611,7 @@ export function buildVariables(primaryCategory, categoryTree = null) {
     const thirdList = useDynamicTree
       ? dynamicSeries.third?.[cat.value] || []
       : getThirdLevelCategories(primaryCategory, cat.value)
-    thirdHints += `• ${cat.value}：${thirdList.join('、')}\n`
+    thirdHints += `• ${cat.value}：${thirdList.length ? thirdList.join('、') : '（无三级分类，third 返回空字符串）'}\n`
   })
 
   return {
@@ -759,7 +637,7 @@ export function buildPrompt(
   categoryTree = null
 ) {
   if (templateId === 'custom') {
-    return customPrompt
+    return replaceVariables(customPrompt, buildVariables(primaryCategory, categoryTree))
   }
 
   // 对于 default 模板，使用系列专用模板
@@ -769,7 +647,7 @@ export function buildPrompt(
       const cloudflareTemplate = SERIES_TEMPLATES[`cloudflare_${primaryCategory}`]
       if (cloudflareTemplate) {
         const variables = buildVariables(primaryCategory, categoryTree)
-        return replaceVariables(cloudflareTemplate, variables)
+        return `${CLASSIFICATION_RULES}\n\n${replaceVariables(cloudflareTemplate, variables)}\n\n${CLOUDFLARE_RESULT}`
       }
     }
 
@@ -777,7 +655,7 @@ export function buildPrompt(
     const specialTemplate = SERIES_TEMPLATES[primaryCategory]
     if (specialTemplate) {
       const variables = buildVariables(primaryCategory, categoryTree)
-      return replaceVariables(specialTemplate, variables)
+      return `${CLASSIFICATION_RULES}\n\n${replaceVariables(specialTemplate, variables)}`
     }
   }
 
@@ -802,6 +680,12 @@ export async function buildPromptWithLatestCategories(
   provider = null,
   options = {}
 ) {
+  if (
+    templateId === 'filenameOnly' ||
+    (templateId === 'custom' && !/\{\{\s*(secondaryList|thirdHints)\s*\}\}/.test(customPrompt))
+  ) {
+    return buildPrompt(templateId, primaryCategory, customPrompt, provider)
+  }
   const categoryTree = await getUploadCategoryTree(options)
   return buildPrompt(templateId, primaryCategory, customPrompt, provider, categoryTree)
 }
@@ -847,9 +731,21 @@ export function getTemplateById(templateId) {
  * @param {string} customPrompt - 自定义提示词
  * @returns {Object} 预览结果
  */
-export function previewPrompt(templateId, primaryCategory, customPrompt = '') {
+export async function previewPrompt(
+  templateId,
+  primaryCategory,
+  customPrompt = '',
+  provider = null,
+  options = {}
+) {
   try {
-    const prompt = buildPrompt(templateId, primaryCategory, customPrompt)
+    const prompt = await buildPromptWithLatestCategories(
+      templateId,
+      primaryCategory,
+      customPrompt,
+      provider,
+      options
+    )
     const isValid = validatePrompt(prompt)
 
     return {

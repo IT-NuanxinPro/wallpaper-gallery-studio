@@ -250,7 +250,10 @@ import TargetSelectModal from '@/components/upload/TargetSelectModal.vue'
 import EditAIResultModal from '@/components/upload/EditAIResultModal.vue'
 import { githubService } from '@/services/github'
 import { localStorageService } from '@/services/localStorage'
-import { clearUploadCategoryTreeCache } from '@/services/upload/category-directory'
+import {
+  clearUploadCategoryTreeCache,
+  getUploadCategoryNodes
+} from '@/services/upload/category-directory'
 import { useConfigStore } from '@/stores/config'
 import { useUploadStore } from '@/stores/upload'
 import { useAuthStore } from '@/stores/auth'
@@ -370,20 +373,7 @@ function handleSidebarResize() {
   syncSidebarAccordion(false)
 }
 
-const categoryCache = new Map()
-const CACHE_TTL = 5 * 60 * 1000
-
-function getCache(key) {
-  const c = categoryCache.get(key)
-  return c && Date.now() - c.timestamp < CACHE_TTL ? c.data : null
-}
-
-function setCache(key, data) {
-  categoryCache.set(key, { data, timestamp: Date.now() })
-}
-
 function clearCategoryCaches() {
-  categoryCache.clear()
   clearUploadCategoryTreeCache()
   githubService.clearDirectoryCache()
 }
@@ -432,48 +422,17 @@ async function handleRefreshCategories() {
 }
 
 async function loadRootCategories(forceRefresh = false) {
-  const cacheKey = `${series.value}-root`
-  const cached = forceRefresh ? null : getCache(cacheKey)
-  console.log('[loadRootCategories] cacheKey:', cacheKey, 'cached:', !!cached)
-  if (cached) {
-    treeData.value = cached
-    return
-  }
-
+  const requestedSeries = series.value
   loading.value = true
   try {
-    const { owner, repo, branch } = configStore.config
-    console.log('[loadRootCategories] Fetching from GitHub...')
-    const contents = await githubService.getContents(
-      owner,
-      repo,
-      `wallpaper/${series.value}`,
-      branch,
-      { forceRefresh }
-    )
-    const categories = contents
-      .filter(i => i.type === 'dir')
-      .map(i => ({
-        name: i.name,
-        path: i.path,
-        type: 'l1',
-        children: [],
-        loaded: false
-      }))
-    console.log(
-      '[loadRootCategories] Got categories:',
-      categories.map(c => c.name)
-    )
-    treeData.value = categories
-    setCache(cacheKey, categories)
+    const categories = await getUploadCategoryNodes(requestedSeries, '', { force: forceRefresh })
+    if (series.value === requestedSeries) treeData.value = categories
   } catch (err) {
     console.error('[loadRootCategories] Error:', err)
-    treeData.value = []
+    if (series.value === requestedSeries) treeData.value = []
   } finally {
     loading.value = false
-    if (forceRefresh) {
-      forceCategoryFetch.value = false
-    }
+    if (forceRefresh) forceCategoryFetch.value = false
   }
 }
 
@@ -486,22 +445,10 @@ async function loadNode(node, resolve) {
     resolve([])
     return
   }
-
-  const cached = getCache(node.data.path)
-  if (cached) {
-    resolve(cached)
-    return
-  }
-
   try {
-    const { owner, repo, branch } = configStore.config
-    const contents = await githubService.getContents(owner, repo, node.data.path, branch, {
-      forceRefresh: forceCategoryFetch.value
+    const children = await getUploadCategoryNodes(series.value, node.data.name, {
+      force: forceCategoryFetch.value
     })
-    const children = contents
-      .filter(i => i.type === 'dir')
-      .map(i => ({ name: i.name, path: i.path, type: 'l2' }))
-    setCache(node.data.path, children)
     resolve(children)
   } catch {
     resolve([])

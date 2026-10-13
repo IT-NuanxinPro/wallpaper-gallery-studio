@@ -6,7 +6,11 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { useCredentialsStore } from './credentials'
 import { AIProviderFactory, AI_PROVIDERS, compressImage, IMAGE_CONFIG } from '@/services/ai/core'
-import { buildPrompt, getModelByKey, CLASSIFIER_CONFIG } from '@/services/ai/classifier'
+import {
+  buildPromptWithLatestCategories,
+  getModelByKey,
+  CLASSIFIER_CONFIG
+} from '@/services/ai/classifier'
 
 // 兼容导出
 export { AI_PROVIDERS }
@@ -71,7 +75,7 @@ export const useAIStore = defineStore('ai', () => {
 
     try {
       const imageBase64 = await compressImage(file, IMAGE_CONFIG)
-      const prompt = buildPrompt(
+      const prompt = await buildPromptWithLatestCategories(
         promptTemplate.value,
         primaryCategory,
         customPrompt,
@@ -87,7 +91,7 @@ export const useAIStore = defineStore('ai', () => {
         imageSize: file.size,
         primary: primaryCategory,
         secondary: analysis.secondary || '通用',
-        third: analysis.third || '通用',
+        third: analysis.third ?? '',
         filenameSuggestions: analysis.filenameSuggestions || [file.name],
         selectedFilename: analysis.filenameSuggestions?.[0] || file.name,
         filename: analysis.filename,

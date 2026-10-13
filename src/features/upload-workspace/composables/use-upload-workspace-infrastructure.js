@@ -5,11 +5,13 @@ import { resolveAppConfig } from '@/app/config/app-config'
 import { createUploadWorkspaceService } from '../application/create-upload-workspace-service'
 import { createGitHubUploadWorkspaceRepository } from '../infrastructure/create-github-upload-workspace-repository'
 
-const CACHE_TTL = 5 * 60 * 1000
+import {
+  clearUploadCategoryTreeCache,
+  getUploadCategoryNodes
+} from '@/services/upload/category-directory'
 
 export function useUploadWorkspaceInfrastructure() {
   const configStore = useConfigStore()
-  const categoryCache = new Map()
 
   function getAppConfig() {
     return resolveAppConfig({
@@ -25,45 +27,19 @@ export function useUploadWorkspaceInfrastructure() {
 
   const service = createUploadWorkspaceService({ repository })
 
-  function getCache(key) {
-    const cached = categoryCache.get(key)
-    return cached && Date.now() - cached.timestamp < CACHE_TTL ? cached.data : null
-  }
-
-  function setCache(key, data) {
-    categoryCache.set(key, {
-      data,
-      timestamp: Date.now()
-    })
-  }
-
   function clearCategoryCaches() {
-    categoryCache.clear()
+    clearUploadCategoryTreeCache()
     repository.clearDirectoryCache()
   }
 
   async function loadRootCategories(series, forceRefresh = false) {
-    const cacheKey = `${series}-root`
-    const cached = forceRefresh ? null : getCache(cacheKey)
-    if (cached) {
-      return cached
-    }
-
-    const categories = await service.loadRootCategories({ series, forceRefresh })
-    setCache(cacheKey, categories)
-    return categories
+    return getUploadCategoryNodes(series, '', { force: forceRefresh })
   }
 
   async function loadChildCategories(path, forceRefresh = false) {
-    const cached = forceRefresh ? null : getCache(path)
-    if (cached) {
-      return cached
-    }
-
-    const series = path.split('/').filter(Boolean)[1] || 'desktop'
-    const children = await service.loadChildCategories({ series, path, forceRefresh })
-    setCache(path, children)
-    return children
+    const parts = path.split('/').filter(Boolean)
+    const series = parts.at(-2)
+    return getUploadCategoryNodes(series, parts.at(-1), { force: forceRefresh })
   }
 
   async function refreshStats() {
@@ -71,12 +47,14 @@ export function useUploadWorkspaceInfrastructure() {
   }
 
   async function createCategory({ series, selectedL1, form }) {
-    return service.createCategory({
+    const result = await service.createCategory({
       series,
       parentCategory: form.level === 'l2' ? selectedL1 : '',
       name: form.name,
       level: form.level
     })
+    clearCategoryCaches()
+    return result
   }
 
   async function inspectCategory(path) {
@@ -84,7 +62,9 @@ export function useUploadWorkspaceInfrastructure() {
   }
 
   async function deleteCategory(path) {
-    return service.deleteCategory(path)
+    const result = await service.deleteCategory(path)
+    clearCategoryCaches()
+    return result
   }
 
   function persistSuccessfulUploads(results, files, fallbackSeries) {
