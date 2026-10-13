@@ -1,13 +1,13 @@
 <template>
   <Teleport to="body">
     <Transition name="modal">
-      <div v-if="visible" class="modal-overlay">
+      <div v-if="visible" class="modal-overlay" :style="{ zIndex }">
         <div class="modal">
           <div class="modal__header">
             <h3>🤖 编辑 AI 分析结果</h3>
             <button
               class="modal__close"
-              :disabled="closingPromptVisible"
+              :disabled="saving || discardConfirmVisible"
               @click="handleRequestClose"
             >
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
@@ -158,7 +158,7 @@
           <div class="modal__footer">
             <button
               class="modal__btn modal__btn--cancel"
-              :disabled="closingPromptVisible"
+              :disabled="saving || discardConfirmVisible"
               @click="handleRequestClose"
             >
               取消
@@ -193,6 +193,7 @@
 import { reactive, computed, watch, ref, onMounted } from 'vue'
 import CustomSelect from '@/components/common/CustomSelect.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
+import { useModalZIndex } from '@/composables/useModalZIndex'
 import {
   getFallbackUploadCategoryTree,
   getUploadCategoryTree
@@ -205,6 +206,7 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['close', 'save'])
+const zIndex = useModalZIndex(() => props.visible)
 
 // 系列选项
 const seriesOptions = ['🖥️ 桌面壁纸', '📱 手机壁纸', '👤 头像图片']
@@ -226,9 +228,9 @@ const seriesLabelMap = {
 const categoryData = ref(getFallbackUploadCategoryTree())
 
 const loadingCategories = ref(false)
-const closingPromptVisible = ref(false)
 const discardConfirmVisible = ref(false)
 const initialSnapshot = ref('')
+let initializingForm = false
 
 // 从 GitHub 获取分类数据
 async function loadCategoriesFromGitHub(force = false) {
@@ -296,11 +298,12 @@ watch(
   () => [props.visible, props.file],
   ([visible, file]) => {
     if (!visible) {
-      closingPromptVisible.value = false
+      discardConfirmVisible.value = false
       return
     }
 
     if (visible) {
+      initializingForm = true
       // 弹窗打开时加载分类数据
       loadCategoriesFromGitHub(true)
 
@@ -332,6 +335,7 @@ watch(
       }
 
       initialSnapshot.value = JSON.stringify(getFormSnapshot())
+      initializingForm = false
     }
   },
   { immediate: true }
@@ -346,6 +350,7 @@ onMounted(() => {
 watch(
   () => form.series,
   newSeries => {
+    if (initializingForm) return
     const seriesKey = seriesValueMap[newSeries] || 'desktop'
     const secondaryOptions = categoryData.value[seriesKey]?.secondary || []
     const thirdOptions = categoryData.value[seriesKey]?.third?.[form.secondary] || []
@@ -359,13 +364,15 @@ watch(
     else if (form.third && !thirdOptions.includes(form.third)) {
       form.third = ''
     }
-  }
+  },
+  { flush: 'sync' }
 )
 
 // 监听二级分类变化，清空不匹配的三级分类
 watch(
   () => form.secondary,
   newSecondary => {
+    if (initializingForm) return
     const seriesKey = seriesValueMap[form.series] || 'desktop'
     const thirdOptions = categoryData.value[seriesKey]?.third?.[newSecondary] || []
 
@@ -373,7 +380,8 @@ watch(
     if (form.third && !thirdOptions.includes(form.third)) {
       form.third = ''
     }
-  }
+  },
+  { flush: 'sync' }
 )
 
 // 添加文件名
@@ -404,27 +412,24 @@ function removeKeyword(index) {
   }
 }
 
-async function handleRequestClose() {
-  if (props.saving || closingPromptVisible.value) return
+function handleRequestClose() {
+  if (props.saving || discardConfirmVisible.value) return
 
   if (!isDirty.value) {
     emit('close')
     return
   }
 
-  closingPromptVisible.value = true
   discardConfirmVisible.value = true
 }
 
 function handleConfirmDiscard() {
   discardConfirmVisible.value = false
-  closingPromptVisible.value = false
   emit('close')
 }
 
 function handleCancelDiscard() {
   discardConfirmVisible.value = false
-  closingPromptVisible.value = false
 }
 
 // 保存修改
@@ -471,7 +476,6 @@ function handleSave() {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 9999;
   padding: $spacing-4;
 }
 

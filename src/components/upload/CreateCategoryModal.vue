@@ -1,7 +1,7 @@
 <template>
   <Teleport to="body">
     <Transition name="modal">
-      <div v-if="visible" class="modal-overlay" @click.self="$emit('close')">
+      <div v-if="visible" class="modal-overlay" :style="{ zIndex }" @click.self="$emit('close')">
         <div class="modal">
           <div class="modal__header">
             <h3>📁 {{ modalTitle }}</h3>
@@ -71,6 +71,7 @@
 
 <script setup>
 import { reactive, computed, watch, ref, nextTick } from 'vue'
+import { useModalZIndex } from '@/composables/useModalZIndex'
 
 const props = defineProps({
   visible: { type: Boolean, default: false },
@@ -79,6 +80,7 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['close', 'create'])
+const zIndex = useModalZIndex(() => props.visible)
 
 const inputRef = ref(null)
 const form = reactive({ name: '' })
@@ -120,7 +122,6 @@ function handleCreate() {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 9999;
 }
 
 .modal {

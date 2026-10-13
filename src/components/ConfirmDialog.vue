@@ -1,7 +1,12 @@
 <template>
   <Teleport to="body">
     <Transition name="dialog">
-      <div v-if="visible" class="confirm-dialog__overlay" @click.self="handleCancel">
+      <div
+        v-if="visible"
+        class="confirm-dialog__overlay"
+        :style="{ zIndex }"
+        @click.self="handleCancel"
+      >
         <div ref="dialogRef" class="confirm-dialog">
           <div class="confirm-dialog__header">
             <el-icon
@@ -47,6 +52,7 @@
 import { ref, computed, watch } from 'vue'
 import { Warning, CircleCheck, CircleClose, InfoFilled } from '@element-plus/icons-vue'
 import { gsap } from 'gsap'
+import { useModalZIndex } from '@/composables/useModalZIndex'
 
 const props = defineProps({
   visible: {
@@ -89,6 +95,7 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['confirm', 'cancel', 'update:visible'])
+const zIndex = useModalZIndex(() => props.visible)
 
 const dialogRef = ref(null)
 const inputValue = ref('')
@@ -144,7 +151,6 @@ watch(
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: $z-modal;
   }
 
   background: $glass-bg;

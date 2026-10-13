@@ -1,7 +1,12 @@
 <template>
   <Teleport to="body">
     <Transition name="modal">
-      <div v-if="visible" class="target-modal__overlay" @click.self="$emit('close')">
+      <div
+        v-if="visible"
+        class="target-modal__overlay"
+        :style="{ zIndex }"
+        @click.self="$emit('close')"
+      >
         <div class="target-modal">
           <div class="target-modal__header">
             <h3 class="target-modal__title">📁 选择目标目录</h3>
@@ -87,6 +92,7 @@
 import { ref, computed, watch } from 'vue'
 import { Close } from '@element-plus/icons-vue'
 import { useUploadWorkspaceInfrastructure } from '@/features/upload-workspace/composables/use-upload-workspace-infrastructure'
+import { useModalZIndex } from '@/composables/useModalZIndex'
 
 const props = defineProps({
   visible: { type: Boolean, default: false },
@@ -95,6 +101,7 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['close', 'confirm'])
+const zIndex = useModalZIndex(() => props.visible)
 
 const uploadWorkspace = useUploadWorkspaceInfrastructure()
 const treeRef = ref(null)
@@ -205,7 +212,6 @@ function handleConfirm() {
     justify-content: center;
     background: rgba(0, 0, 0, 0.6);
     backdrop-filter: blur(4px);
-    z-index: 2000;
   }
 
   &__header {

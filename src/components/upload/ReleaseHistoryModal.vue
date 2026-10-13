@@ -1,7 +1,12 @@
 <template>
   <Teleport to="body">
     <Transition name="modal">
-      <div v-if="visible" class="release-modal__overlay" @click.self="$emit('close')">
+      <div
+        v-if="visible"
+        class="release-modal__overlay"
+        :style="{ zIndex }"
+        @click.self="$emit('close')"
+      >
         <div class="release-modal">
           <!-- 头部 -->
           <div class="release-modal__header">
@@ -104,6 +109,7 @@
 import { computed } from 'vue'
 import { Close, ArrowRight } from '@element-plus/icons-vue'
 import { useConfigStore } from '@/stores/config'
+import { useModalZIndex } from '@/composables/useModalZIndex'
 
 const props = defineProps({
   visible: { type: Boolean, default: false },
@@ -111,6 +117,7 @@ const props = defineProps({
 })
 
 defineEmits(['close'])
+const zIndex = useModalZIndex(() => props.visible)
 
 const configStore = useConfigStore()
 
@@ -194,7 +201,6 @@ function openRelease(tag) {
     justify-content: center;
     background: rgba(0, 0, 0, 0.6);
     backdrop-filter: blur(4px);
-    z-index: 2000;
   }
 
   &__header {
