@@ -2,11 +2,21 @@ import { AI_TASK_STATUS, useAiTasksStore } from '@/stores/ai-tasks'
 import { useCredentialsStore } from '@/stores/credentials'
 import { useUploadSessionStore } from '@/stores/upload-session'
 import { analyzeImage as classifierAnalyze } from '@/services/ai/classifier'
+import { AI_MODEL_KEY, AI_PROVIDER } from './model'
 
 let runningPromise = null
 
-function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms))
+function sleep(ms, signal) {
+  return new Promise(resolve => {
+    if (signal?.aborted) return resolve()
+    const finish = () => {
+      clearTimeout(timer)
+      signal?.removeEventListener('abort', finish)
+      resolve()
+    }
+    const timer = setTimeout(finish, ms)
+    signal?.addEventListener('abort', finish, { once: true })
+  })
 }
 
 function buildTargetPath(series, metadata) {
@@ -58,12 +68,17 @@ async function runQueue() {
   const sessionStore = useUploadSessionStore()
   const credentialsStore = useCredentialsStore()
 
+  await credentialsStore.loadCredentials()
   await taskStore.initialize()
   await sessionStore.restoreAiTaskFiles()
 
   while (true) {
-    const task = taskStore.tasks.find(item => item.status === AI_TASK_STATUS.QUEUED)
-    if (!task) break
+    let task = taskStore.tasks.find(item => item.status === AI_TASK_STATUS.QUEUED)
+    if (!task) return
+
+    // 每次执行（包括重试）读取当前会话，不在持久化任务中携带凭据。
+    const credentials = credentialsStore.getCredentialsByProvider(AI_PROVIDER)
+    if (!credentials?.apiKey?.trim() || credentials.signal?.aborted) return
 
     const uploadFile = sessionStore.files.find(file => file.id === task.fileId)
     if (!uploadFile?.file) {
@@ -75,78 +90,80 @@ async function runQueue() {
       continue
     }
 
-    const credentials = credentialsStore.getCredentialsByProvider(task.provider)
-    if (!credentials) {
-      // 没有凭据时保持 queued，等用户配置后再次恢复，不把任务判死。
-      console.warn(`[AiTaskCenter] 缺少 ${task.provider} 凭据，暂停队列`)
-      break
-    }
+    const previousAttempts = task.attempts || 0
+    const attemptNumber = previousAttempts + 1
+    task = await taskStore.updateTask(task.id, {
+      provider: AI_PROVIDER,
+      modelKey: AI_MODEL_KEY,
+      status: AI_TASK_STATUS.ANALYZING,
+      attempts: attemptNumber,
+      startedAt: task.startedAt || Date.now(),
+      retryAt: null,
+      error: null
+    })
+    markUploadFileTask(uploadFile, task, AI_TASK_STATUS.ANALYZING)
 
-    const maxAttempts = task.maxAttempts || 3
-    let completed = false
-    let lastError = null
-
-    for (let attempt = task.attempts || 0; attempt < maxAttempts && !completed; attempt++) {
-      const attemptNumber = attempt + 1
-      await taskStore.updateTask(task.id, {
-        status: AI_TASK_STATUS.ANALYZING,
-        attempts: attemptNumber,
-        startedAt: task.startedAt || Date.now(),
-        retryAt: null,
-        error: null
+    try {
+      const result = await classifierAnalyze({
+        file: uploadFile.file,
+        series: task.series,
+        providerType: AI_PROVIDER,
+        credentials,
+        modelKey: AI_MODEL_KEY
       })
-      task.attempts = attemptNumber
-      markUploadFileTask(uploadFile, task, AI_TASK_STATUS.ANALYZING)
-
-      try {
-        const result = await classifierAnalyze({
-          file: uploadFile.file,
-          series: task.series,
-          providerType: task.provider,
-          credentials,
-          modelKey: task.modelKey
-        })
-
-        const metadata = buildAiMetadata(task.series, result)
-        applyResultToUploadFile(uploadFile, task, metadata)
-        await taskStore.updateTask(task.id, {
-          status: AI_TASK_STATUS.COMPLETED,
-          result: metadata,
-          error: null,
-          retryAt: null,
-          finishedAt: Date.now()
-        })
-        completed = true
-      } catch (error) {
-        lastError = error
-        const isLastAttempt = attemptNumber >= maxAttempts
-
-        if (!isLastAttempt) {
-          const retryDelay = Math.min(30000, 2000 * 2 ** attempt)
-          const retryAt = Date.now() + retryDelay
-          await taskStore.updateTask(task.id, {
-            status: AI_TASK_STATUS.RETRYING,
-            attempts: attemptNumber,
-            error: error.message,
-            retryAt
-          })
-          markUploadFileTask(uploadFile, task, AI_TASK_STATUS.RETRYING)
-          await sleep(retryDelay)
-        }
+      if (credentials.signal?.aborted) {
+        throw Object.assign(new Error('AI 会话已变更'), { name: 'AbortError' })
       }
-    }
 
-    if (!completed) {
-      const message = lastError?.message || 'AI 分析失败'
-      uploadFile.aiTaskStatus = AI_TASK_STATUS.FAILED
-      uploadFile.aiTaskAttempts = task.attempts || maxAttempts
-      uploadFile.aiMetadata = null
+      const metadata = buildAiMetadata(task.series, result)
+      applyResultToUploadFile(uploadFile, task, metadata)
       await taskStore.updateTask(task.id, {
-        status: AI_TASK_STATUS.FAILED,
-        error: message,
+        status: AI_TASK_STATUS.COMPLETED,
+        result: metadata,
+        error: null,
         retryAt: null,
         finishedAt: Date.now()
       })
+    } catch (error) {
+      if (credentials.signal?.aborted || error.name === 'AbortError') {
+        task = await taskStore.updateTask(task.id, {
+          status: AI_TASK_STATUS.QUEUED,
+          attempts: previousAttempts,
+          retryAt: null,
+          error: null
+        })
+        markUploadFileTask(uploadFile, task, AI_TASK_STATUS.QUEUED)
+        // 清除凭据会在下一轮退出；换 Key 则自动改用新会话。
+        continue
+      }
+
+      // 错误正文可能含服务端回显，任务历史只存本地固定提示。
+      const message = 'AI 分析失败，请检查当前标签页的 API 配置后重试'
+      if (attemptNumber < (task.maxAttempts || 3)) {
+        const retryDelay = Math.min(30000, 2000 * 2 ** previousAttempts)
+        task = await taskStore.updateTask(task.id, {
+          status: AI_TASK_STATUS.RETRYING,
+          error: message,
+          retryAt: Date.now() + retryDelay
+        })
+        markUploadFileTask(uploadFile, task, AI_TASK_STATUS.RETRYING)
+        await sleep(retryDelay, credentials.signal)
+        task = await taskStore.updateTask(task.id, {
+          status: AI_TASK_STATUS.QUEUED,
+          retryAt: null
+        })
+        markUploadFileTask(uploadFile, task, AI_TASK_STATUS.QUEUED)
+      } else {
+        uploadFile.aiTaskStatus = AI_TASK_STATUS.FAILED
+        uploadFile.aiTaskAttempts = attemptNumber
+        uploadFile.aiMetadata = null
+        await taskStore.updateTask(task.id, {
+          status: AI_TASK_STATUS.FAILED,
+          error: message,
+          retryAt: null,
+          finishedAt: Date.now()
+        })
+      }
     }
   }
 }

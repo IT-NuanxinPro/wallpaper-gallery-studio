@@ -1,6 +1,12 @@
 <template>
   <el-dialog v-model="visible" title="AI 智能分析" width="800px" :close-on-click-modal="false">
     <div class="ai-analysis-modal">
+      <p class="ai-analysis-modal__config">
+        GPT-6.1 Sol · {{ credentialsStore.hasCredentials ? '当前标签页已配置' : '未配置 API Key' }}
+        <router-link to="/settings#ai-config" @click="visible = false">
+          {{ credentialsStore.hasCredentials ? '管理 AI 配置' : '去设置 API Key' }}
+        </router-link>
+      </p>
       <!-- 分析进度 -->
       <div v-if="analyzing" class="analyzing">
         <el-progress type="circle" :percentage="progress" :width="120">
@@ -28,7 +34,7 @@
               <el-radio
                 v-for="(name, index) in analysisResult.filenameSuggestions"
                 :key="index"
-                :label="name"
+                :value="name"
                 border
               >
                 {{ name }}
@@ -99,7 +105,13 @@
       <div v-else-if="error" class="error-state">
         <el-result icon="error" title="分析失败" :sub-title="error">
           <template #extra>
-            <el-button type="primary" @click="retryAnalysis"> 重新分析 </el-button>
+            <el-button
+              type="primary"
+              :disabled="!credentialsStore.hasCredentials"
+              @click="retryAnalysis"
+            >
+              重新分析
+            </el-button>
           </template>
         </el-result>
       </div>
@@ -117,14 +129,18 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, onBeforeUnmount, watch } from 'vue'
 import { ArrowRight } from '@element-plus/icons-vue'
 import { analyzeImage } from '@/services/ai/classifier'
+import { AI_MODEL_KEY, AI_PROVIDER } from '@/services/ai/model'
+import { useCredentialsStore } from '@/stores/credentials'
+
+const credentialsStore = useCredentialsStore()
 
 const props = defineProps({
   modelValue: Boolean,
   file: Object,
-  aiToken: String
+  series: { type: String, default: 'desktop' }
 })
 
 const emit = defineEmits(['update:modelValue', 'confirm'])
@@ -164,55 +180,89 @@ const confidenceType = computed(() => {
   return 'danger'
 })
 
-// 监听文件变化，自动分析
+let requestId = 0
+let progressInterval = null
+
+function clearProgress() {
+  if (progressInterval) clearInterval(progressInterval)
+  progressInterval = null
+}
+
+function releasePreview() {
+  if (imagePreview.value) URL.revokeObjectURL(imagePreview.value)
+  imagePreview.value = ''
+}
+
+// 弹窗和文件共同决定本次分析，切换时不接收旧结果。
 watch(
-  () => props.file,
-  async newFile => {
-    if (newFile && visible.value) {
-      await startAnalysis()
-    }
+  () => [props.file, props.modelValue],
+  ([file, open]) => {
+    requestId += 1
+    clearProgress()
+    releasePreview()
+    analyzing.value = false
+    analysisResult.value = null
+    error.value = null
+    if (file && open) startAnalysis()
   },
   { immediate: true }
 )
 
-// 开始分析
 async function startAnalysis() {
-  if (!props.file || !props.aiToken) return
-
+  if (!props.file || !credentialsStore.hasCredentials) return
+  const currentRequestId = ++requestId
+  const credentials = credentialsStore.getCredentialsByProvider(AI_PROVIDER)
   analyzing.value = true
   progress.value = 0
   error.value = null
   analysisResult.value = null
-
-  // 生成图片预览
+  clearProgress()
+  releasePreview()
   imagePreview.value = URL.createObjectURL(props.file)
+  progressInterval = setInterval(() => {
+    if (progress.value < 90) progress.value += 10
+  }, 300)
 
   try {
-    // 模拟进度
-    const progressInterval = setInterval(() => {
-      if (progress.value < 90) {
-        progress.value += 10
-      }
-    }, 300)
-
-    // 调用 AI 分析
-    const result = await analyzeImage(props.file, props.aiToken)
-
-    clearInterval(progressInterval)
+    const result = await analyzeImage({
+      file: props.file,
+      series: props.series,
+      providerType: AI_PROVIDER,
+      modelKey: AI_MODEL_KEY,
+      credentials
+    })
+    if (currentRequestId !== requestId) return
+    if (credentials.signal?.aborted) {
+      throw new globalThis.DOMException('AI 配置已变更，请重新分析', 'AbortError')
+    }
     progress.value = 100
-
-    // 设置分析结果
-    analysisResult.value = result
-    selectedFilename.value = result.filenameSuggestions[0]
-    selectedPrimaryCategory.value = result.categorySuggestion.primary
-    selectedSecondaryCategory.value = result.categorySuggestion.secondary
-
-    analyzing.value = false
+    analysisResult.value = {
+      ...result,
+      categorySuggestion: {
+        primary: props.series,
+        secondary: result.secondary,
+        confidence: result.confidence || 0
+      },
+      tags: result.keywords || []
+    }
+    selectedFilename.value = result.filenameSuggestions?.[0] || ''
+    selectedPrimaryCategory.value = props.series
+    selectedSecondaryCategory.value = result.secondary || ''
   } catch (err) {
-    analyzing.value = false
-    error.value = err.message || 'AI 分析失败，请重试'
+    if (currentRequestId === requestId) error.value = err.message || 'AI 分析失败，请重试'
+  } finally {
+    if (currentRequestId === requestId) {
+      clearProgress()
+      analyzing.value = false
+    }
   }
 }
+
+onBeforeUnmount(() => {
+  requestId += 1
+  clearProgress()
+  releasePreview()
+})
 
 // 重新分析
 function retryAnalysis() {
@@ -238,6 +288,16 @@ function confirmAnalysis() {
 <style lang="scss" scoped>
 .ai-analysis-modal {
   min-height: 400px;
+
+  &__config {
+    font-size: 13px;
+    line-height: 1.6;
+
+    a {
+      margin-left: 8px;
+      color: var(--el-color-primary);
+    }
+  }
 
   .analyzing {
     display: flex;

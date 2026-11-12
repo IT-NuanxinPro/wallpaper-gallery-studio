@@ -93,32 +93,24 @@
       </div>
 
       <div v-if="editable" class="video-review__ai">
-        <label :for="`video-ai-model-${job.id}`">AI 分类模型</label>
+        <span>AI 分类模型</span>
         <div class="video-review__ai-controls">
-          <select
-            :id="`video-ai-model-${job.id}`"
-            :value="modelKey"
-            :disabled="busy || !models.length"
-            @change="$emit('update:modelKey', $event.target.value)"
-          >
-            <option v-if="!models.length" value="">暂无已配置模型</option>
-            <option v-for="model in models" :key="model.key" :value="model.key">
-              {{ model.name }}
-            </option>
-          </select>
+          <strong>GPT-6.1 Sol</strong>
+          <el-tag :type="hasCredentials ? 'success' : 'warning'" size="small">
+            {{ hasCredentials ? '当前标签页已配置' : '未配置 API Key' }}
+          </el-tag>
           <el-button
             :loading="busy"
-            :disabled="busy || !models.length || !!conflict"
+            :disabled="busy || !hasCredentials || !!conflict"
             @click="$emit('analyze')"
           >
             分析所选封面
           </el-button>
         </div>
         <p class="video-review__hint">
-          复用工作台已有 AI 凭证；更换封面后可重新分析。未配置凭证时可前往<router-link
-            to="/settings"
-            >设置</router-link
-          >，也可直接人工填写。
+          与图片上传、AI 工坊共用当前标签页配置。<router-link to="/settings#ai-config">
+            {{ hasCredentials ? '管理 AI 配置' : '去设置 API Key' }} </router-link
+          >；也可直接人工填写。
         </p>
       </div>
 
@@ -232,20 +224,11 @@ const props = defineProps({
   editable: Boolean,
   busy: Boolean,
   conflict: Object,
-  models: { type: Array, default: () => [] },
-  modelKey: String,
+  hasCredentials: Boolean,
   topicSuggestions: { type: Array, default: () => [] },
   topicsError: String
 })
-const emit = defineEmits([
-  'update:draft',
-  'update:modelKey',
-  'save',
-  'analyze',
-  'accept-remote',
-  'reapply',
-  'refresh'
-])
+const emit = defineEmits(['update:draft', 'save', 'analyze', 'accept-remote', 'reapply', 'refresh'])
 const failedFrames = ref([])
 const previewFailed = ref(false)
 const previewUrl = ref('')

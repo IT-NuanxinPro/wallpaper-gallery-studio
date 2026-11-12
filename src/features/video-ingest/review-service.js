@@ -50,6 +50,9 @@ export async function analyzeVideoFrame({
       credentials,
       modelKey
     })
+    if (credentials?.signal?.aborted) {
+      throw new globalThis.DOMException('AI 配置已变更，请重新分析', 'AbortError')
+    }
     const filename = analysis.filenameSuggestions?.[0] || review.filename
     const nextReview = {
       ...review,

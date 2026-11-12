@@ -5,7 +5,7 @@
         <button
           class="upload-header__mode-btn"
           :class="{ 'upload-header__mode-btn--active': uploadMode === 'ai' }"
-          :disabled="isSwitching"
+          :disabled="isSwitching || !credentialsStore.hasCredentials"
           @click="handleModeChange('ai')"
         >
           <span class="upload-header__mode-icon">🤖</span>
@@ -98,7 +98,7 @@
             <p class="upload-header__manual-hint">
               {{
                 uploadMode === 'ai'
-                  ? '当前模型决定自动分析能力和批量上限。'
+                  ? '图片、视频与 AI 工坊共用当前标签页配置。'
                   : '当前目录决定图片最终上传位置。'
               }}
             </p>
@@ -110,97 +110,23 @@
               class="upload-header__mode-content upload-header__mode-pane"
               :class="{ 'upload-header__mode-pane--active': uploadMode === 'ai' }"
             >
-              <el-popover
-                v-model:visible="modelPopoverVisible"
-                placement="bottom"
-                :width="modelPopoverWidth"
-                trigger="click"
-                popper-class="upload-header__ai-popover"
-              >
-                <template #reference>
-                  <button
-                    ref="modelTriggerRef"
-                    class="upload-header__ai-btn"
-                    :disabled="aiAnalyzing"
-                  >
-                    <span class="upload-header__ai-btn-main">
-                      <span class="upload-header__ai-btn-icon">{{
-                        aiConfig?.providerIcon || '🤖'
-                      }}</span>
-                      <span class="upload-header__ai-btn-copy">
-                        <span class="upload-header__ai-btn-text">{{
-                          aiConfig?.modelName || 'AI 自动分类'
-                        }}</span>
-                        <span class="upload-header__ai-btn-provider">{{
-                          aiConfig?.providerName || 'AI Provider'
-                        }}</span>
-                        <span
-                          v-if="getModelBadges(currentModel).length > 0"
-                          class="upload-header__ai-btn-tags"
-                        >
-                          <span
-                            v-for="badge in getModelBadges(currentModel)"
-                            :key="badge.label"
-                            class="upload-header__model-badge"
-                            :class="`upload-header__model-badge--${badge.tone}`"
-                          >
-                            {{ badge.label }}
-                          </span>
-                        </span>
-                      </span>
+              <div class="upload-header__ai-btn">
+                <span class="upload-header__ai-btn-main">
+                  <span class="upload-header__ai-btn-icon">🤖</span>
+                  <span class="upload-header__ai-btn-copy">
+                    <span class="upload-header__ai-btn-text">GPT-6.1 Sol</span>
+                    <span class="upload-header__ai-btn-provider">
+                      {{ credentialsStore.hasCredentials ? '当前标签页已配置' : '未配置 API Key' }}
                     </span>
-                    <span class="upload-header__ai-btn-suffix">
-                      <span v-if="aiAnalyzing" class="upload-header__ai-btn-badge">
-                        {{ aiAnalyzingCount }}
-                      </span>
-                      <span v-else class="upload-header__ai-btn-arrow">▼</span>
-                    </span>
-                  </button>
-                </template>
-
-                <div class="upload-header__ai-dropdown">
-                  <div class="upload-header__ai-dropdown-section">
-                    <div class="upload-header__ai-dropdown-label">AI 模型</div>
-                    <div class="upload-header__ai-dropdown-options">
-                      <button
-                        v-for="model in sortedModels"
-                        :key="model.key"
-                        class="upload-header__ai-dropdown-option"
-                        :class="{
-                          'upload-header__ai-dropdown-option--active':
-                            aiConfig?.modelKey === model.key
-                        }"
-                        @click="handleModelSelect(model.key)"
-                      >
-                        <span class="upload-header__ai-dropdown-copy">
-                          <span class="upload-header__ai-dropdown-name-row">
-                            <span class="upload-header__ai-dropdown-name">{{ model.name }}</span>
-                            <span
-                              v-if="getModelBadges(model).length > 0"
-                              class="upload-header__ai-dropdown-tags"
-                            >
-                              <span
-                                v-for="badge in getModelBadges(model)"
-                                :key="badge.label"
-                                class="upload-header__model-badge"
-                                :class="`upload-header__model-badge--${badge.tone}`"
-                              >
-                                {{ badge.label }}
-                              </span>
-                            </span>
-                          </span>
-                          <span class="upload-header__ai-dropdown-desc">{{
-                            getCompactModelDescription(model)
-                          }}</span>
-                        </span>
-                        <span class="upload-header__ai-dropdown-source">
-                          {{ getProviderLabel(model.provider) }}
-                        </span>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </el-popover>
+                  </span>
+                </span>
+                <span v-if="aiAnalyzing" class="upload-header__ai-btn-badge">{{
+                  aiAnalyzingCount
+                }}</span>
+                <router-link to="/settings#ai-config" class="upload-header__ai-settings">
+                  {{ credentialsStore.hasCredentials ? 'AI 配置' : '去设置' }}
+                </router-link>
+              </div>
             </div>
 
             <div
@@ -225,8 +151,11 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { nextTick, onMounted, ref, watch } from 'vue'
 import { gsap } from 'gsap'
+import { useCredentialsStore } from '@/stores/credentials'
+
+const credentialsStore = useCredentialsStore()
 import { FolderOpened, Warning, Picture, Delete, Upload, Loading } from '@element-plus/icons-vue'
 
 const props = defineProps({
@@ -249,7 +178,6 @@ const props = defineProps({
 const emit = defineEmits([
   'mode-change',
   'series-change',
-  'model-change',
   'retry-metadata',
   'retry',
   'clear',
@@ -262,115 +190,10 @@ const seriesOptions = [
   { value: 'avatar', label: '头像', icon: '👤' }
 ]
 
-const sortedModels = computed(() => {
-  const providerPriority = {
-    zhipu: 0,
-    groq: 1,
-    sub2api: 2,
-    cloudflare: 3
-  }
-
-  return [...(props.aiConfig?.availableModels || [])].sort((first, second) => {
-    const providerDiff =
-      (providerPriority[first.provider] ?? 99) - (providerPriority[second.provider] ?? 99)
-
-    if (providerDiff !== 0) return providerDiff
-    if (first.recommended !== second.recommended)
-      return Number(second.recommended) - Number(first.recommended)
-    return 0
-  })
-})
-
-const currentModel = computed(
-  () => sortedModels.value.find(model => model.key === props.aiConfig?.modelKey) || null
-)
-
-function getModelBadges(model) {
-  if (!model) return []
-
-  const badges = []
-
-  if (model.key === 'sub2api-grok-4.6') {
-    badges.push({ label: '推荐', tone: 'primary' })
-    badges.push({ label: '视觉', tone: 'success' })
-  }
-
-  if (model.key === 'sub2api-grok-4.5') {
-    badges.push({ label: '视觉', tone: 'success' })
-    badges.push({ label: '稳定', tone: 'info' })
-  }
-
-  if (model.key === 'zhipu-glm-4v-flash') {
-    badges.push({ label: '推荐', tone: 'primary' })
-    badges.push({ label: '免费', tone: 'success' })
-    badges.push({ label: '极速', tone: 'success' })
-  }
-
-  if (model.key === 'zhipu-glm-4.1v-thinking-flash') {
-    badges.push({ label: '免费', tone: 'success' })
-    badges.push({ label: '推理', tone: 'warning' })
-    badges.push({ label: '深分析', tone: 'info' })
-  }
-
-  if (model.key === 'groq-qwen3.6-27b') {
-    badges.push({ label: '极速', tone: 'success' })
-    badges.push({ label: '长上下文', tone: 'warning' })
-    badges.push({ label: '限流', tone: 'danger' })
-  }
-
-  if (model.key === 'cloudflare-llama-3.2') {
-    badges.push({ label: 'Workers', tone: 'warning' })
-    badges.push({ label: '私有化', tone: 'info' })
-  }
-
-  if (model.key === 'cloudflare-llava-1.5') {
-    badges.push({ label: '兼容', tone: 'primary' })
-    badges.push({ label: '轻量', tone: 'success' })
-  }
-
-  return badges
-}
-
-function getCompactModelDescription(model) {
-  if (!model) return ''
-
-  const descriptionMap = {
-    'sub2api-grok-4.6': '新版 Grok 视觉模型，推荐用于壁纸分类与元数据生成',
-    'sub2api-grok-4.5': '稳定的 Grok 视觉模型，支持壁纸分类与元数据生成',
-    'zhipu-glm-4v-flash': '智谱免费视觉模型，速度快，推荐日常使用',
-    'zhipu-glm-4.1v-thinking-flash': '智谱免费推理模型，带思考过程，适合深度分析',
-    'groq-qwen3.6-27b': '极速但免费层每分钟仅 ~1.7 张图，适合低频使用',
-    'cloudflare-llama-3.2': 'Workers 托管，适合私有部署',
-    'cloudflare-llava-1.5': '轻量兼容，适合基础兜底'
-  }
-
-  return descriptionMap[model.key] || model.description || ''
-}
-
-function getProviderLabel(provider) {
-  const labels = {
-    sub2api: 'Sub2API',
-    groq: 'Groq',
-    zhipu: '智谱 GLM',
-    cloudflare: 'Cloudflare'
-  }
-
-  return labels[provider] || provider
-}
-
 const isSwitching = ref(false)
-const modelPopoverVisible = ref(false)
-const modelTriggerRef = ref(null)
-const modelPopoverWidth = ref(280)
 const modeStageRef = ref(null)
 const aiPaneRef = ref(null)
 const manualPaneRef = ref(null)
-
-function syncModelPopoverWidth() {
-  const trigger = modelTriggerRef.value
-  if (!trigger) return
-  modelPopoverWidth.value = Math.max(Math.round(trigger.getBoundingClientRect().width), 220)
-}
 
 function getModePane(mode) {
   return mode === 'ai' ? aiPaneRef.value : manualPaneRef.value
@@ -446,19 +269,8 @@ async function handleModeChange(mode) {
   isSwitching.value = false
 }
 
-function handleModelSelect(modelKey) {
-  emit('model-change', modelKey)
-  modelPopoverVisible.value = false
-}
-
 onMounted(() => {
-  nextTick(syncModelPopoverWidth)
   nextTick(() => syncModePaneState(props.uploadMode))
-  window.addEventListener('resize', syncModelPopoverWidth)
-})
-
-onUnmounted(() => {
-  window.removeEventListener('resize', syncModelPopoverWidth)
 })
 
 watch(
@@ -652,7 +464,6 @@ watch(
     border-radius: $radius-lg;
     color: $gray-200;
     font-size: $font-size-sm;
-    cursor: pointer;
     transition: all $duration-normal;
     max-width: none;
 
@@ -750,183 +561,10 @@ watch(
     }
   }
 
-  // AI 下拉菜单
-  &__ai-dropdown {
-    max-height: min(420px, calc(100vh - 140px));
-    overflow: hidden;
-
-    &-section {
-      display: flex;
-      flex-direction: column;
-      max-height: inherit;
-      margin-bottom: $spacing-3;
-
-      &:last-of-type {
-        margin-bottom: $spacing-2;
-      }
-    }
-
-    &-label {
-      font-size: $font-size-xs;
-      color: $gray-400;
-      margin-bottom: $spacing-2;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-    }
-
-    &-options {
-      display: flex;
-      flex-direction: column;
-      gap: $spacing-1;
-      max-height: min(380px, calc(100vh - 190px));
-      overflow-y: auto;
-      overscroll-behavior: contain;
-      padding-right: 2px;
-
-      &::-webkit-scrollbar {
-        width: 6px;
-      }
-
-      &::-webkit-scrollbar-track {
-        background: transparent;
-      }
-
-      &::-webkit-scrollbar-thumb {
-        background: rgba(255, 255, 255, 0.14);
-        border-radius: 999px;
-      }
-    }
-
-    &-option {
-      display: flex;
-      align-items: flex-start;
-      gap: $spacing-2;
-      padding: $spacing-2 $spacing-3;
-      background: rgba(255, 255, 255, 0.05);
-      border: 1px solid transparent;
-      border-radius: $radius-md;
-      color: $gray-300;
-      font-size: $font-size-sm;
-      cursor: pointer;
-      transition: all $duration-normal;
-      text-align: left;
-      width: 100%;
-
-      &:hover {
-        background: rgba(255, 255, 255, 0.1);
-      }
-
-      &--active {
-        background: rgba($primary-start, 0.15);
-        border-color: rgba($primary-start, 0.4);
-        color: $white;
-      }
-
-      &--disabled {
-        opacity: 0.35;
-        cursor: not-allowed;
-        pointer-events: none;
-      }
-    }
-
-    &-copy {
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-      min-width: 0;
-      flex: 1;
-    }
-
-    &-name-row {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      min-width: 0;
-      flex-wrap: wrap;
-    }
-
-    &-tags {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      flex-wrap: wrap;
-    }
-
-    &-name {
-      color: $white;
-      font-size: 13px;
-      font-weight: 600;
-      text-align: left;
-    }
-
-    &-desc {
-      color: $gray-500;
-      font-size: 11px;
-      line-height: 1.4;
-      text-align: left;
-      display: -webkit-box;
-      -webkit-line-clamp: 2;
-      -webkit-box-orient: vertical;
-      overflow: hidden;
-    }
-
-    &-source {
-      flex-shrink: 0;
-      margin-left: auto;
-      padding: 4px 8px;
-      background: rgba(255, 255, 255, 0.06);
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      border-radius: $radius-full;
-      font-size: 10px;
-      color: $gray-400;
-      line-height: 1;
-    }
-
-    &-badge {
-      font-size: 10px;
-      padding: 1px 4px;
-      background: rgba($success, 0.2);
-      color: $success;
-      border-radius: $radius-sm;
-    }
-  }
-
-  &__model-badge {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 18px;
-    padding: 0 7px;
-    border-radius: $radius-full;
-    border: 1px solid transparent;
-    font-size: 10px;
-    font-weight: 600;
-    line-height: 1;
-    white-space: nowrap;
-
-    &--primary {
-      background: rgba($primary-start, 0.16);
-      border-color: rgba($primary-start, 0.26);
-      color: #cdb8ff;
-    }
-
-    &--success {
-      background: rgba($success, 0.14);
-      border-color: rgba($success, 0.26);
-      color: #8df0c6;
-    }
-
-    &--warning {
-      background: rgba($warning, 0.14);
-      border-color: rgba($warning, 0.26);
-      color: #ffd48a;
-    }
-
-    &--info {
-      background: rgba($info, 0.14);
-      border-color: rgba($info, 0.26);
-      color: #9ad0ff;
-    }
+  &__ai-settings {
+    flex-shrink: 0;
+    color: $primary-start;
+    font-size: $font-size-xs;
   }
 
   // 手动模式路径
@@ -1097,20 +735,6 @@ watch(
       animation: spin 1s linear infinite;
     }
   }
-}
-
-:deep(.upload-header__ai-popover) {
-  padding: 8px !important;
-  background: rgba(16, 18, 27, 0.92) !important;
-  border: 1px solid rgba(255, 255, 255, 0.08) !important;
-  border-radius: 18px !important;
-  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.28) !important;
-  backdrop-filter: blur(18px);
-}
-
-:deep(.upload-header__ai-popover .el-popper__arrow::before) {
-  background: rgba(16, 18, 27, 0.92) !important;
-  border: 1px solid rgba(255, 255, 255, 0.08) !important;
 }
 
 @media (max-width: 960px) {

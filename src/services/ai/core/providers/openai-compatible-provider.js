@@ -1,4 +1,10 @@
 import { BaseAIProvider } from './base-provider'
+import { AI_MODEL_ID } from '../../model'
+import { DEFAULT_AI_BASE_URL, normalizeAiBaseUrl } from '../../session-credentials'
+
+function sessionCancelled() {
+  return Object.assign(new Error('AI 会话配置已变更，请重新分析'), { name: 'AbortError' })
+}
 
 /**
  * OpenAI 兼容协议 Provider
@@ -12,7 +18,7 @@ export class OpenAICompatibleProvider extends BaseAIProvider {
   }
 
   validateCredentials(credentials) {
-    return !!(credentials?.apiKey && credentials?.model)
+    return typeof credentials?.apiKey === 'string' && !!credentials.apiKey.trim()
   }
 
   async analyze({ imageBase64, prompt, credentials }) {
@@ -22,24 +28,33 @@ export class OpenAICompatibleProvider extends BaseAIProvider {
 
     const {
       apiKey,
-      model,
       maxTokens = 4096,
       temperature = 0.7,
       reasoningEffort,
-      timeoutMs = Number(import.meta.env.VITE_SUB2API_TIMEOUT_MS) || 120000
+      timeoutMs = Number(import.meta.env.VITE_SUB2API_TIMEOUT_MS) || 120000,
+      signal
     } = credentials
 
+    if (signal?.aborted) throw sessionCancelled()
+    const baseUrl = normalizeAiBaseUrl(credentials.baseUrl || this.baseUrl || DEFAULT_AI_BASE_URL)
+
     let imageUrl = imageBase64
-    if (!imageBase64.startsWith('data:')) {
+    if (imageBase64 && !imageBase64.startsWith('data:')) {
       imageUrl = `data:image/jpeg;base64,${imageBase64}`
     }
 
     const controller = new globalThis.AbortController()
-    const timeout = setTimeout(() => controller.abort(), timeoutMs)
+    let timedOut = false
+    const abortSession = () => controller.abort()
+    signal?.addEventListener('abort', abortSession, { once: true })
+    const timeout = setTimeout(() => {
+      timedOut = true
+      controller.abort()
+    }, timeoutMs)
 
     let response
     try {
-      response = await fetch(`${this.baseUrl}/chat/completions`, {
+      response = await fetch(`${baseUrl.replace(/\/+$/, '')}/chat/completions`, {
         method: 'POST',
         signal: controller.signal,
         headers: {
@@ -47,13 +62,13 @@ export class OpenAICompatibleProvider extends BaseAIProvider {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          model,
+          model: AI_MODEL_ID,
           messages: [
             {
               role: 'user',
               content: [
                 { type: 'text', text: prompt },
-                { type: 'image_url', image_url: { url: imageUrl } }
+                ...(imageUrl ? [{ type: 'image_url', image_url: { url: imageUrl } }] : [])
               ]
             }
           ],
@@ -62,40 +77,39 @@ export class OpenAICompatibleProvider extends BaseAIProvider {
           ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {})
         })
       })
+      if (signal?.aborted) throw sessionCancelled()
+      if (!response.ok) {
+        // 服务端正文可能回显 Authorization；只使用已知 HTTP 状态生成错误。
+        let message = `AI 服务请求失败（HTTP ${response.status}），请稍后重试`
+        if (response.status === 401 || response.status === 403) {
+          message = 'API Key 无效或已过期，请检查当前标签页配置'
+        } else if (response.status === 429) {
+          message = 'AI 请求频率超限，请稍后重试'
+        }
+        throw Object.assign(new Error(message), { code: 'AI_HTTP_ERROR' })
+      }
+      const data = await response.json()
+      if (signal?.aborted) throw sessionCancelled()
+      const content = data.choices?.[0]?.message?.content
+      if (typeof content !== 'string') throw new Error('Invalid AI content')
+      // 只解析业务字段，既不保留整段响应，也不允许响应回显当前 Key。
+      return this.parseResponse({ choices: [{ message: { content } }] }, apiKey)
     } catch (error) {
-      if (error.name === 'AbortError') {
+      if (signal?.aborted) throw sessionCancelled()
+      if (timedOut) {
         throw new Error(`${this.providerName} 请求超时（${Math.round(timeoutMs / 1000)} 秒）`)
       }
-      throw new Error(`${this.providerName} 连接失败：${error.message}`)
+      if (error.code === 'AI_HTTP_ERROR') throw error
+      throw new Error(
+        response ? 'AI 返回内容无法解析，请重试' : 'AI 服务连接失败，请检查 API 地址和网络'
+      )
     } finally {
       clearTimeout(timeout)
+      signal?.removeEventListener('abort', abortSession)
     }
-
-    if (!response.ok) {
-      let errorMessage = `${this.providerName} API error: ${response.status}`
-      try {
-        const error = await response.json()
-        errorMessage = error.error?.message || error.message || errorMessage
-        console.error(`${this.providerName} API Error Details:`, error)
-      } catch {
-        const text = await response.text().catch(() => '')
-        if (text) errorMessage += ` - ${text}`
-      }
-
-      if (response.status === 401 || response.status === 403) {
-        errorMessage = `${this.providerName} API Key 无效或已过期，请检查配置。`
-      } else if (response.status === 429) {
-        errorMessage = `API 请求频率超限: ${errorMessage}`
-      }
-
-      throw new Error(errorMessage)
-    }
-
-    const data = await response.json()
-    return this.parseResponse(data)
   }
 
-  parseResponse(data) {
+  parseResponse(data, apiKey = '') {
     let aiText = data.choices?.[0]?.message?.content || ''
 
     if (!aiText) {
@@ -110,7 +124,17 @@ export class OpenAICompatibleProvider extends BaseAIProvider {
       throw new Error(`No JSON found in ${this.providerName} response`)
     }
 
-    const parsed = JSON.parse(jsonMatch[0])
+    // reviver 从内向外遍历；解码后同时处理字符串值和对象键，覆盖嵌套及转义回显。
+    const parsed = JSON.parse(jsonMatch[0], (_key, value) => {
+      if (!apiKey) return value
+      if (typeof value === 'string') return value.replaceAll(apiKey, '[已隐藏]')
+      if (value && typeof value === 'object' && !Array.isArray(value)) {
+        return Object.fromEntries(
+          Object.entries(value).map(([key, nested]) => [key.replaceAll(apiKey, '[已隐藏]'), nested])
+        )
+      }
+      return value
+    })
 
     let filenameSuggestions = parsed.filenames || []
     if (!filenameSuggestions.length && parsed.filename) {
@@ -144,23 +168,20 @@ export class OpenAICompatibleProvider extends BaseAIProvider {
       displayTitle: parsed.displayTitle || parsed.display_title || null,
       is_perfect_match: parsed.is_perfect_match !== undefined ? parsed.is_perfect_match : null,
       new_category_proposal: parsed.new_category_proposal || null,
-      reasoning: parsed.reasoning || null,
-      raw: data
+      reasoning: parsed.reasoning || null
     }
   }
 }
 
 /**
  * sub2api Provider
- * 开发环境通过 Vite 同源代理访问配置的网关，生产环境直连远程 API。
+ * 地址优先使用当前会话配置，未覆盖时使用公开默认地址。
  */
 export class Sub2apiProvider extends OpenAICompatibleProvider {
   constructor(config = {}) {
-    const defaultBaseUrl = import.meta.env.DEV ? '/sub2api/v1' : 'https://api.061129.xyz/v1'
-
     super({
-      name: 'Sub2API',
-      baseUrl: import.meta.env.VITE_SUB2API_BASE_URL || defaultBaseUrl,
+      name: 'GPT-6.1 Sol',
+      baseUrl: DEFAULT_AI_BASE_URL,
       ...config
     })
   }

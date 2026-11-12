@@ -8,6 +8,7 @@
     "dev:proxy": "node server/ai-proxy.js",
     "dev:all": "concurrently \"npm run dev\" \"npm run dev:proxy\"",
     "build": "vite build",
+    "check:client-secrets": "node scripts/check-client-ai-secrets.mjs",
     "preview": "vite preview",
     "test:video:worker": "node --experimental-sqlite --test worker/video/tests/*.test.mjs",
     "dev:video:local": "node --experimental-sqlite scripts/video-local-server.mjs",

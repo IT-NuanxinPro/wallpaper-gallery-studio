@@ -87,7 +87,6 @@
             @change-target="handleChangeTarget"
             @mode-change="handleModeChange"
             @series-change="handleSeriesChange"
-            @model-change="handleModelChange"
             @retry-metadata="handleRetryMetadata"
             @apply-all-ai="handleApplyAllAi"
             @edit-ai="handleEditAI"
@@ -690,12 +689,6 @@ function handleApplyAllAi() {
   } else {
     ElMessage.info('没有待应用的 AI 推荐')
   }
-}
-
-function handleModelChange(modelKey) {
-  uploadStore.setAiModel(modelKey)
-  const config = uploadStore.getCurrentAiConfig()
-  ElMessage.success(`已切换到 ${config.modelName}`)
 }
 
 // 编辑 AI 分析结果

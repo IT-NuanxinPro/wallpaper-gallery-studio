@@ -5,22 +5,28 @@ afterEach(() => {
   vi.resetModules()
 })
 
-describe('本地 AI 默认模型', () => {
-  it('按环境配置选择 sub2api 模型，并同步 Provider', async () => {
-    vi.stubEnv('VITE_AI_DEFAULT_MODEL', 'sub2api-gpt-6.1-sol')
-    vi.resetModules()
-    const { CLASSIFIER_CONFIG, ASSISTANT_CONFIG, getModelByKey } = await import('./config')
-    expect(CLASSIFIER_CONFIG.defaultProvider).toBe('sub2api')
-    expect(CLASSIFIER_CONFIG.defaultModel).toBe('sub2api-gpt-6.1-sol')
-    expect(ASSISTANT_CONFIG.defaultProvider).toBe('sub2api')
-    expect(getModelByKey(CLASSIFIER_CONFIG.defaultModel).id).toBe('gpt-6.1-sol')
-  })
+describe('固定 AI 模型', () => {
+  it.each(['sub2api-grok-4.6', 'zhipu-glm-4v-flash', 'missing-model'])(
+    '旧配置 %s 不会恢复已下架模型',
+    async previousModel => {
+      vi.stubEnv('VITE_AI_DEFAULT_MODEL', previousModel)
+      vi.resetModules()
+      const { CLASSIFIER_CONFIG, ASSISTANT_CONFIG, getModelByKey, getModelList } =
+        await import('./config')
+      expect(CLASSIFIER_CONFIG.defaultProvider).toBe('sub2api')
+      expect(CLASSIFIER_CONFIG.defaultModel).toBe('sub2api-gpt-6.1-sol')
+      expect(ASSISTANT_CONFIG.defaultProvider).toBe('sub2api')
+      expect(getModelByKey(CLASSIFIER_CONFIG.defaultModel).id).toBe('gpt-6.1-sol')
+      expect(getModelList().map(model => model.key)).toEqual(['sub2api-gpt-6.1-sol'])
+      expect(getModelByKey(previousModel)).toBeNull()
+    }
+  )
 
-  it('无效的默认模型配置仍回退到已有 GLM 默认值', async () => {
-    vi.stubEnv('VITE_AI_DEFAULT_MODEL', 'missing-model')
-    vi.resetModules()
-    const { CLASSIFIER_CONFIG } = await import('./config')
-    expect(CLASSIFIER_CONFIG.defaultProvider).toBe('zhipu')
-    expect(CLASSIFIER_CONFIG.defaultModel).toBe('zhipu-glm-4v-flash')
+  it('工厂拒绝所有已下架服务', async () => {
+    const { AIProviderFactory } = await import('../core')
+    expect(AIProviderFactory.getSupportedTypes()).toEqual(['sub2api'])
+    for (const provider of ['zhipu', 'groq', 'cloudflare', 'doubao']) {
+      expect(() => AIProviderFactory.create(provider)).toThrow()
+    }
   })
 })

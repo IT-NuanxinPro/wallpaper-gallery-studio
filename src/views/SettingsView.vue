@@ -2,6 +2,7 @@
   <MainLayout>
     <div ref="viewRef" class="settings-view">
       <div class="settings-view__container">
+        <CredentialsConfig class="settings-view__ai-config" />
         <!-- 左侧：系统设置 -->
         <GlassCard :hoverable="false" class="settings-view__card">
           <div class="settings-view__header">
@@ -128,6 +129,7 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import MainLayout from '@/components/MainLayout.vue'
 import GlassCard from '@/components/GlassCard.vue'
+import CredentialsConfig from '@/components/ai/CredentialsConfig.vue'
 import { useConfigStore } from '@/stores/config'
 import { useAuthStore } from '@/stores/auth'
 import { useAnimation } from '@/composables/useAnimation'
@@ -230,7 +232,7 @@ onMounted(async () => {
 
 .settings-view {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
   min-height: 100%;
   padding: $spacing-6;
@@ -242,6 +244,10 @@ onMounted(async () => {
     width: 100%;
     max-width: 900px;
     align-items: stretch;
+  }
+
+  &__ai-config {
+    grid-column: 1 / -1;
   }
 
   &__card {

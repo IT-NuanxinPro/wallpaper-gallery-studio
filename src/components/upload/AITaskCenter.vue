@@ -54,6 +54,7 @@
         <button
           v-if="task.status === 'failed'"
           class="ai-task-center__retry"
+          :disabled="!credentialsStore.hasCredentials"
           @click="handleRetry(task.id)"
         >
           重试
@@ -69,9 +70,11 @@
 import { computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useAiTasksStore } from '@/stores/ai-tasks'
+import { useCredentialsStore } from '@/stores/credentials'
 import { resumeAiTaskQueue, retryAiTask } from '@/services/ai/task-runner'
 
 const taskStore = useAiTasksStore()
+const credentialsStore = useCredentialsStore()
 
 const visibleTasks = computed(() =>
   [...taskStore.tasks]
@@ -85,10 +88,7 @@ const visibleTasks = computed(() =>
 )
 
 function getProviderLabel(provider) {
-  if (provider === 'sub2api') return 'Sub2API'
-  if (provider === 'zhipu') return '智谱 GLM'
-  if (provider === 'groq') return 'Groq'
-  return provider || 'AI'
+  return provider === 'sub2api' ? 'GPT-6.1 Sol' : '历史任务'
 }
 
 function getStatusLabel(status) {
@@ -107,6 +107,7 @@ function queuePosition(task) {
 }
 
 async function handleRetry(taskId) {
+  if (!credentialsStore.hasCredentials) return
   try {
     await retryAiTask(taskId)
   } catch (error) {

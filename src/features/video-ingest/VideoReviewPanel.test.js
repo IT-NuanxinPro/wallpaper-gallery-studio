@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { mount, RouterLinkStub } from '@vue/test-utils'
 import ElementPlus from 'element-plus'
 import VideoReviewPanel from './VideoReviewPanel.vue'
 
@@ -30,13 +30,30 @@ function createPanel() {
       },
       draft: { ...draft },
       editable: true,
-      models: []
+      hasCredentials: false
     },
-    global: { plugins: [ElementPlus], stubs: { RouterLink: true } }
+    global: { plugins: [ElementPlus], stubs: { RouterLink: RouterLinkStub } }
   })
 }
 
 describe('视频候选帧审核交互', () => {
+  it('固定显示 GPT-6.1 Sol，未配置 Key 时禁止 AI 分析但仍可人工编辑', async () => {
+    const panel = createPanel()
+    const controls = panel.get('.video-review__ai')
+    expect(controls.text()).toContain('GPT-6.1 Sol')
+    expect(controls.find('select').exists()).toBe(false)
+    expect(controls.get('button').attributes('disabled')).toBeDefined()
+    expect(controls.getComponent(RouterLinkStub).props('to')).toBe('/settings#ai-config')
+    const title = panel.get('input[placeholder="面向访客的视频标题"]')
+    await title.setValue('人工填写标题')
+    expect(panel.emitted('update:draft').at(-1)[0].displayTitle).toBe('人工填写标题')
+    await panel.setProps({ hasCredentials: true })
+    expect(controls.get('button').attributes('disabled')).toBeUndefined()
+    await controls.get('button').trigger('click')
+    expect(panel.emitted('analyze')).toHaveLength(1)
+    panel.unmount()
+  })
+
   it('封面图片与视频poster使用匿名CORS，避免污染后续AI读帧缓存', async () => {
     const panel = createPanel()
     const job = panel.props('job')

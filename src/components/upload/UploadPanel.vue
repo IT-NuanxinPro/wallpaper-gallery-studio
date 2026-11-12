@@ -17,7 +17,6 @@
       :metadata-error="metadataError"
       @mode-change="handleModeChange"
       @series-change="$emit('series-change', $event)"
-      @model-change="$emit('model-change', $event)"
       @retry-metadata="$emit('retry-metadata')"
       @retry="$emit('retry')"
       @clear="handleClear"
@@ -61,12 +60,14 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { ElMessageBox } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
+import { useCredentialsStore } from '@/stores/credentials'
 import UploadHeader from './UploadPanel/UploadHeader.vue'
 import UploadDropzone from './UploadPanel/UploadDropzone.vue'
 import UploadFileGrid from './UploadPanel/UploadFileGrid.vue'
 import AITaskCenter from './AITaskCenter.vue'
 
 const authStore = useAuthStore()
+const credentialsStore = useCredentialsStore()
 
 const props = defineProps({
   targetPath: { type: String, default: '' },
@@ -97,7 +98,6 @@ const emit = defineEmits([
   'change-target',
   'mode-change',
   'series-change',
-  'model-change',
   'retry-metadata',
   'apply-all-ai',
   'edit-ai'
@@ -123,7 +123,9 @@ const dropzoneIcon = computed(() => {
 
 const dropzoneText = computed(() => {
   if (props.uploadMode === 'ai') {
-    return '拖拽多张图片到此处，AI 将进入任务队列逐张分析'
+    return credentialsStore.hasCredentials
+      ? '拖拽多张图片到此处，AI 将进入任务队列逐张分析'
+      : '可先选择图片，填写 API Key 后开始分析；也可切换手动上传'
   }
   return props.targetPath ? '拖拽图片或文件夹到此处' : '请先选择分类'
 })

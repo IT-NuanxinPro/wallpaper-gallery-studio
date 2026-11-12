@@ -5,6 +5,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { useCredentialsStore } from './credentials'
+import { AI_MODEL_KEY, AI_PROVIDER } from '@/services/ai/model'
 import { AIProviderFactory, AI_PROVIDERS, compressImage, IMAGE_CONFIG } from '@/services/ai/core'
 import {
   buildPromptWithLatestCategories,
@@ -25,11 +26,11 @@ export const useAIStore = defineStore('ai', () => {
 
   const hasResults = computed(() => results.value.length > 0)
   const currentModelConfig = computed(() => {
-    return getModelByKey(currentModel.value)
+    return getModelByKey(AI_MODEL_KEY)
   })
 
   /**
-   * 调用 AI API（支持多 Provider）
+   * 调用当前标签页配置的固定模型
    */
   async function callAI(imageBase64, prompt) {
     const credentialsStore = useCredentialsStore()
@@ -44,13 +45,13 @@ export const useAIStore = defineStore('ai', () => {
     }
 
     // 根据当前 Provider 创建对应的 Provider 实例
-    const provider = AIProviderFactory.create(currentProvider.value)
+    const provider = AIProviderFactory.create(AI_PROVIDER)
 
     // 获取对应 Provider 的凭证
-    const credentials = credentialsStore.getCredentialsByProvider(currentProvider.value)
+    const credentials = credentialsStore.getCredentialsByProvider(AI_PROVIDER)
 
-    if (!credentials) {
-      throw new Error(`未配置 ${currentProvider.value} 的凭证`)
+    if (!credentials?.apiKey?.trim()) {
+      throw new Error('请先配置当前标签页的 API Key')
     }
 
     // 调用 Provider 的 analyze 方法
@@ -65,6 +66,10 @@ export const useAIStore = defineStore('ai', () => {
         reasoningEffort: modelConfig.reasoningEffort
       }
     })
+
+    if (credentials.signal?.aborted) {
+      throw Object.assign(new Error('AI 会话配置已变更，请重新分析'), { name: 'AbortError' })
+    }
 
     return analysis
   }
@@ -101,14 +106,13 @@ export const useAIStore = defineStore('ai', () => {
         description: analysis.description || '',
         keywords: analysis.keywords || [],
         confidence: analysis.confidence || 0,
-        model: currentModel.value,
-        provider: currentProvider.value,
+        model: AI_MODEL_KEY,
+        provider: AI_PROVIDER,
         promptTemplate: promptTemplate.value,
         displayTitle: analysis.displayTitle || null,
         is_perfect_match: analysis.is_perfect_match,
         new_category_proposal: analysis.new_category_proposal || null,
-        reasoning: analysis.reasoning || null,
-        raw: analysis.raw
+        reasoning: analysis.reasoning || null
       }
 
       results.value.unshift(result)
@@ -151,12 +155,12 @@ export const useAIStore = defineStore('ai', () => {
     }
   }
 
-  function setModel(modelKey) {
-    currentModel.value = modelKey
+  function setModel() {
+    currentModel.value = AI_MODEL_KEY
   }
 
-  function setProvider(providerKey) {
-    currentProvider.value = providerKey
+  function setProvider() {
+    currentProvider.value = AI_PROVIDER
   }
 
   function setPromptTemplate(templateId) {

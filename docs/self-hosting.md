@@ -169,33 +169,11 @@ VITE_OAUTH_WORKER_URL=https://wallpaper-oauth.your-subdomain.workers.dev
 
 ---
 
-## 第四步：获取 AI API Key
+## 第四步：在标签页配置 GPT-6.1 Sol
 
-至少配置一个 AI Provider，推荐 智谱 GLM 或 Groq（均免费）。
+工作台仅使用GPT-6.1 Sol。每位同事使用自己网关账户的API Key，在工作台「上传设置 → AI配置」中填写API地址和Key；三个AI入口共用一次配置。
 
-### 智谱 GLM（推荐，免费）
-
-1. 注册 [open.bigmodel.cn](https://open.bigmodel.cn)
-2. 进入 **用户中心 → API Keys**
-3. 创建新 Key，复制保存
-
-### Groq AI（备选，速度极快但免费层限流）
-
-1. 注册 [console.groq.com](https://console.groq.com)
-2. 进入 **API Keys → Create API Key**
-3. 复制保存
-
-### Cloudflare Workers AI（可选）
-
-1. 登录 [Cloudflare Dashboard](https://dash.cloudflare.com)
-2. 进入 **Workers & Pages → Overview**，记录 **Account ID**
-3. 进入 **My Profile → API Tokens → Create Token**
-4. 选择 **Workers AI** 权限模板，创建并复制 Token
-5. 部署 `worker/ai-proxy.js`（用于解决 CORS）：
-
-```bash
-wrangler deploy worker/ai-proxy.js --name ai-proxy --compatibility-date 2026-03-17
-```
+Key不放在Cloudflare Pages环境变量、仓库、localStorage或任务记录中。当前标签页刷新可恢复，新标签页或关闭重开需重新填写；清除配置立即取消旧会话请求。网关需要允许工作台来源的CORS请求。
 
 ---
 
@@ -215,14 +193,13 @@ wrangler deploy worker/ai-proxy.js --name ai-proxy --compatibility-date 2026-03-
 
 在 **Settings → Environment variables** 中添加以下变量：
 
-| 变量名                       | 说明                           | 必填              |
-| ---------------------------- | ------------------------------ | ----------------- |
-| `VITE_OAUTH_WORKER_URL`      | OAuth Worker URL（第三步获取） | ✅                |
-| `VITE_ZHIPU_API_KEY`         | 智谱 GLM API Key               | 至少填一个 AI Key |
-| `VITE_GROQ_API_KEY`          | Groq API Key                   | 至少填一个 AI Key |
-| `VITE_CLOUDFLARE_ACCOUNT_ID` | Cloudflare Account ID          | 使用 CF AI 时必填 |
-| `VITE_CLOUDFLARE_API_TOKEN`  | Cloudflare API Token           | 使用 CF AI 时必填 |
-| `VITE_WORKER_URL`            | AI Proxy Worker URL            | 使用 CF AI 时必填 |
+| 变量名                  | 说明                       | 必填           |
+| ----------------------- | -------------------------- | -------------- |
+| `VITE_OAUTH_WORKER_URL` | OAuth Worker URL           | 是             |
+| `VITE_SUB2API_BASE_URL` | 公开API默认地址，不包含Key | 否             |
+| `VITE_VIDEO_API_URL`    | 视频控制Worker地址         | 使用视频时必填 |
+
+禁止把API Key放入任何 `VITE_*` 构建变量。旧部署已有的AI密钥变量应移除，并重新构建；用户在设置页配置自己的会话Key。
 
 ### 5.3 触发部署
 
@@ -367,14 +344,9 @@ cp .env.example .env.local
 # OAuth Worker（本地开发也需要，否则无法登录）
 VITE_OAUTH_WORKER_URL=https://wallpaper-oauth.your-subdomain.workers.dev
 
-# AI Provider（至少填一个）
-VITE_ZHIPU_API_KEY=your_zhipu_api_key
-VITE_GROQ_API_KEY=gsk_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-
-# Cloudflare AI（可选）
-VITE_CLOUDFLARE_ACCOUNT_ID=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-VITE_CLOUDFLARE_API_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-VITE_WORKER_URL=https://ai-proxy.your-subdomain.workers.dev
+# 仅公开API地址；Key在当前标签页设置中输入
+VITE_SUB2API_BASE_URL=https://api.061129.xyz/v1
+# 本地代理可设 /sub2api/v1，SUB2API_PROXY_TARGET另设网关地址
 ```
 
 ### 启动开发服务器
@@ -384,7 +356,7 @@ pnpm install
 pnpm dev
 ```
 
-> 智谱 GLM 与 Groq 均支持浏览器直连（CORS），本地开发无需额外代理。
+> API网关需允许当前工作台来源；本地可以使用Vite同源代理。
 
 ### 本地登录说明
 
@@ -417,9 +389,9 @@ http://localhost:5173/callback
 
 ### Q: AI 分析一直失败
 
-1. 检查对应 Provider 的 API Key 是否正确填写
-2. 检查 Key 是否已过期或超出免费额度
-3. 打开浏览器控制台查看具体错误信息
+1. 在「上传设置 → AI 共用配置」确认当前标签页已填写 API 地址和自己的 Key
+2. 确认网关支持 `gpt-6.1-sol`，Key 未过期且有可用额度
+3. 检查网关是否允许工作台域名的 CORS 请求，按页面错误提示处理
 
 ### Q: 想换一个图床仓库
 

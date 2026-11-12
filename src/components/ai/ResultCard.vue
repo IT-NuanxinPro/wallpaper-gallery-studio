@@ -486,11 +486,6 @@ const modelName = computed(() => {
 // 检测是否是 Cloudflare 返回的 Markdown 格式
 const isMarkdownResponse = computed(() => {
   // 直接检测是否使用 Cloudflare provider
-  console.log('🔍 Provider Detection:', {
-    provider: props.result.provider,
-    isCloudflare: props.result.provider === 'cloudflare',
-    result: props.result
-  })
   return props.result.provider === 'cloudflare'
 })
 
@@ -498,29 +493,24 @@ const isMarkdownResponse = computed(() => {
 const renderedMarkdown = computed(() => {
   if (!isMarkdownResponse.value) return ''
   const rawResponse = props.result.raw?.result?.response || ''
-  console.log('📝 Markdown Rendering:', {
-    hasRaw: !!props.result.raw,
-    hasResult: !!props.result.raw?.result,
-    hasResponse: !!props.result.raw?.result?.response,
-    responseLength: rawResponse.length,
-    responsePreview: rawResponse.substring(0, 100)
-  })
   return marked(rawResponse)
 })
 
 // 格式化文件名 (仅电脑壁纸)
 const formattedFilenames = computed(() => {
   if (props.result.primary !== 'desktop') return []
-  
-  return props.result.filenameSuggestions?.map(filename => {
-    // 获取文件名和扩展名
-    const lastDotIndex = filename.lastIndexOf('.')
-    const nameWithoutExt = lastDotIndex > 0 ? filename.substring(0, lastDotIndex) : filename
-    
-    // 格式: {secondary}--{third}_{originalName}.png
-    const formattedName = `${props.result.secondary}--${props.result.third}_${nameWithoutExt}.png`
-    return formattedName
-  }) || []
+
+  return (
+    props.result.filenameSuggestions?.map(filename => {
+      // 获取文件名和扩展名
+      const lastDotIndex = filename.lastIndexOf('.')
+      const nameWithoutExt = lastDotIndex > 0 ? filename.substring(0, lastDotIndex) : filename
+
+      // 格式: {secondary}--{third}_{originalName}.png
+      const formattedName = `${props.result.secondary}--${props.result.third}_${nameWithoutExt}.png`
+      return formattedName
+    }) || []
+  )
 })
 
 function formatTime(ts) {

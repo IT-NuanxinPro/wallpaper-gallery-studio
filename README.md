@@ -19,7 +19,7 @@
 
 ### 🤖 AI 智能分类
 
-- **多 AI Provider** - 智谱 GLM（推荐）、Groq、Cloudflare Workers AI
+- **GPT-6.1 Sol** - 图片上传、视频分析与 AI 工坊共享当前标签页的手动配置
 - **自动分类** - 上传图片后自动识别类型并推荐三级分类
 - **智能命名** - AI 生成 2 个中文文件名建议（8-15 汉字）
 - **关键词提取** - 自动提取图片关键词和描述
@@ -69,16 +69,16 @@
 
 ## 🛠️ 技术栈
 
-| 类别 | 技术                                    |
-| ---- | --------------------------------------- |
-| 框架 | Vue 3 + Composition API                 |
-| 构建 | Vite 7                                  |
-| UI   | Element Plus                            |
-| 状态 | Pinia                                   |
-| 动画 | GSAP                                    |
-| 样式 | SCSS + CSS Variables                    |
-| AI   | 智谱 GLM / Groq / Cloudflare Workers AI |
-| 规范 | ESLint + Prettier + Husky               |
+| 类别 | 技术                         |
+| ---- | ---------------------------- |
+| 框架 | Vue 3 + Composition API      |
+| 构建 | Vite 7                       |
+| UI   | Element Plus                 |
+| 状态 | Pinia                        |
+| 动画 | GSAP                         |
+| 样式 | SCSS + CSS Variables         |
+| AI   | GPT-6.1 Sol（兼容 API 网关） |
+| 规范 | ESLint + Prettier + Husky    |
 
 ## 🚀 快速开始
 
@@ -105,7 +105,7 @@ pnpm install
 
 # 3. 配置环境变量
 cp .env.example .env.local
-# 编辑 .env.local，填入你的 API Key
+# 编辑 .env.local 配置公开服务地址；API Key 在工作台设置页手动填写
 
 # 4. 启动开发服务器
 pnpm dev
@@ -127,12 +127,13 @@ wallpaper-gallery-studio/
 ├── public/                  # 静态资源
 │   └── hash-worker.js       # Web Worker（文件 Hash 计算）
 ├── worker/
-│   └── ai-proxy.js          # Cloudflare Worker（Cloudflare AI 代理）
+│   ├── video/              # 视频任务与上传控制服务
+│   └── ai-proxy.js          # 历史代理，当前AI入口不再使用
 ├── src/
 │   ├── components/
 │   │   ├── ai/              # AI 相关组件
 │   │   │   ├── AIAssistantPanel.vue      # AI 工坊主面板
-│   │   │   ├── AIProviderSelector.vue    # Provider 选择器
+│   │   │   ├── AIProviderSelector.vue    # 共用配置兼容入口
 │   │   │   ├── CredentialsConfig.vue     # 凭证配置
 │   │   │   ├── PromptTemplateSelector.vue
 │   │   │   └── ResultCard.vue            # 分析结果卡片
@@ -168,9 +169,7 @@ wallpaper-gallery-studio/
 │   │   │   ├── core/        # AI 核心层（共享）
 │   │   │   │   ├── providers/
 │   │   │   │   │   ├── base-provider.js        # Provider 基类
-│   │   │   │   │   ├── cloudflare-provider.js  # Cloudflare Workers AI
-│   │   │   │   │   ├── groq-provider.js        # Groq AI
-│   │   │   │   │   ├── zhipu-provider.js       # 智谱 GLM
+│   │   │   │   │   ├── openai-compatible-provider.js # GPT-6.1 Sol网关
 │   │   │   │   │   └── index.js                # Provider 工厂
 │   │   │   │   ├── image-processor.js          # 图片压缩处理
 │   │   │   │   └── index.js
@@ -191,7 +190,7 @@ wallpaper-gallery-studio/
 │   │   ├── ai.js            # AI 分析状态（统一 store）
 │   │   ├── auth.js          # 认证状态
 │   │   ├── config.js        # 仓库配置状态
-│   │   ├── credentials.js   # 多 Provider 凭证管理
+│   │   ├── credentials.js   # 标签页临时 AI 配置
 │   │   ├── upload.js        # 上传状态 + AI 自动分析
 │   │   ├── workflow.js      # 工作流状态
 │   │   └── history.js       # 上传历史记录
@@ -221,46 +220,25 @@ wallpaper-gallery-studio/
 └── package.json
 ```
 
-## 🔧 环境变量配置
+## 🔧 AI 配置
 
-复制 `.env.example` 为 `.env.local` 并填入你的值：
+打开「上传设置 → AI 配置」，填写 API 地址和自己的 API Key，点击「保存到当前标签页」。固定使用 GPT-6.1 Sol，图片上传、动态视频分析与 AI 工坊共用此配置。
+
+- 刷新当前标签页可以恢复；新建、复制标签页和关闭后重新打开需要重新填写。
+- Key仅存于Pinia内存和当前标签页sessionStorage；不会写入localStorage、上传任务或服务端。
+- 清除或更换Key会取消旧会话中的AI请求，后续任务只读取新配置。
+- 浏览器会话缓存仍属于页面可访问的数据，不等于系统密钥保险库；点击「清除配置」可立即移除。
+
+构建环境只放公开配置，不配置任何AI Key：
 
 ```env
-# Cloudflare Workers AI（可选）
-VITE_CLOUDFLARE_ACCOUNT_ID=your_cloudflare_account_id
-VITE_CLOUDFLARE_API_TOKEN=your_cloudflare_api_token
-VITE_WORKER_URL=https://your-worker.your-subdomain.workers.dev
-
-# 智谱 GLM（推荐，免费视觉模型）
-# 获取地址：https://open.bigmodel.cn/usercenter/apikeys
-VITE_ZHIPU_API_KEY=your_zhipu_api_key
-
-# Groq AI（备选，速度极快但免费层限流）
-# 获取地址：https://console.groq.com/keys
-VITE_GROQ_API_KEY=your_groq_api_key
+VITE_SUB2API_BASE_URL=https://api.061129.xyz/v1
+VITE_VIDEO_API_URL=https://your-video-worker.workers.dev
 ```
 
-## 🤖 AI Provider 说明
+本地开发可将公开地址设置为 `/sub2api/v1`，通过 `SUB2API_PROXY_TARGET` 指定网关。Key仍在设置页输入。上线后执行 `pnpm check:client-secrets` 检查构建产物不包含已配置的旧AI密钥。
 
-模型列表统一在 `src/services/ai/classifier/config.js` 中维护，classifier 和 assistant 两个服务共享同一份配置。默认使用**智谱 GLM** 免费层（无限流），其次 Groq，最后 Cloudflare。
-
-### 智谱 GLM（推荐，免费）
-
-- 智谱 BigModel 平台 GLM-4V 视觉模型，免费层无限流，OpenAI 兼容协议且支持 CORS
-- 推荐模型：**GLM-4V Flash**（直接回答、速度快）、**GLM-4.1V Thinking Flash**（带推理、分析更深入）
-- 获取 Key：[open.bigmodel.cn/usercenter/apikeys](https://open.bigmodel.cn/usercenter/apikeys)
-
-### Groq AI（备选）
-
-- 推理速度极快，但免费层限额 8000 TPM（约 1.7 张图/分钟），需串行限速
-- 推荐模型：**Qwen3.6 27B Vision**（`qwen/qwen3.6-27b`）
-- 获取 Key：[console.groq.com/keys](https://console.groq.com/keys)
-- 本地和线上均直连（Groq 官方支持 CORS）
-
-### Cloudflare Workers AI
-
-- 需要部署 `worker/ai-proxy.js` 到 Cloudflare Workers
-- 支持模型：Llama 3.2 11B Vision、LLaVA 1.5 7B
+模型配置统一在 `src/services/ai/model.js`；classifier与assistant只暴露GPT-6.1 Sol。旧GLM、Groq、Cloudflare AI、Grok入口已下架。
 
 ### 分类决策树
 
@@ -281,16 +259,6 @@ VITE_GROQ_API_KEY=your_groq_api_key
 3. 在 Settings → Environment variables 添加环境变量（参考上方配置）
 4. 推送代码，自动触发部署
 
-### Cloudflare Worker 部署（仅 Cloudflare AI 需要）
-
-```bash
-npm install -g wrangler
-wrangler login
-wrangler deploy worker/ai-proxy.js --name ai-proxy --compatibility-date 2026-03-17
-```
-
-部署后将 Worker URL 填入 `VITE_WORKER_URL` 环境变量。
-
 ## 🔒 权限说明
 
 | 权限级别 | 说明                | 可用功能                  |
@@ -302,13 +270,12 @@ wrangler deploy worker/ai-proxy.js --name ai-proxy --compatibility-date 2026-03-
 
 ## 📝 本地存储
 
-| Key                   | 用途                    | 过期策略            |
-| --------------------- | ----------------------- | ------------------- |
-| `auth_token`          | GitHub Token            | 手动登出清除        |
-| `uploaded_hashes`     | 上传文件 Hash（去重）   | 30 天 / 最多 500 条 |
-| `upload_history`      | 上传历史记录            | 手动清除            |
-| `ai_credentials`      | AI 凭证（AES-GCM 加密） | 手动清除            |
-| `ai_current_provider` | 上次选择的 Provider     | 持久                |
+| Key                    | 用途                               | 过期策略                            |
+| ---------------------- | ---------------------------------- | ----------------------------------- |
+| `auth_token`           | GitHub Token                       | 手动登出清除                        |
+| `uploaded_hashes`      | 上传文件 Hash（去重）              | 30 天 / 最多 500 条                 |
+| `upload_history`       | 上传历史记录                       | 手动清除                            |
+| `studio_ai_session_v1` | 当前标签页AI配置（sessionStorage） | 同标签刷新恢复；新标签/关闭重开清除 |
 
 ## 📄 License
 

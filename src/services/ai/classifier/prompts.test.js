@@ -19,7 +19,7 @@ describe('动态分类提示词', () => {
   it.each(['desktop', 'mobile', 'avatar'])(
     '所有 %s 模板使用同一批分类且约束父子关系',
     async series => {
-      for (const provider of ['sub2api', 'cloudflare']) {
+      for (const provider of ['sub2api']) {
         const prompt = await buildPromptWithLatestCategories('default', series, '', provider)
         for (const name of categories[series].secondary) expect(prompt).toContain(name)
         for (const names of Object.values(categories[series].third)) {
@@ -56,12 +56,12 @@ describe('动态分类提示词', () => {
     expect(getUploadCategoryTree).not.toHaveBeenCalled()
   })
 
-  it('预览与实际发送内容一致，支持强制刷新和对应 Provider 模板', async () => {
-    const preview = await previewPrompt('default', 'mobile', '', 'cloudflare', { force: true })
+  it('预览与实际发送内容一致，支持强制刷新', async () => {
+    const preview = await previewPrompt('default', 'mobile', '', 'sub2api', { force: true })
     expect(getUploadCategoryTree).toHaveBeenLastCalledWith({ force: true })
     expect(preview.success).toBe(true)
     expect(preview.prompt).toBe(
-      await buildPromptWithLatestCategories('default', 'mobile', '', 'cloudflare')
+      await buildPromptWithLatestCategories('default', 'mobile', '', 'sub2api')
     )
   })
 })

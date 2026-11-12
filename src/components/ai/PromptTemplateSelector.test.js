@@ -24,15 +24,15 @@ beforeEach(() => {
 afterEach(() => wrapper.unmount())
 
 describe('提示词预览', () => {
-  it('展开时加载最新分类，切换系列和 Provider 后更新，刷新按钮强制重读', async () => {
+  it('固定模型预览加载最新分类，切换系列后更新，刷新按钮强制重读', async () => {
     expect(getUploadCategoryTree).not.toHaveBeenCalled()
     await wrapper.get('button').trigger('click')
     await flushPromises()
     expect(wrapper.get('pre').text()).toContain('科技：机器人')
-    await wrapper.setProps({ primaryCategory: 'mobile', provider: 'cloudflare' })
+    await wrapper.setProps({ primaryCategory: 'mobile' })
     await flushPromises()
     expect(wrapper.get('pre').text()).toContain('游戏：新游戏')
-    expect(wrapper.get('pre').text()).toContain('供上传归档读取的结构化结果')
+    expect(wrapper.get('pre').text()).toContain('输出格式 (JSON Only)')
     await wrapper
       .findAll('button')
       .find(button => button.text().includes('刷新分类'))

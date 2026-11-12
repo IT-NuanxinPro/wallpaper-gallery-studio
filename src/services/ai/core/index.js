@@ -9,9 +9,6 @@ export {
   AIProviderFactory,
   PROVIDER_DISPLAY,
   BaseAIProvider,
-  CloudflareProvider,
-  GroqProvider,
-  ZhipuProvider,
   Sub2apiProvider,
   OpenAICompatibleProvider
 } from './providers'

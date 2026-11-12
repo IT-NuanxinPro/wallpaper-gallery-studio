@@ -6,50 +6,35 @@
 import { AIProviderFactory, compressImage, IMAGE_CONFIG } from '../core'
 import { getSystemPrompt } from './prompts'
 import { getModelByKey } from '../classifier/config'
+import { AI_MODEL_KEY, AI_PROVIDER } from '../model'
 
 /**
  * 发送消息给 AI
  */
-export async function sendMessage({
-  message,
-  image,
-  providerType,
-  credentials,
-  modelKey,
-  systemPromptType = 'default'
-}) {
-  try {
-    const modelConfig = getModelByKey(modelKey)
-    if (!modelConfig) {
-      throw new Error(`Unknown model: ${modelKey}`)
+export async function sendMessage({ message, image, credentials, systemPromptType = 'default' }) {
+  const modelConfig = getModelByKey(AI_MODEL_KEY)
+
+  const provider = AIProviderFactory.create(AI_PROVIDER)
+  const systemPrompt = getSystemPrompt(systemPromptType)
+
+  let imageBase64 = null
+  if (image) {
+    imageBase64 = await compressImage(image, IMAGE_CONFIG)
+  }
+
+  const fullPrompt = `${systemPrompt}\n\n用户：${message}`
+
+  const response = await provider.analyze({
+    imageBase64,
+    prompt: fullPrompt,
+    credentials: {
+      ...credentials,
+      model: modelConfig.id
     }
+  })
 
-    const provider = AIProviderFactory.create(providerType)
-    const systemPrompt = getSystemPrompt(systemPromptType)
-
-    let imageBase64 = null
-    if (image) {
-      imageBase64 = await compressImage(image, IMAGE_CONFIG)
-    }
-
-    const fullPrompt = `${systemPrompt}\n\n用户：${message}`
-
-    const response = await provider.analyze({
-      imageBase64,
-      prompt: fullPrompt,
-      credentials: {
-        ...credentials,
-        model: modelConfig.id
-      }
-    })
-
-    return {
-      message: response.description || response.raw?.result?.response || '无法解析响应',
-      raw: response.raw
-    }
-  } catch (error) {
-    console.error('AI 助手请求失败:', error)
-    throw error
+  return {
+    message: response.description || '无法解析响应'
   }
 }
 

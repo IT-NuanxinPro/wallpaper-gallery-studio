@@ -3,16 +3,16 @@
  * 独立于 AI 助手的配置
  */
 
-import { AI_PROVIDERS } from '../core'
+import { AI_PROVIDER, AI_MODEL_KEY, AI_MODEL_ID } from '../model'
 
 /**
  * 分类服务的模型配置
  */
 export const CLASSIFIER_MODELS = {
-  'sub2api-gpt-6.1-sol': {
-    id: 'gpt-6.1-sol',
+  [AI_MODEL_KEY]: {
+    id: AI_MODEL_ID,
     name: 'GPT-6.1 Sol',
-    provider: AI_PROVIDERS.SUB2API,
+    provider: AI_PROVIDER,
     description: '通过 sub2api 识别壁纸内容，生成分类、描述和文件名',
     speed: 'fast',
     accuracy: 'high',
@@ -21,118 +21,16 @@ export const CLASSIFIER_MODELS = {
     temperature: 0.7,
     reasoningEffort: 'low',
     recommended: true
-  },
-
-  // sub2api Grok 视觉模型（本地 Docker 与远程 API 共用模型标识）
-  'sub2api-grok-4.6': {
-    id: 'grok-4.6',
-    name: 'Grok 4.6',
-    provider: AI_PROVIDERS.SUB2API,
-    description: '新版 Grok 视觉模型，适合壁纸分类与元数据生成',
-    speed: 'fast',
-    accuracy: 'high',
-    cost: 'low',
-    maxTokens: 2048,
-    temperature: 0.7,
-    recommended: true
-  },
-
-  'sub2api-grok-4.5': {
-    id: 'grok-4.5',
-    name: 'Grok 4.5',
-    provider: AI_PROVIDERS.SUB2API,
-    description: '稳定的 Grok 视觉模型，支持壁纸分类与元数据生成',
-    speed: 'fast',
-    accuracy: 'high',
-    cost: 'low',
-    maxTokens: 2048,
-    temperature: 0.7,
-    recommended: false
-  },
-
-  // Groq AI 模型
-  // 注：Groq 已下线 llama-4-scout / llama-4-maverick（2026-07），
-  // 目前唯一在线的视觉模型是 qwen/qwen3.6-27b
-  // 免费层限额 8000 TPM，约 1.7 张图/分钟
-  'groq-qwen3.6-27b': {
-    id: 'qwen/qwen3.6-27b',
-    name: 'Qwen3.6 27B Vision (Groq)',
-    provider: AI_PROVIDERS.GROQ,
-    description: 'Groq 视觉模型，131K 上下文。免费层每分钟仅 ~1.7 张图',
-    speed: 'fast',
-    accuracy: 'high',
-    cost: 'low',
-    maxTokens: 4096,
-    temperature: 0.7,
-    recommended: false
-  },
-
-  // 智谱 GLM 视觉模型（免费层可用，推荐）
-  // 注意：glm-4v-flash 免费模型 max_tokens 上限为 1024
-  'zhipu-glm-4v-flash': {
-    id: 'glm-4v-flash',
-    name: 'GLM-4V Flash (免费)',
-    provider: AI_PROVIDERS.ZHIPU,
-    description: '智谱免费视觉模型，直接回答无推理，速度快',
-    speed: 'fast',
-    accuracy: 'high',
-    cost: 'low',
-    maxTokens: 1024,
-    temperature: 0.7,
-    recommended: true
-  },
-
-  'zhipu-glm-4.1v-thinking-flash': {
-    id: 'glm-4.1v-thinking-flash',
-    name: 'GLM-4.1V Thinking Flash (免费)',
-    provider: AI_PROVIDERS.ZHIPU,
-    description: '智谱免费推理视觉模型，带 <think> 推理过程，分析更深入',
-    speed: 'medium',
-    accuracy: 'high',
-    cost: 'low',
-    // 思考与最终答案共享输出预算，1024 会在思考阶段截断。
-    maxTokens: 8192,
-    temperature: 0.7,
-    recommended: false
-  },
-
-  // Cloudflare Workers AI
-  'cloudflare-llama-3.2': {
-    id: '@cf/meta/llama-3.2-11b-vision-instruct',
-    name: 'Llama 3.2 11B Vision (CF)',
-    provider: AI_PROVIDERS.CLOUDFLARE,
-    description: 'Cloudflare 托管的 Llama 3.2 视觉模型',
-    speed: 'medium',
-    accuracy: 'high',
-    cost: 'low',
-    maxTokens: 10000,
-    temperature: 0.3,
-    recommended: false
-  },
-
-  'cloudflare-llava-1.5': {
-    id: '@cf/llava-hf/llava-1.5-7b-hf',
-    name: 'LLaVA 1.5 7B (CF)',
-    provider: AI_PROVIDERS.CLOUDFLARE,
-    description: 'Cloudflare 托管的 LLaVA 视觉模型',
-    speed: 'medium',
-    accuracy: 'medium',
-    cost: 'low',
-    maxTokens: 2048,
-    temperature: 0.3,
-    recommended: false
   }
 }
 
 /**
  * 分类服务默认配置
  */
-const defaultModel = CLASSIFIER_MODELS[import.meta.env.VITE_AI_DEFAULT_MODEL]
-  ? import.meta.env.VITE_AI_DEFAULT_MODEL
-  : 'zhipu-glm-4v-flash'
+const defaultModel = AI_MODEL_KEY
 
 export const CLASSIFIER_CONFIG = {
-  // 本地环境可以指定默认模型，Provider 与模型保持一致。
+  // 所有功能使用同一固定模型，忽略旧环境和本地选择。
   defaultProvider: CLASSIFIER_MODELS[defaultModel].provider,
 
   // 默认模型

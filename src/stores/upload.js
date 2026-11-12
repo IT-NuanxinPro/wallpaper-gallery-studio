@@ -10,17 +10,12 @@ import { useHistoryStore } from './history'
 import { useUploadSessionStore } from './upload-session'
 import { useUploadWorkspaceStore } from './upload-workspace'
 import { useCredentialsStore } from './credentials'
-import { AI_PROVIDERS } from '@/services/ai/core'
+import { AI_MODEL_KEY, AI_PROVIDER } from '@/services/ai/model'
 import { previewManager } from '@/utils/previewManager'
 import { hashWorker } from '@/utils/hashWorker'
 import { sha256Hex } from '@/utils/file-hash'
 import { imageCompressor } from '@/utils/imageCompressor'
-import {
-  analyzeImage as classifierAnalyze,
-  CLASSIFIER_CONFIG,
-  getModelList,
-  getRecommendedModel
-} from '@/services/ai/classifier'
+import { analyzeImage as classifierAnalyze, getModelList } from '@/services/ai/classifier'
 
 // 允许的文件类型
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp']
@@ -85,43 +80,8 @@ export const useUploadStore = defineStore('upload', () => {
     errorFiles
   } = storeToRefs(sessionStore)
 
-  // 计算属性
-  function getUploadModelList(credentialsStore = useCredentialsStore()) {
-    const providerPriority = {
-      [AI_PROVIDERS.ZHIPU]: 0,
-      [AI_PROVIDERS.GROQ]: 1,
-      [AI_PROVIDERS.SUB2API]: 2
-    }
-
-    const supportedProviders = [AI_PROVIDERS.SUB2API, AI_PROVIDERS.ZHIPU, AI_PROVIDERS.GROQ]
-    const availableProviderKeys = credentialsStore.availableProviders
-      .map(provider => provider.key)
-      .filter(provider => supportedProviders.includes(provider))
-    const visibleProviderKeys = new Set([AI_PROVIDERS.SUB2API, ...availableProviderKeys])
-
+  function getUploadModelList() {
     return getModelList()
-      .filter(model => {
-        if (availableProviderKeys.length > 0) {
-          return visibleProviderKeys.has(model.provider)
-        }
-        return supportedProviders.includes(model.provider)
-      })
-      .sort((a, b) => {
-        const providerDiff =
-          (providerPriority[a.provider] ?? 99) - (providerPriority[b.provider] ?? 99)
-        if (providerDiff !== 0) return providerDiff
-        if (a.recommended !== b.recommended) return Number(b.recommended) - Number(a.recommended)
-        return 0
-      })
-  }
-
-  function getPreferredUploadModel(credentialsStore = useCredentialsStore()) {
-    const availableModels = getUploadModelList(credentialsStore)
-    const configured = availableModels.find(model => model.key === CLASSIFIER_CONFIG.defaultModel)
-    if (configured && credentialsStore.getCredentialsByProvider(configured.provider)?.apiKey) {
-      return configured
-    }
-    return availableModels[0] || getRecommendedModel(AI_PROVIDERS.ZHIPU)
   }
 
   // 生成唯一 ID
@@ -194,28 +154,11 @@ export const useUploadStore = defineStore('upload', () => {
       return
     }
 
-    const availableModels = getUploadModelList(credentialsStore)
-    let selectedModel = availableModels.find(model => model.key === selectedModelKey.value)
-
-    if (!selectedModel) {
-      selectedModel = getPreferredUploadModel(credentialsStore)
-      if (selectedModel?.key) {
-        selectedModelKey.value = selectedModel.key
-      }
-    }
-
-    const provider = selectedModel?.provider || credentialsStore.defaultProvider
+    selectedModelKey.value = AI_MODEL_KEY
+    const provider = AI_PROVIDER
+    const modelKey = AI_MODEL_KEY
     const credentials = credentialsStore.getCredentialsByProvider(provider)
-
-    if (!credentials) {
-      console.warn(`AI 分析：未找到 ${provider} 的凭证`)
-      return
-    }
-
-    const modelKey = selectedModel?.key || CLASSIFIER_CONFIG.defaultModel
-
-    // sub2api 由账号池调度，适度提高并发以减少批量识图总耗时。
-    const concurrency = provider === AI_PROVIDERS.SUB2API ? 4 : 3
+    if (!credentials?.apiKey?.trim()) return
 
     const filesNeedingAnalysis = filesToAnalyze
       .map(file => files.value.find(candidate => candidate.id === file.id))
@@ -233,9 +176,7 @@ export const useUploadStore = defineStore('upload', () => {
       await uploadFileLifecycleService.analyzeFiles(filesNeedingAnalysis, {
         series: series.value,
         provider,
-        credentials,
-        modelKey,
-        concurrency
+        modelKey
       })
     } finally {
       aiAnalyzingCount.value = 0
@@ -540,34 +481,14 @@ export const useUploadStore = defineStore('upload', () => {
 
   // 获取当前 AI 配置信息
   function getCurrentAiConfig() {
-    const credentialsStore = useCredentialsStore()
-    const availableModels = getUploadModelList(credentialsStore)
-    let model = availableModels.find(item => item.key === selectedModelKey.value)
-
-    if (!model) {
-      model = getPreferredUploadModel(credentialsStore)
-      if (model?.key) {
-        selectedModelKey.value = model.key
-      }
-    }
-
-    const provider = model?.provider || credentialsStore.defaultProvider
-    const modelKey = model?.key || CLASSIFIER_CONFIG.defaultModel
-
-    const providerDisplay = {
-      groq: { name: 'Groq AI', icon: '⚡' },
-      zhipu: { name: '智谱 GLM', icon: '🧠' },
-      cloudflare: { name: 'Cloudflare AI', icon: '☁️' },
-      sub2api: { name: 'Sub2API', icon: '🤖' }
-    }
-    const display = providerDisplay[provider] || { name: provider, icon: '🤖' }
-
+    selectedModelKey.value = AI_MODEL_KEY
+    const availableModels = getUploadModelList()
     return {
-      provider,
-      providerName: display.name,
-      providerIcon: display.icon,
-      modelKey,
-      modelName: model?.name || modelKey,
+      provider: AI_PROVIDER,
+      providerName: 'GPT-6.1 Sol',
+      providerIcon: '🤖',
+      modelKey: AI_MODEL_KEY,
+      modelName: availableModels[0].name,
       availableModels
     }
   }

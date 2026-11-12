@@ -290,6 +290,32 @@ describe('视频接口与 AI 审核租约', () => {
     expect(released).toBe('lease')
   })
 
+  it('分析途中清除或更换 Key 后不保存旧结果，并释放 AI 租约', async () => {
+    const controller = new globalThis.AbortController()
+    const saveReview = vi.fn()
+    const releaseAi = vi.fn().mockResolvedValue(undefined)
+    const api = {
+      claimAi: async () => ({ leaseToken: 'lease', revision: 2 }),
+      saveReview,
+      releaseAi
+    }
+    await expect(
+      analyzeVideoFrame({
+        api,
+        job: { id: 'job', revision: 1, result: { frames: [{ id: 'frame-1', url: 'signed' }] } },
+        review,
+        credentials: { apiKey: 'session-key', signal: controller.signal },
+        frameToBase64: async () => 'data:image/webp;base64,AA',
+        analyzeImage: async () => {
+          controller.abort()
+          return { filenameSuggestions: ['不应保存.jpg'] }
+        }
+      })
+    ).rejects.toMatchObject({ name: 'AbortError' })
+    expect(saveReview).not.toHaveBeenCalled()
+    expect(releaseAi).toHaveBeenCalledWith('job', 'lease')
+  })
+
   it('分析失败仍释放AI租约，避免审核被长期锁住', async () => {
     const releaseAi = vi.fn().mockResolvedValue(undefined)
     const api = { claimAi: async () => ({ leaseToken: 'lease', revision: 2 }), releaseAi }

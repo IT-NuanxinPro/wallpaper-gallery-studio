@@ -268,14 +268,13 @@
             <VideoReviewPanel
               v-if="selectedJob && reviewDraft"
               v-model:draft="reviewDraft"
-              v-model:model-key="selectedModelKey"
               :job="selectedJob"
               :revision="draftRevision"
               :dirty="isDirty"
               :editable="canWrite && canReview(selectedJob)"
               :busy="reviewBusy"
               :conflict="conflict"
-              :models="availableModels"
+              :has-credentials="credentialsStore.hasCredentials"
               :topic-suggestions="topics"
               :topics-error="topicsError"
               @save="saveReview()"
@@ -297,7 +296,7 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { onBeforeRouteLeave } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { UploadFilled, VideoCamera } from '@element-plus/icons-vue'
@@ -306,7 +305,7 @@ import GlassCard from '@/components/GlassCard.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useConfigStore } from '@/stores/config'
 import { useCredentialsStore } from '@/stores/credentials'
-import { analyzeImage, CLASSIFIER_CONFIG, getModelList } from '@/services/ai/classifier'
+import { analyzeImage, CLASSIFIER_CONFIG } from '@/services/ai/classifier'
 import VideoReviewPanel from '@/features/video-ingest/VideoReviewPanel.vue'
 import { createVideoApi } from '@/features/video-ingest/api'
 import { createVideoUploader } from '@/features/video-ingest/uploader'
@@ -359,20 +358,7 @@ const statusFilter = ref('all')
 const transfers = ref([])
 const retryingIds = ref([])
 const controllers = new Map()
-const selectedModelKey = ref(CLASSIFIER_CONFIG.defaultModel)
 const canWrite = computed(() => authStore.canUpload)
-const availableModels = computed(() => {
-  const providers = credentialsStore.availableProviders.map(provider => provider.key)
-  return getModelList().filter(model => providers.includes(model.provider))
-})
-watch(
-  availableModels,
-  models => {
-    if (!models.some(model => model.key === selectedModelKey.value))
-      selectedModelKey.value = models.find(model => model.recommended)?.key || models[0]?.key || ''
-  },
-  { immediate: true }
-)
 
 const filteredJobs = computed(() =>
   jobs.value.filter(
@@ -536,17 +522,16 @@ async function saveReview(useLatest = false) {
   }
 }
 async function analyzeReview() {
-  const model = availableModels.value.find(item => item.key === selectedModelKey.value)
-  if (!model) {
-    ElMessage.warning('请在设置中配置现有 AI 服务凭证')
+  if (!credentialsStore.hasCredentials) {
+    ElMessage.warning('请在设置中填写当前标签页的 API Key')
     return
   }
   try {
     await workspace.analyzeReview({
       analyzeImage,
-      modelKey: model.key,
-      providerType: model.provider,
-      credentials: credentialsStore.getCredentialsByProvider(model.provider)
+      modelKey: CLASSIFIER_CONFIG.defaultModel,
+      providerType: 'sub2api',
+      credentials: credentialsStore.getCredentialsByProvider('sub2api')
     })
     ElMessage.success('封面分析完成，建议已保存，可继续人工审核')
   } catch (failure) {

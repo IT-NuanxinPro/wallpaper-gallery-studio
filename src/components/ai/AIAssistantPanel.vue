@@ -12,40 +12,6 @@
     <div class="panel-content">
       <!-- 左栏：配置区（可滚动） -->
       <div class="left-column">
-        <!-- 凭证配置（仅生产环境显示） -->
-        <!-- <div v-if="credentialsStore.isProduction" class="config-section">
-          <CredentialsConfig />
-        </div> -->
-
-        <!-- Provider 选择 -->
-        <el-card class="config-card compact" shadow="hover">
-          <template #header>
-            <div class="card-header">
-              <span class="header-icon">🔌</span>
-              <span class="header-title">AI 服务商</span>
-            </div>
-          </template>
-          <el-radio-group
-            v-model="currentProvider"
-            size="default"
-            class="provider-group"
-            @change="handleProviderChange"
-          >
-            <el-radio-button
-              v-for="(display, providerKey) in PROVIDER_DISPLAY"
-              :key="providerKey"
-              :value="providerKey"
-              :disabled="display.disabled"
-            >
-              <div class="provider-option">
-                <span class="provider-icon">{{ display.icon }}</span>
-                <span class="provider-name">{{ display.name }}</span>
-              </div>
-            </el-radio-button>
-          </el-radio-group>
-        </el-card>
-
-        <!-- 模型选择 -->
         <el-card class="config-card compact" shadow="hover">
           <template #header>
             <div class="card-header">
@@ -53,16 +19,16 @@
               <span class="header-title">AI 模型</span>
             </div>
           </template>
-          <el-radio-group v-model="aiStore.currentModel" size="default" class="model-group">
-            <el-radio-button v-for="model in modelList" :key="model.key" :value="model.key">
-              <div class="model-option">
-                <span class="model-name">{{ model.name }}</span>
-                <el-tag v-if="model.recommended" type="success" size="small" class="model-tag">
-                  推荐
-                </el-tag>
-              </div>
-            </el-radio-button>
-          </el-radio-group>
+          <div class="shared-ai-config">
+            <strong>GPT-6.1 Sol</strong>
+            <el-tag :type="credentialsStore.hasCredentials ? 'success' : 'warning'" size="small">
+              {{ credentialsStore.hasCredentials ? '当前标签页已配置' : '未配置 API Key' }}
+            </el-tag>
+            <p>与图片上传、视频分析共用当前标签页的 API 配置。</p>
+            <router-link to="/settings#ai-config">
+              {{ credentialsStore.hasCredentials ? '管理 AI 配置' : '去设置 API Key' }}
+            </router-link>
+          </div>
         </el-card>
 
         <!-- 主分类选择 -->
@@ -132,6 +98,7 @@
               type="primary"
               size="large"
               :loading="aiStore.analyzing"
+              :disabled="!credentialsStore.hasCredentials"
               class="analyze-btn"
               @click="handleAnalyze"
             >
@@ -195,23 +162,15 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, nextTick, onMounted, onUnmounted } from 'vue'
 import { ElMessage, ElNotification } from 'element-plus'
 import { UploadFilled } from '@element-plus/icons-vue'
 import { gsap } from 'gsap'
 import { useAIStore } from '@/stores/ai'
 import { useCredentialsStore } from '@/stores/credentials'
-import { AI_PROVIDERS, PROVIDER_DISPLAY } from '@/services/ai/core'
-import { getModelList, getRecommendedModel, ASSISTANT_CONFIG } from '@/services/ai/classifier'
 import { detectImageTypeFromFile } from '@/utils/image-detector'
-// import CredentialsConfig from '@/components/ai/CredentialsConfig.vue'
 import PromptTemplateSelector from '@/components/ai/PromptTemplateSelector.vue'
 import ResultCard from '@/components/ai/ResultCard.vue'
-
-// 根据 Provider 获取模型列表
-function getModelsByProvider(provider) {
-  return getModelList(provider)
-}
 
 const aiStore = useAIStore()
 const credentialsStore = useCredentialsStore()
@@ -225,35 +184,9 @@ const fileList = ref([])
 const progress = ref(0)
 const currentIndex = ref(0)
 const totalCount = ref(0)
-const currentProvider = ref(ASSISTANT_CONFIG.defaultProvider)
 
 // 保存动画 timeline 引用，用于清理
 let entranceTimeline = null
-
-// Computed
-const modelList = computed(() => {
-  return getModelsByProvider(currentProvider.value)
-})
-
-// 监听 Provider 变化
-watch(currentProvider, newProvider => {
-  // 切换 Provider 时，自动选择该 Provider 的推荐模型
-  const recommendedModel = getRecommendedModel(newProvider)
-  if (recommendedModel) {
-    aiStore.currentModel = recommendedModel.key
-  }
-
-  // 同步更新 AI Store 的 Provider
-  aiStore.setProvider(newProvider)
-
-  // 保存到 localStorage
-  localStorage.setItem('ai_current_provider', newProvider)
-})
-
-// Methods
-function handleProviderChange() {
-  ElMessage.success(`已切换到 ${PROVIDER_DISPLAY[currentProvider.value].name}`)
-}
 
 async function handleFileChange(file, files) {
   fileList.value = files
@@ -363,27 +296,15 @@ onMounted(async () => {
   try {
     // 1. 加载凭证
     await credentialsStore.loadCredentials()
-
-    // 2. 加载上次选择的 Provider
-    const savedProvider = localStorage.getItem('ai_current_provider')
-    if (savedProvider && AI_PROVIDERS[savedProvider.toUpperCase()]) {
-      currentProvider.value = savedProvider
-      aiStore.setProvider(savedProvider)
-    } else {
-      // 使用默认 Provider
-      aiStore.setProvider(currentProvider.value)
-    }
-
-    console.log('[AIAssistant] 数据加载完成')
   } catch (err) {
-    console.error('加载凭证失败:', err)
+    ElMessage.error(err.message || '加载 AI 配置失败')
   } finally {
     // 3. 隐藏 loading
     pageLoading.value = false
   }
 
   // 4. 等待 DOM 更新后播放动画
-  await new Promise(resolve => setTimeout(resolve, 100))
+  await nextTick()
 
   // 5. 播放入场动画
   entranceTimeline = gsap.timeline({ defaults: { ease: 'power3.out' } })
@@ -588,9 +509,7 @@ onUnmounted(() => {
   }
 }
 
-.category-group,
-.model-group,
-.provider-group {
+.category-group {
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -626,40 +545,24 @@ onUnmounted(() => {
   }
 }
 
-.provider-option {
+.shared-ai-config {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
+  flex-direction: column;
   gap: 10px;
-  width: 100%;
 
-  .provider-icon {
-    font-size: 18px;
+  strong {
+    font-size: 16px;
   }
-
-  .provider-name {
-    font-size: 14px;
-    font-weight: 500;
+  p {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.6;
   }
-}
-
-.model-option {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-
-  .model-name {
-    font-size: 14px;
-    font-weight: 500;
+  a {
+    color: #409eff;
+    font-size: 13px;
   }
-
-  .model-tag {
-    margin-left: 8px;
-  }
-}
-
-.model-info {
-  border-top: 1px solid rgba(0, 0, 0, 0.06);
 }
 
 // 中栏：上传区
