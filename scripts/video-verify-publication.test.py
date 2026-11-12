@@ -19,14 +19,19 @@ class PublicationVerificationTests(unittest.TestCase):
     def setUp(self):
         self.routes = {}
         self.methods = []
-        routes, methods = self.routes, self.methods
+        self.request_headers = []
+        self.require_media_referer = False
+        routes, methods, request_headers, state = self.routes, self.methods, self.request_headers, self
         class Handler(BaseHTTPRequestHandler):
             def log_message(self, *args):
                 pass
             def do_GET(self):
                 methods.append(self.command)
                 route = unquote(urlsplit(self.path).path)
+                request_headers.append((route, dict(self.headers)))
                 status, content_type, body = routes.get(route, (404, "application/json", b"{}"))
+                if state.require_media_referer and route.startswith(("/wallpaper/video/", "/preview/video/", "/thumbnail/video/")) and self.headers.get("Referer") != state.origin + "/":
+                    status, content_type, body = 403, "application/json", b'{"error":"referer-required"}'
                 self.send_response(status)
                 self.send_header("Content-Type", content_type)
                 self.send_header("Content-Length", str(len(body)))
@@ -93,6 +98,29 @@ class PublicationVerificationTests(unittest.TestCase):
         self.assertEqual(report["verifiedSources"], sources)
         self.assertEqual(len(report["publications"][0]["jobs"][0]["objects"]), 3)
         self.assertTrue(all(method == "GET" for method in self.methods))
+
+    def test_media_uses_site_referer_without_forwarding_it_or_credentials_to_github(self):
+        publication, deployment, sources, _ = self.fixture()
+        self.require_media_referer = True
+        report = self.run_fixture(publication, deployment, sources)
+        self.assertTrue(report["ok"])
+        media = [(route, headers) for route, headers in self.request_headers if route.startswith(("/wallpaper/video/", "/preview/video/", "/thumbnail/video/"))]
+        self.assertEqual(len(media), 3)
+        for _, headers in media:
+            self.assertEqual(headers.get("Referer"), self.origin + "/")
+            self.assertNotIn("Authorization", headers)
+            self.assertNotIn("X-Video-Service-Token", headers)
+        for route, headers in self.request_headers:
+            if route.startswith("/repos/"):
+                self.assertNotIn("Referer", headers)
+
+    def test_media_error_reports_only_safe_kind_not_private_url(self):
+        publication, deployment, sources, _ = self.fixture()
+        self.add("/" + publication["jobs"][0]["finalKeys"]["download"], b"private upstream error", status=403)
+        with self.assertRaisesRegex(verify.VerificationError, "media/download") as captured:
+            self.run_fixture(publication, deployment, sources)
+        self.assertNotIn(self.origin, str(captured.exception))
+        self.assertNotIn("private upstream", str(captured.exception))
 
     def test_corrupt_formal_video_blocks_success_even_when_size_matches(self):
         publication, deployment, sources, _ = self.fixture()

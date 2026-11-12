@@ -91,10 +91,14 @@ class ReadOnlyHTTP:
         except ValueError:
             raise VerificationError("只读HTTP未返回有效JSON") from None
 
-    def media(self, url, size, digest, content_type):
+    def media(self, url, size, digest, content_type, site_origin):
         require(isinstance(size, int) and size > 0 and re.fullmatch(r"[a-f0-9]{64}", digest or ""), "处理产物缺少可验收的大小或SHA256")
+        parsed_origin = urlsplit(site_origin)
+        require(parsed_origin.scheme in ("https", "http") and parsed_origin.netloc and not parsed_origin.username and not parsed_origin.password and parsed_origin.path in ("", "/") and not parsed_origin.query and not parsed_origin.fragment, "可信网站origin格式无效")
+        referer = parsed_origin.scheme + "://" + parsed_origin.netloc + "/"
         actual, count = hashlib.sha256(), 0
-        with self.response(url) as response:
+        # 只对正式公开媒体声明网站合法来源，GitHub和临时签名artifact请求不携带此头。
+        with self.response(url, {"Referer": referer}) as response:
             require(response.status == 200, f"正式对象GET失败（{response.status}）")
             require(response.headers.get("Content-Type", "").split(";")[0].lower() == content_type, "正式对象Content-Type不匹配")
             content_length = response.headers.get("Content-Length")
@@ -237,7 +241,11 @@ def verify_publications(publications, deployment_results, sources, *, site_origi
             assets = [("download", result["download"]["size"], result["download"]["sha256"], "video/mp4"), ("preview", result["preview"]["size"], result["preview"]["sha256"], "video/mp4"), ("thumbnail", selected["thumbnailSize"], selected["thumbnailSha256"], "image/webp")]
             verified_objects = []
             for kind, size, digest, content_type in assets:
-                verified_objects.append({"kind": kind, "key": keys[kind], **http.media(public_url(resource_origin.rstrip("/"), "/" + keys[kind]), size, digest, content_type)})
+                try:
+                    actual_object = http.media(public_url(resource_origin.rstrip("/"), "/" + keys[kind]), size, digest, content_type, site_origin)
+                except VerificationError as error:
+                    raise VerificationError(f"media/{kind}: {error}") from None
+                verified_objects.append({"kind": kind, "key": keys[kind], **actual_object})
             verified_jobs.append({"jobId": job["id"], "sourceFilename": job["filename"], "sourceSha256": job["sha256"], "website": website[job["id"]], "objects": verified_objects})
         report["publications"].append({"publicationId": publication["id"], "deployment": deployment, "websiteVideoTotal": total, "jobs": verified_jobs})
     denied = http.json(site_origin.rstrip("/") + "/api/download-file", allowed=(403,))
