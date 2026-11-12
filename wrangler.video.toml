@@ -1,0 +1,33 @@
+name = "wallpaper-video-ingest"
+main = "worker/video/index.mjs"
+compatibility_date = "2026-11-12"
+workers_dev = true
+
+[vars]
+GITHUB_OWNER = "IT-NuanxinPro"
+IMAGE_REPO = "nuanXinProPic"
+WORKFLOW_REPO = "wallpaper-gallery-workflow"
+STAGING_BUCKET_NAME = "wallpaper-video-staging"
+PUBLIC_BUCKET_NAME = "wallpaper-images"
+# 部署时替换为实际工作台来源，多个来源用逗号分隔。
+ALLOWED_ORIGINS = "http://localhost:5174,http://127.0.0.1:5174"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "wallpaper-video-tasks"
+database_id = "REPLACE_WITH_CREATED_D1_DATABASE_ID"
+migrations_dir = "worker/video/migrations"
+
+[[r2_buckets]]
+binding = "VIDEO_STAGING"
+bucket_name = "wallpaper-video-staging"
+
+[[r2_buckets]]
+binding = "VIDEO_PUBLIC"
+bucket_name = "wallpaper-images"
+
+[triggers]
+crons = ["*/5 * * * *"]
+
+# 必需 secrets：R2_ACCOUNT_ID、R2_ACCESS_KEY_ID、R2_SECRET_ACCESS_KEY、
+# VIDEO_SERVICE_TOKEN、GITHUB_DISPATCH_TOKEN。不要添加到浏览器 VITE_*。

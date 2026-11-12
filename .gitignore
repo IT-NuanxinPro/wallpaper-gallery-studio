@@ -31,3 +31,9 @@ dist-ssr
 src/auto-imports.d.ts
 src/components.d.ts
 .eslintrc-auto-import.json
+.wrangler/
+.dev.vars*
+wrangler.video.local.toml
+output/video-e2e-*/
+output/playwright/
+docs/video-staging-cors.local.json

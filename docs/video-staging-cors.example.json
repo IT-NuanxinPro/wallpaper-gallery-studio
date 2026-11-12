@@ -1,0 +1,17 @@
+{
+  "rules": [
+    {
+      "allowed": {
+        "origins": [
+          "https://YOUR-STUDIO-ORIGIN.example",
+          "http://localhost:5174",
+          "http://127.0.0.1:5174"
+        ],
+        "methods": ["GET", "HEAD", "PUT"],
+        "headers": ["Content-Type", "Range"]
+      },
+      "exposeHeaders": ["ETag", "Content-Length", "Content-Range", "Accept-Ranges"],
+      "maxAgeSeconds": 3600
+    }
+  ]
+}

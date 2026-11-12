@@ -27,6 +27,12 @@ const routes = [
     meta: { requiresAuth: true }
   },
   {
+    path: '/video-upload',
+    name: 'VideoUpload',
+    component: () => import('@/views/VideoUploadView.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
     path: '/history',
     name: 'History',
     component: () => import('@/views/HistoryView.vue'),

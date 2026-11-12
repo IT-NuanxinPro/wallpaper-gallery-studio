@@ -77,6 +77,7 @@ import { computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import {
   Upload,
+  VideoCamera,
   Clock,
   Setting,
   ArrowDown,
@@ -115,6 +116,7 @@ const permissionTagType = computed(() => {
 
 const navItems = [
   { path: '/upload', label: '上传', icon: Upload },
+  { path: '/video-upload', label: '视频', icon: VideoCamera },
   { path: '/ai-assistant', label: 'AI 工坊', icon: MagicStick },
   { path: '/history', label: '历史', icon: Clock }
 ]
@@ -271,6 +273,39 @@ async function handleCommand(command) {
     overflow: visible;
     display: flex;
     flex-direction: column;
+  }
+
+  @media (max-width: 900px) {
+    &__nav {
+      flex-wrap: wrap;
+      gap: $spacing-3;
+      padding: 12px !important;
+    }
+
+    &__nav-center {
+      order: 2;
+      flex-basis: 100%;
+      justify-content: space-between;
+    }
+
+    &__nav-item {
+      flex: 1;
+      justify-content: center;
+      padding: $spacing-2;
+      white-space: nowrap;
+    }
+
+    &__nav-right {
+      flex: 0;
+    }
+    &__permission-tag,
+    &__user-name {
+      display: none;
+    }
+    &__logo-text {
+      white-space: nowrap;
+      font-size: $font-size-sm;
+    }
   }
 }
 </style>
