@@ -86,6 +86,23 @@ test('all multipart operations use staging credentials and never require the gen
   await assert.rejects(storage.sign(objectKey, 'GET', true), error => error.status === 503)
 })
 
+test('multipart fetch injection never receives R2Storage as its native fetch receiver', async () => {
+  const methods = []
+  const storage = new R2Storage(env, async function (url, options = {}) {
+    assert.equal(this, undefined, 'native Worker fetch must be called without a storage receiver')
+    const target = new URL(url)
+    methods.push(options.method || 'GET')
+    if (target.searchParams.has('uploads')) return new Response('<InitiateMultipartUploadResult><UploadId>receiver-safe</UploadId></InitiateMultipartUploadResult>')
+    if (!options.method) return new Response('<ListPartsResult><IsTruncated>false</IsTruncated></ListPartsResult>')
+    return new Response('<CompleteMultipartUploadResult/>')
+  })
+  assert.equal(await storage.create(objectKey, 'video/mp4'), 'receiver-safe')
+  assert.deepEqual(await storage.parts(objectKey, 'receiver-safe'), [])
+  await storage.complete(objectKey, 'receiver-safe', [{ partNumber: 1, etag: '"part"' }])
+  await storage.abort(objectKey, 'receiver-safe')
+  assert.deepEqual(methods, ['POST', 'GET', 'POST', 'DELETE'])
+})
+
 function assertStorageRequest(url, options = {}) {
   const target = new URL(url)
   assert.equal(target.hostname, 'testaccount.r2.cloudflarestorage.com')

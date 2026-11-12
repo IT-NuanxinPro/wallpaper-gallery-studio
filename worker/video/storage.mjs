@@ -29,7 +29,7 @@ const xmlText = (xml, name) => xml.match(new RegExp(`<${name}>([\\s\\S]*?)</${na
 const xmlEscape = value => String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 
 export class R2Storage {
-  constructor(env, request = fetch) { this.env = env; this.request = request }
+  constructor(env, request = fetch) { this.env = env; this.request = (...args) => request(...args) }
   bucket(publicBucket = false) { return publicBucket ? this.env.PUBLIC_BUCKET_NAME : this.env.STAGING_BUCKET_NAME }
   binding(publicBucket = false) { return publicBucket ? this.env.VIDEO_PUBLIC : this.env.VIDEO_STAGING }
   async sign(key, method, publicBucket = false, query = {}) {
