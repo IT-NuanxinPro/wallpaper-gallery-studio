@@ -26,13 +26,33 @@ export function resolveSetupR2Credentials(env) {
   return { accessKey: env.CLOUDFLARE_R2_ACCESS_KEY, secretKey: env.CLOUDFLARE_R2_SECRET_KEY }
 }
 
+export function resolveSetupStagingR2Credentials(env) {
+  if (env.VIDEO_STAGING_R2_ACCESS_KEY || env.VIDEO_STAGING_R2_SECRET_KEY) {
+    if (!env.VIDEO_STAGING_R2_ACCESS_KEY || !env.VIDEO_STAGING_R2_SECRET_KEY)
+      throw new Error('暂存桶专用R2密钥必须成对配置，不与正式桶key混用')
+    return {
+      accessKey: env.VIDEO_STAGING_R2_ACCESS_KEY,
+      secretKey: env.VIDEO_STAGING_R2_SECRET_KEY
+    }
+  }
+  return resolveSetupR2Credentials(env)
+}
+
 export async function probeR2Buckets(signedEnv, fetchImpl = fetch) {
   const results = []
   for (const bucket of [STAGING, PUBLIC]) {
+    const credentials =
+      bucket === STAGING && signedEnv.R2_STAGING_ACCESS_KEY_ID
+        ? {
+            ...signedEnv,
+            R2_ACCESS_KEY_ID: signedEnv.R2_STAGING_ACCESS_KEY_ID,
+            R2_SECRET_ACCESS_KEY: signedEnv.R2_STAGING_SECRET_ACCESS_KEY
+          }
+        : signedEnv
     const key = `video-setup-probe-${crypto.randomUUID()}`
     const result = { bucket, ok: false, head: '网络失败' }
     try {
-      const signed = await presign(signedEnv, bucket, key, 'HEAD', {}, 60)
+      const signed = await presign(credentials, bucket, key, 'HEAD', {}, 60)
       const response = await fetchImpl(signed, {
         method: 'HEAD',
         redirect: 'error',
@@ -46,7 +66,7 @@ export async function probeR2Buckets(signedEnv, fetchImpl = fetch) {
     if (!result.ok) {
       result.get = '网络失败'
       try {
-        const signed = await presign(signedEnv, bucket, key, 'GET', {}, 60)
+        const signed = await presign(credentials, bucket, key, 'GET', {}, 60)
         const response = await fetchImpl(signed, {
           method: 'GET',
           redirect: 'error',
@@ -257,6 +277,7 @@ export async function setupVideoService({
   ]
   for (const key of required) if (!env[key]) throw new Error(`缺少部署配置：${key}`)
   const r2Credentials = resolveSetupR2Credentials(env)
+  const stagingCredentials = resolveSetupStagingR2Credentials(env)
   if (!/^[a-f0-9]{32}$/i.test(env.CLOUDFLARE_ACCOUNT_ID) || !/^[a-f0-9]{40}$/.test(env.STUDIO_REF))
     throw new Error('Cloudflare账户或Studio完整SHA格式无效')
   const actualRef = run('git', ['rev-parse', 'HEAD'], { cwd: root }).trim()
@@ -416,6 +437,8 @@ export async function setupVideoService({
         R2_ACCOUNT_ID: account,
         R2_ACCESS_KEY_ID: r2Credentials.accessKey,
         R2_SECRET_ACCESS_KEY: r2Credentials.secretKey,
+        R2_STAGING_ACCESS_KEY_ID: stagingCredentials.accessKey,
+        R2_STAGING_SECRET_ACCESS_KEY: stagingCredentials.secretKey,
         VIDEO_SERVICE_TOKEN: serviceToken,
         GITHUB_DISPATCH_TOKEN: env.VIDEO_CONFIG_TOKEN
       }),
@@ -449,7 +472,9 @@ export async function setupVideoService({
       const signedEnv = {
         R2_ACCOUNT_ID: account,
         R2_ACCESS_KEY_ID: r2Credentials.accessKey,
-        R2_SECRET_ACCESS_KEY: r2Credentials.secretKey
+        R2_SECRET_ACCESS_KEY: r2Credentials.secretKey,
+        R2_STAGING_ACCESS_KEY_ID: stagingCredentials.accessKey,
+        R2_STAGING_SECRET_ACCESS_KEY: stagingCredentials.secretKey
       }
       await probeR2Buckets(signedEnv, fetchImpl)
       let healthy = false

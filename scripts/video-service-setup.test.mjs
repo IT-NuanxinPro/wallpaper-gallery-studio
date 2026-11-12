@@ -12,7 +12,8 @@ import {
   redactSetupDiagnostic,
   executeSetupCommand,
   probeR2Buckets,
-  resolveSetupR2Credentials
+  resolveSetupR2Credentials,
+  resolveSetupStagingR2Credentials
 } from './video-service-setup.mjs'
 
 test('只选择明确独立资源，同名异常或资源名越界时拒绝', () => {
@@ -207,6 +208,14 @@ function setupFixture({
       const secrets = JSON.parse(fs.readFileSync(file, 'utf8'))
       assert.equal(secrets.GITHUB_DISPATCH_TOKEN, env.VIDEO_CONFIG_TOKEN)
       assert.equal(secrets.R2_SECRET_ACCESS_KEY, env.CLOUDFLARE_R2_SECRET_KEY)
+      assert.equal(
+        secrets.R2_STAGING_ACCESS_KEY_ID,
+        env.VIDEO_STAGING_R2_ACCESS_KEY || env.VIDEO_R2_ACCESS_KEY || env.CLOUDFLARE_R2_ACCESS_KEY
+      )
+      assert.equal(
+        secrets.R2_STAGING_SECRET_ACCESS_KEY,
+        env.VIDEO_STAGING_R2_SECRET_KEY || env.VIDEO_R2_SECRET_KEY || env.CLOUDFLARE_R2_SECRET_KEY
+      )
       assert.ok(secrets.VIDEO_SERVICE_TOKEN.length >= 48)
     }
     return ''
@@ -453,4 +462,78 @@ test('视频R2专用密钥成对优先，缺半对时拒绝与正式旧key混用
     () => resolveSetupR2Credentials({ ...previous, VIDEO_R2_ACCESS_KEY: 'only-half' }),
     /成对/
   )
+})
+
+test('暂存专用密钥仅用于暂存桶签名，正式桶仍使用原公用密钥', async () => {
+  const observed = []
+  await probeR2Buckets(
+    {
+      R2_ACCOUNT_ID: 'a'.repeat(32),
+      R2_ACCESS_KEY_ID: 'public-fixture-access',
+      R2_SECRET_ACCESS_KEY: 'public-fixture-secret',
+      R2_STAGING_ACCESS_KEY_ID: 'staging-fixture-access',
+      R2_STAGING_SECRET_ACCESS_KEY: 'staging-fixture-secret'
+    },
+    async (url, options) => {
+      const parsed = new URL(url)
+      observed.push({
+        bucket: parsed.pathname.split('/')[1],
+        access: parsed.searchParams.get('X-Amz-Credential').split('/')[0],
+        method: options.method
+      })
+      return { status: 404 }
+    }
+  )
+  assert.deepEqual(observed, [
+    { bucket: 'wallpaper-video-staging', access: 'staging-fixture-access', method: 'HEAD' },
+    { bucket: 'wallpaper-images', access: 'public-fixture-access', method: 'HEAD' }
+  ])
+})
+
+test('暂存专用密钥成对配置，未配置时兼容双桶/旧凭据回退', () => {
+  const fallback = {
+    CLOUDFLARE_R2_ACCESS_KEY: 'public-access',
+    CLOUDFLARE_R2_SECRET_KEY: 'public-secret'
+  }
+  assert.deepEqual(resolveSetupStagingR2Credentials(fallback), {
+    accessKey: 'public-access',
+    secretKey: 'public-secret'
+  })
+  assert.deepEqual(
+    resolveSetupStagingR2Credentials({
+      ...fallback,
+      VIDEO_R2_ACCESS_KEY: 'both-access',
+      VIDEO_R2_SECRET_KEY: 'both-secret'
+    }),
+    { accessKey: 'both-access', secretKey: 'both-secret' }
+  )
+  assert.deepEqual(
+    resolveSetupStagingR2Credentials({
+      ...fallback,
+      VIDEO_STAGING_R2_ACCESS_KEY: 'stage-access',
+      VIDEO_STAGING_R2_SECRET_KEY: 'stage-secret'
+    }),
+    { accessKey: 'stage-access', secretKey: 'stage-secret' }
+  )
+  assert.throws(
+    () => resolveSetupStagingR2Credentials({ ...fallback, VIDEO_STAGING_R2_ACCESS_KEY: 'half' }),
+    /成对/
+  )
+  assert.throws(
+    () => resolveSetupStagingR2Credentials({ ...fallback, VIDEO_STAGING_R2_SECRET_KEY: 'half' }),
+    /成对/
+  )
+})
+
+test('完整setup批量配置分开的暂存密钥，不替换正式桶general密钥', async () => {
+  const fixture = setupFixture({ enable: false })
+  fixture.env.VIDEO_STAGING_R2_ACCESS_KEY = 'fixture-staging-access'
+  fixture.env.VIDEO_STAGING_R2_SECRET_KEY = 'fixture-staging-secret'
+  try {
+    await setupVideoService({ ...fixture, root: '/checkout/studio' })
+    assert.ok(fixture.commands.some(call => call.args.includes('bulk')))
+    assert.equal(fixture.getGate(), 'false')
+  } finally {
+    fixture.cleanup()
+  }
 })

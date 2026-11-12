@@ -43,6 +43,49 @@ test('SigV4 binds the request method, object path and expiry', async () => {
   for (const signature of changed) assert.notEqual(signature, signatureCases[0].signature)
 })
 
+test('bucket signing selects the complete staging pair and keeps public credentials unchanged', async t => {
+  t.mock.timers.enable({ apis: ['Date'], now: date.getTime() })
+  const storage = new R2Storage({ ...env, R2_STAGING_ACCESS_KEY_ID: 'stage-access', R2_STAGING_SECRET_ACCESS_KEY: 'stage-secret' })
+  // 同样由独立 Python HMAC 计算，验证 access ID 和 secret 均按桶选择。
+  assert.equal(await storage.sign(objectKey, 'GET'), expectedBase.replace('test-access%2F', 'stage-access%2F') + '&X-Amz-Signature=57474e7645d3ed78e8b3faa112f65e8b098582333bec6a7f4345d4b3e4c06fa1')
+  assert.equal(await storage.sign(objectKey, 'GET', true), expectedBase.replace('/test-bucket/', '/test-public-bucket/') + '&X-Amz-Signature=9e65b49a29cb365f929cbacf8b0c3ed331ca983affb062c685f618039cd90789')
+})
+
+test('bucket signing without staging credentials preserves the existing general pair', async t => {
+  t.mock.timers.enable({ apis: ['Date'], now: date.getTime() })
+  assert.equal(await new R2Storage(env).sign(objectKey, 'GET'), `${expectedBase}&X-Amz-Signature=${signatureCases[0].signature}`)
+})
+
+for (const partial of [{ R2_STAGING_ACCESS_KEY_ID: 'stage-access' }, { R2_STAGING_SECRET_ACCESS_KEY: 'stage-secret' }]) {
+  test(`staging signing rejects a half configured ${Object.keys(partial)[0]} pair without mixing credentials`, async () => {
+    const storage = new R2Storage({ ...env, ...partial })
+    await assert.rejects(storage.sign(objectKey, 'GET'), error => error.status === 503 && error.code === 'NOT_CONFIGURED')
+    const publicUrl = new URL(await storage.sign(objectKey, 'GET', true))
+    assert.equal(publicUrl.searchParams.get('X-Amz-Credential').split('/')[0], 'test-access')
+  })
+}
+
+test('all multipart operations use staging credentials and never require the general pair', async () => {
+  const stagingOnly = { ...env, R2_ACCESS_KEY_ID: undefined, R2_SECRET_ACCESS_KEY: undefined, R2_STAGING_ACCESS_KEY_ID: 'stage-access', R2_STAGING_SECRET_ACCESS_KEY: 'stage-secret' }
+  const requests = []
+  const storage = new R2Storage(stagingOnly, async (url, options = {}) => {
+    const target = new URL(url)
+    assert.equal(target.searchParams.get('X-Amz-Credential').split('/')[0], 'stage-access')
+    assert.equal(target.pathname.startsWith('/test-bucket/'), true)
+    assert.equal(JSON.stringify({ url, options }).includes('stage-secret'), false)
+    requests.push(options.method || 'GET')
+    if (target.searchParams.has('uploads')) return new Response('<InitiateMultipartUploadResult><UploadId>session</UploadId></InitiateMultipartUploadResult>')
+    if (!options.method) return new Response('<ListPartsResult><IsTruncated>false</IsTruncated></ListPartsResult>')
+    return new Response('<CompleteMultipartUploadResult/>')
+  })
+  assert.equal(await storage.create(objectKey, 'video/mp4'), 'session')
+  assert.deepEqual(await storage.parts(objectKey, 'session'), [])
+  await storage.complete(objectKey, 'session', [{ partNumber: 1, etag: '"part"' }])
+  await storage.abort(objectKey, 'session')
+  assert.deepEqual(requests, ['POST', 'GET', 'POST', 'DELETE'])
+  await assert.rejects(storage.sign(objectKey, 'GET', true), error => error.status === 503)
+})
+
 function assertStorageRequest(url, options = {}) {
   const target = new URL(url)
   assert.equal(target.hostname, 'testaccount.r2.cloudflarestorage.com')

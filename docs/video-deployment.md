@@ -251,7 +251,7 @@ gh run list --workflow "video-publish.yml" --repo "IT-NuanxinPro/wallpaper-galle
 
 该工作流可以复用gallery现有的 `CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID`、`CLOUDFLARE_R2_ACCESS_KEY`、`CLOUDFLARE_R2_SECRET_KEY`，在runner内直接写入新Worker Secrets；不会读回、导出、回传Secret值或上传凭据artifact。还需人在获批后单独配置新的gallery Repository Secret `VIDEO_CONFIG_TOKEN`，不要把对话中现有授权token粘贴到代码、文档或workflow参数中。
 
-视频R2凭据优先使用新的 `VIDEO_R2_ACCESS_KEY` 与 `VIDEO_R2_SECRET_KEY`，两者必须成对提供；未配置时才复用原gallery密钥，不允许新旧半对混用，也不覆盖正式站点原密钥。双桶授权由主任务明确配置，不能因403自动扩大权限或把暂存桶改成公开。
+视频暂存桶优先使用成对的 `VIDEO_STAGING_R2_ACCESS_KEY` / `VIDEO_STAGING_R2_SECRET_KEY`，仅需暂存桶读写权限；正式桶/general保持使用成对的 `VIDEO_R2_ACCESS_KEY` / `VIDEO_R2_SECRET_KEY`，未配置时回退既有 `CLOUDFLARE_R2_ACCESS_KEY` / `CLOUDFLARE_R2_SECRET_KEY`。未设置暂存专用密钥时，兼容原双桶 `VIDEO_R2_*` 配置或既有密钥回退。任一专用组仅有半对时拒绝混用，不覆盖正式站点原密钥。Worker批量Secrets保留 `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` 作为正式/general，并新增 `R2_STAGING_ACCESS_KEY_ID` / `R2_STAGING_SECRET_ACCESS_KEY`；分桶签名与自检使用各自凭据，不需要把暂存专用授权扩大到正式桶，更不能因403把暂存桶改成公开。
 
 setup的Cloudflare管理凭据优先使用单独的 `VIDEO_CLOUDFLARE_API_TOKEN`，未配置时才回退现有站点token；不覆盖站点 `CLOUDFLARE_API_TOKEN`。首次setup运行 `43216702839` 返回generic HTTP401且消费者已反关确认；原日志未标明API阶段，不能仅凭401确定权限缺失位置。修复后错误明确区分Cloudflare D1列表/R2桶/CORS/Worker阶段与GitHub运行列表，并仅显示HTTP状态、数值错误码，不输出URL/token/正文。获批临时管理凭据仅经受保护stdin写入专用Secret，执行完由主任务删除该临时Secret，不把凭据写回本地文件。
 
@@ -270,9 +270,9 @@ setup的Cloudflare管理凭据优先使用单独的 `VIDEO_CLOUDFLARE_API_TOKEN`
 1. 先把执行器 `VIDEO_INGEST_ENABLED=false`，确认两个视频workflow没有运行/排队任务，避免轮换内部服务密钥打断旧Runner。
 2. 列出Cloudflare资源，只复用/创建同名 `wallpaper-video-tasks` 与 `wallpaper-video-staging`；未知列表、重复同名或错误ID均失败。正式 `wallpaper-images` 必须已存在，只绑定/读取，绝不新建、清空或修改其CORS/公开配置。
 3. 为暂存桶合并单独的 `video-studio-upload-v1` CORS规则，保留已有其他规则，加入实际origin、GET/HEAD/PUT、Range和ETag暴露。
-4. 在runner专用临时目录生成0600配置和0600批量Secrets JSON；运行局部 `npx --yes wrangler@4.160.1`，仅迁移独立视频D1并部署独立Worker。生成随机 `VIDEO_SERVICE_TOKEN`，Worker中将专用 `VIDEO_CONFIG_TOKEN` 用作 `GITHUB_DISPATCH_TOKEN`，通过stdin同步服务密钥到执行器Secret，不在日志中打印值。
+4. 在runner专用临时目录生成0600配置和0600批量Secrets JSON；运行局部 `npx --yes wrangler@4.160.1`，仅迁移独立视频D1并部署独立Worker。暂存/正式R2分别写入对应Secrets，生成随机 `VIDEO_SERVICE_TOKEN`，Worker中将专用 `VIDEO_CONFIG_TOKEN` 用作 `GITHUB_DISPATCH_TOKEN`，通过stdin同步服务密钥到执行器Secret，不在日志中打印值。
 5. 两桶分别执行只读签名HEAD探测（不存在的随机探测key接受404，不上传探测内容）；HEAD失败后在同一桶用同一不存在key做GET，只提取白名单 `S3 <Code>`，最后聚合两个桶的状态，避免第一个403遮住正式桶结果。不输出XML正文、RequestId、对象key或签名。403本身不能判定是授权范围还是签名错误，需结合安全错误码定位。再检查Worker health、带专用token的 `GET /video/jobs`（真实GitHub权限及D1 SQL）、内部鉴权404探测和来源预检；不会调用claim消费真实任务，不读取Secret、不自动扩大权限或修改正式桶ACL。
 6. 自检通过才设置执行器 `VIDEO_API_URL`、`VIDEO_GALLERY_WORKFLOW=deploy.yml`；仅当输入显式true才最后启用 `VIDEO_INGEST_ENABLED=true`。默认仍关闭消费者。
 7. 成功时输出仅公开Worker URL、D1 ID及桶名；CLI失败会标明独立D1迁移、Worker部署或Worker密钥写入阶段，将stderr先脱敏环境中TOKEN/KEY/SECRET值、临时服务密钥、Bearer及URL查询，再保留最后不超过1200字；不输出完整命令或密钥文件内容。成功或失败均由Node finally和shell EXIT trap清理本次临时目录；失败不删除已经创建的云资源。任何配置失败都会尽力写回 `VIDEO_INGEST_ENABLED=false` 并独立读回确认，workflow另有failure步骤执行同样保护；这也覆盖“远端启用成功、CLI响应丢失”的情况。无法读回false时明确报告“无法确认消费者已关闭，必须人工确认”，不声称开关已安全关闭。
 
-这些检查只说明配置和只读访问可用，不能证明PUT、转码、5帧、正式发布或网站媒体checksum已通过，更不能据此删除5个源文件。实际五视频验收仍按前节逐文件执行。固定Wrangler的secret bulk、cors及migration参数已在本机使用 `--help` 只读核对；本地14项fixture覆盖资源白名单、CORS合并、默认不开消费者、0600密钥临时文件、自检后才启用、失败不删云资源、启用响应丢失后的关停/无法确认分支、API阶段与CLI stderr脱敏诊断，以及两桶聚合自检与专用R2密钥成对优先。
+这些检查只说明配置和只读访问可用，不能证明PUT、转码、5帧、正式发布或网站媒体checksum已通过，更不能据此删除5个源文件。实际五视频验收仍按前节逐文件执行。固定Wrangler的secret bulk、cors及migration参数已在本机使用 `--help` 只读核对；本地17项fixture覆盖资源白名单、CORS合并、默认不开消费者、0600密钥临时文件、自检后才启用、失败不删云资源、启用响应丢失后的关停/无法确认分支、API阶段与CLI stderr脱敏诊断、两桶聚合自检，以及分桶凭据签名、半对拒绝、兼容回退和批量Secrets分离。

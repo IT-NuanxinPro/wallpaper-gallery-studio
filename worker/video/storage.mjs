@@ -32,7 +32,16 @@ export class R2Storage {
   constructor(env, request = fetch) { this.env = env; this.request = request }
   bucket(publicBucket = false) { return publicBucket ? this.env.PUBLIC_BUCKET_NAME : this.env.STAGING_BUCKET_NAME }
   binding(publicBucket = false) { return publicBucket ? this.env.VIDEO_PUBLIC : this.env.VIDEO_STAGING }
-  async sign(key, method, publicBucket = false, query = {}) { return presign(this.env, this.bucket(publicBucket), key, method, query) }
+  async sign(key, method, publicBucket = false, query = {}) {
+    let signingEnv = this.env
+    if (!publicBucket) {
+      const accessKey = this.env.R2_STAGING_ACCESS_KEY_ID
+      const secretKey = this.env.R2_STAGING_SECRET_ACCESS_KEY
+      ensure(!!accessKey === !!secretKey, 'R2暂存桶上传授权必须成对配置', 503, 'NOT_CONFIGURED')
+      if (accessKey && secretKey) signingEnv = { ...this.env, R2_ACCESS_KEY_ID: accessKey, R2_SECRET_ACCESS_KEY: secretKey }
+    }
+    return presign(signingEnv, this.bucket(publicBucket), key, method, query)
+  }
   async create(key, contentType) {
     const response = await this.request(await this.sign(key, 'POST', false, { uploads: '' }), { method: 'POST', headers: { 'Content-Type': contentType } })
     if (!response.ok) throw new HttpError(502, 'R2_UPLOAD_INIT', '无法建立R2上传会话')
