@@ -3,6 +3,7 @@
 import argparse
 import base64
 import hashlib
+import http.client
 import io
 import json
 import os
@@ -70,20 +71,53 @@ class ReadOnlyHTTP:
     def __init__(self):
         self.opener = urllib.request.build_opener(NoRedirect())
 
-    def response(self, url, headers=None):
+    def stage(self, url):
+        parsed = urlsplit(url)
+        host, path = parsed.hostname, parsed.path
+        local = host in ("localhost", "127.0.0.1")
+        if (host == "api.github.com" or local) and path.startswith("/repos/"):
+            return "artifact" if "/actions/artifacts/" in path else "github"
+        if host == "objects.githubusercontent.com" or (host or "").endswith(".blob.core.windows.net"):
+            return "artifact"
+        if (host == "img.061129.xyz" or local) and path.startswith(("/wallpaper/video/", "/preview/video/", "/thumbnail/video/")):
+            return "media"
+        if (host == "wallpaper.061129.xyz" or local) and path.startswith(("/data/", "/wallpaper/", "/api/")):
+            return "website"
+        return "http"
+
+    def retry(self, url, operation):
+        for attempt in range(3):
+            try:
+                return operation()
+            except (urllib.error.URLError, OSError, http.client.HTTPException, RetryableStatus):
+                if attempt == 2:
+                    raise VerificationError(self.stage(url) + ": 只读GET临时连接或上游错误，3次重试后仍失败") from None
+                time.sleep(attempt + 1)
+
+    def open_once(self, url, headers=None):
         try:
-            return self.opener.open(urllib.request.Request(url, headers={"User-Agent": "wallpaper-publication-readonly-verifier", "Cache-Control": "no-cache", **(headers or {})}, method="GET"), timeout=60)
+            response = self.opener.open(urllib.request.Request(url, headers={"User-Agent": "wallpaper-publication-readonly-verifier", "Cache-Control": "no-cache", **(headers or {})}, method="GET"), timeout=60)
         except urllib.error.HTTPError as response:
-            return response
-        except (urllib.error.URLError, OSError):
-            raise VerificationError("只读HTTP连接失败；未输出请求地址或凭据") from None
+            if response.code not in (502, 503, 504):
+                return response
+            response.close()
+            raise RetryableStatus() from None
+        if response.status in (502, 503, 504):
+            response.close()
+            raise RetryableStatus()
+        return response
+
+    def response(self, url, headers=None):
+        return self.retry(url, lambda: self.open_once(url, headers))
 
     def small(self, url, headers=None, allowed=(200,), maximum=16 * 1024 * 1024):
-        with self.response(url, headers) as response:
-            require(response.status in allowed, f"只读HTTP状态不符合预期（{response.status}）")
-            value = response.read(maximum + 1)
-            require(len(value) <= maximum, "只读JSON/HTML响应超过验收上限")
-            return value
+        def read():
+            with self.open_once(url, headers) as response:
+                require(response.status in allowed, f"{self.stage(url)}: 只读HTTP状态不符合预期（{response.status}）")
+                value = response.read(maximum + 1)
+                require(len(value) <= maximum, "只读JSON/HTML响应超过验收上限")
+                return value
+        return self.retry(url, read)
 
     def json(self, url, headers=None, allowed=(200,)):
         try:
@@ -91,25 +125,48 @@ class ReadOnlyHTTP:
         except ValueError:
             raise VerificationError("只读HTTP未返回有效JSON") from None
 
+    def artifact(self, url, headers):
+        def read():
+            with self.open_once(url, headers) as response:
+                if response.status in (301, 302, 303, 307, 308):
+                    destination = response.headers.get("Location", "")
+                    require(urlsplit(destination).scheme == "https", "artifact: 部署下载重定向无效")
+                    # 跨域签名GET不携带GitHub token或网站Referer。
+                    with self.open_once(destination) as signed:
+                        require(signed.status == 200, f"artifact: 下载失败（{signed.status}）")
+                        value = signed.read(1024 * 1024 + 1)
+                else:
+                    require(response.status == 200, f"artifact: 下载失败（{response.status}）")
+                    value = response.read(1024 * 1024 + 1)
+            require(len(value) <= 1024 * 1024, "artifact: 部署结果过大")
+            return value
+        return self.retry(url, read)
+
     def media(self, url, size, digest, content_type, site_origin):
         require(isinstance(size, int) and size > 0 and re.fullmatch(r"[a-f0-9]{64}", digest or ""), "处理产物缺少可验收的大小或SHA256")
         parsed_origin = urlsplit(site_origin)
         require(parsed_origin.scheme in ("https", "http") and parsed_origin.netloc and not parsed_origin.username and not parsed_origin.password and parsed_origin.path in ("", "/") and not parsed_origin.query and not parsed_origin.fragment, "可信网站origin格式无效")
         referer = parsed_origin.scheme + "://" + parsed_origin.netloc + "/"
-        actual, count = hashlib.sha256(), 0
-        # 只对正式公开媒体声明网站合法来源，GitHub和临时签名artifact请求不携带此头。
-        with self.response(url, {"Referer": referer}) as response:
-            require(response.status == 200, f"正式对象GET失败（{response.status}）")
-            require(response.headers.get("Content-Type", "").split(";")[0].lower() == content_type, "正式对象Content-Type不匹配")
-            content_length = response.headers.get("Content-Length")
-            require(content_length is None or content_length == str(size), "正式对象Content-Length不匹配")
-            for chunk in iter(lambda: response.read(1024 * 1024), b""):
-                count += len(chunk)
-                require(count <= size, "正式对象实际字节数超过处理产物")
-                actual.update(chunk)
-        require(count == size, "正式对象实际字节数不匹配")
-        require(actual.hexdigest() == digest, "正式对象SHA256与处理产物不匹配")
-        return {"size": count, "sha256": actual.hexdigest(), "contentType": content_type}
+        def read():
+            actual, count = hashlib.sha256(), 0
+            # 每次网络重试重新GET全部媒体并重置摘要；完整性错误不参与重试。
+            with self.open_once(url, {"Referer": referer}) as response:
+                require(response.status == 200, f"media: 正式对象GET失败（{response.status}）")
+                require(response.headers.get("Content-Type", "").split(";")[0].lower() == content_type, "正式对象Content-Type不匹配")
+                content_length = response.headers.get("Content-Length")
+                require(content_length is None or content_length == str(size), "正式对象Content-Length不匹配")
+                for chunk in iter(lambda: response.read(1024 * 1024), b""):
+                    count += len(chunk)
+                    require(count <= size, "正式对象实际字节数超过处理产物")
+                    actual.update(chunk)
+            require(count == size, "正式对象实际字节数不匹配")
+            require(actual.hexdigest() == digest, "正式对象SHA256与处理产物不匹配")
+            return {"size": count, "sha256": actual.hexdigest(), "contentType": content_type}
+        return self.retry(url, read)
+
+
+class RetryableStatus(Exception):
+    pass
 
 
 class DetailHTML(HTMLParser):
@@ -148,15 +205,7 @@ def verify_deployment(http, publication, expected, gallery_repository, data_repo
     matching = [item for item in artifacts if item.get("name") == "video-publication-result" and not item.get("expired")]
     require(len(matching) == 1, "真实部署成功artifact缺失、过期或有歧义")
     url = base + "/actions/artifacts/" + str(matching[0]["id"]) + "/zip"
-    with http.response(url, headers) as response:
-        if response.status in (301, 302, 303, 307, 308):
-            destination = response.headers.get("Location", "")
-            require(urlsplit(destination).scheme == "https", "部署artifact下载重定向无效")
-            archive_bytes = http.small(destination, maximum=1024 * 1024)
-        else:
-            require(response.status == 200, "部署artifact下载失败")
-            archive_bytes = response.read(1024 * 1024 + 1)
-            require(len(archive_bytes) <= 1024 * 1024, "部署artifact过大")
+    archive_bytes = http.artifact(url, headers)
     try:
         with zipfile.ZipFile(io.BytesIO(archive_bytes)) as archive:
             entries = [entry for entry in archive.infolist() if not entry.is_dir() and entry.filename.endswith(".json")]

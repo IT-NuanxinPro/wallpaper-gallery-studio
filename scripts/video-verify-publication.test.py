@@ -2,10 +2,13 @@ import base64
 import hashlib
 import importlib.util
 import io
+from http.client import IncompleteRead
 import json
 from pathlib import Path
 import threading
 import unittest
+from unittest.mock import patch
+import urllib.error
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import unquote, urlsplit
 import zipfile
@@ -13,6 +16,92 @@ import zipfile
 spec = importlib.util.spec_from_file_location("video_verify", Path(__file__).with_name("video-verify-publication.py"))
 verify = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(verify)
+
+
+class MemoryResponse(io.BytesIO):
+    def __init__(self, data=b"{}", status=200, content_type="application/json"):
+        super().__init__(data)
+        self.status = status
+        self.headers = {"Content-Type": content_type, "Content-Length": str(len(data))}
+
+
+class HTTPRetryTests(unittest.TestCase):
+    def test_connection_retries_at_most_three_times_with_one_and_two_second_delays(self):
+        http = verify.ReadOnlyHTTP()
+        with patch.object(http.opener, "open", side_effect=[urllib.error.URLError("private-signed-url"), OSError("secret-connection-error"), MemoryResponse()]) as request, patch.object(verify.time, "sleep") as sleep:
+            self.assertEqual(http.json("https://wallpaper.061129.xyz/data/video.json"), {})
+        self.assertEqual(request.call_count, 3)
+        self.assertEqual([call.args[0] for call in sleep.call_args_list], [1, 2])
+
+    def test_forbidden_and_integrity_failure_are_never_retried(self):
+        http = verify.ReadOnlyHTTP()
+        with patch.object(http.opener, "open", return_value=MemoryResponse(status=403)) as request, patch.object(verify.time, "sleep") as sleep:
+            with self.assertRaises(verify.VerificationError):
+                http.small("https://img.061129.xyz/wallpaper/video/private.mp4")
+        self.assertEqual(request.call_count, 1)
+        sleep.assert_not_called()
+        with patch.object(http.opener, "open", return_value=MemoryResponse(b"wrong", content_type="video/mp4")) as request, patch.object(verify.time, "sleep") as sleep:
+            with self.assertRaisesRegex(verify.VerificationError, "SHA256"):
+                http.media("https://img.061129.xyz/wallpaper/video/private.mp4", 5, hashlib.sha256(b"right").hexdigest(), "video/mp4", "https://wallpaper.061129.xyz")
+        self.assertEqual(request.call_count, 1)
+        sleep.assert_not_called()
+
+    def test_small_body_disconnect_restarts_whole_get(self):
+        class Disconnected(MemoryResponse):
+            def read(self, size=-1):
+                raise IncompleteRead(b"partial")
+        http = verify.ReadOnlyHTTP()
+        with patch.object(http.opener, "open", side_effect=[Disconnected(), MemoryResponse(b'{"complete":true}')]) as request, patch.object(verify.time, "sleep") as sleep:
+            self.assertEqual(http.json("https://wallpaper.061129.xyz/data/video.json"), {"complete": True})
+        self.assertEqual(request.call_count, 2)
+        sleep.assert_called_once_with(1)
+
+    def test_artifact_body_disconnect_restarts_get_without_forwarding_token_to_signed_url(self):
+        class Disconnected(MemoryResponse):
+            def read(self, size=-1):
+                raise IncompleteRead(b"partial")
+        def redirect():
+            response = MemoryResponse(status=302)
+            response.headers["Location"] = "https://objects.githubusercontent.com/private?signature=secret"
+            return response
+        http = verify.ReadOnlyHTTP()
+        with patch.object(http.opener, "open", side_effect=[redirect(), Disconnected(), redirect(), MemoryResponse(b"zip-bytes")]) as request, patch.object(verify.time, "sleep") as sleep:
+            self.assertEqual(http.artifact("https://api.github.com/repos/owner/gallery/actions/artifacts/7/zip", {"Authorization": "Bearer secret"}), b"zip-bytes")
+        self.assertEqual(request.call_count, 4)
+        self.assertIsNone(request.call_args_list[1].args[0].get_header("Authorization"))
+        self.assertIsNone(request.call_args_list[3].args[0].get_header("Authorization"))
+        sleep.assert_called_once_with(1)
+
+    def test_media_disconnect_resets_hash_before_retry_and_preserves_referer(self):
+        class Disconnected(MemoryResponse):
+            def __init__(self):
+                super().__init__(b"correct-video", content_type="video/mp4")
+                self.first = True
+            def read(self, size=-1):
+                if self.first:
+                    self.first = False
+                    return b"correct-"
+                raise OSError("private-source-url")
+        payload = b"correct-video"
+        http = verify.ReadOnlyHTTP()
+        with patch.object(http.opener, "open", side_effect=[Disconnected(), MemoryResponse(payload, content_type="video/mp4")]) as request, patch.object(verify.time, "sleep") as sleep:
+            result = http.media("https://img.061129.xyz/wallpaper/video/private.mp4", len(payload), hashlib.sha256(payload).hexdigest(), "video/mp4", "https://wallpaper.061129.xyz")
+        self.assertEqual(result["sha256"], hashlib.sha256(payload).hexdigest())
+        self.assertEqual(request.call_count, 2)
+        self.assertEqual(request.call_args.args[0].get_header("Referer"), "https://wallpaper.061129.xyz/")
+        sleep.assert_called_once_with(1)
+
+    def test_retryable_status_and_exhausted_network_error_have_safe_stage_only(self):
+        http = verify.ReadOnlyHTTP()
+        with patch.object(http.opener, "open", side_effect=[MemoryResponse(status=502), MemoryResponse(status=504), MemoryResponse()]) as request, patch.object(verify.time, "sleep"):
+            self.assertEqual(http.json("https://api.github.com/repos/owner/gallery/actions/runs/42"), {})
+        self.assertEqual(request.call_count, 3)
+        with patch.object(http.opener, "open", side_effect=urllib.error.URLError("secret-signed-url")) as request, patch.object(verify.time, "sleep"):
+            with self.assertRaisesRegex(verify.VerificationError, "website") as captured:
+                http.small("https://wallpaper.061129.xyz/data/private-filename.json?signature=secret")
+        self.assertEqual(request.call_count, 3)
+        self.assertNotIn("secret", str(captured.exception))
+        self.assertNotIn("private-filename", str(captured.exception))
 
 
 class PublicationVerificationTests(unittest.TestCase):
