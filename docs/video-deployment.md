@@ -251,6 +251,8 @@ gh run list --workflow "video-publish.yml" --repo "IT-NuanxinPro/wallpaper-galle
 
 该工作流可以复用gallery现有的 `CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID`、`CLOUDFLARE_R2_ACCESS_KEY`、`CLOUDFLARE_R2_SECRET_KEY`，在runner内直接写入新Worker Secrets；不会读回、导出、回传Secret值或上传凭据artifact。还需人在获批后单独配置新的gallery Repository Secret `VIDEO_CONFIG_TOKEN`，不要把对话中现有授权token粘贴到代码、文档或workflow参数中。
 
+setup的Cloudflare管理凭据优先使用单独的 `VIDEO_CLOUDFLARE_API_TOKEN`，未配置时才回退现有站点token；不覆盖站点 `CLOUDFLARE_API_TOKEN`。首次setup运行 `43216702839` 返回generic HTTP401且消费者已反关确认；原日志未标明API阶段，不能仅凭401确定权限缺失位置。修复后错误明确区分Cloudflare D1列表/R2桶/CORS/Worker阶段与GitHub运行列表，并仅显示HTTP状态、数值错误码，不输出URL/token/正文。获批临时管理凭据仅经受保护stdin写入专用Secret，执行完由主任务删除该临时Secret，不把凭据写回本地文件。
+
 专用 `VIDEO_CONFIG_TOKEN` 需仅选择4个相关仓库：Studio用于精确SHA checkout（Contents read）；图床用于Worker业务鉴权自检（Contents write）；执行器用于repository_dispatch、读取运行及设置 `VIDEO_SERVICE_TOKEN`/vars（Contents write、Actions read、Secrets write、Variables write）；gallery用于读取deploy工作流（Actions read及元数据读取）。同一细粒度token的权限适用于所选仓库集合，不能表示每个仓库单独分配不同权限；创建时需评估这个现有单token接口的权限范围。Cloudflare管理token仍需目标账户的Workers Scripts编辑、D1编辑、R2桶创建/读取/CORS管理能力；原Pages专用token未必足够。
 
 手动输入只有：

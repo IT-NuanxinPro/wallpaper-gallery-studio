@@ -173,7 +173,11 @@ export async function setupVideoService({
   const account = env.CLOUDFLARE_ACCOUNT_ID
   const ghEnvironment = { ...env, GH_TOKEN: env.VIDEO_CONFIG_TOKEN }
   const cfBase = `https://api.cloudflare.com/client/v4/accounts/${account}`
-  async function request(url, token, { method = 'GET', body, allow404 = false } = {}) {
+  async function request(
+    url,
+    token,
+    { method = 'GET', body, allow404 = false, stage = '配置API' } = {}
+  ) {
     let response
     try {
       response = await fetchImpl(url, {
@@ -187,16 +191,44 @@ export async function setupVideoService({
         ...(body ? { body: JSON.stringify(body) } : {})
       })
     } catch {
-      throw new Error('配置API网络请求失败，未输出请求地址或凭据')
+      throw new Error(`${stage}网络请求失败，未输出请求地址或凭据`)
     }
     if (allow404 && response.status === 404) return null
     const data = await response.json().catch(() => null)
-    if (!response.ok || !data || data.success === false)
-      throw new Error(`配置API请求失败（HTTP ${response.status}），未输出响应正文`)
+    if (!response.ok || !data || data.success === false) {
+      const codes = (Array.isArray(data?.errors) ? data.errors : [])
+        .map(error => error?.code)
+        .filter(code => /^\d+$/.test(String(code)))
+      throw new Error(
+        `${stage}请求失败（HTTP ${response.status}${codes.length ? `，错误码${codes.join(',')}` : ''}），未输出响应正文`
+      )
+    }
     return data
   }
-  const cf = (route, options) => request(`${cfBase}${route}`, env.CLOUDFLARE_API_TOKEN, options)
-  const gh = route => request(`https://api.github.com/repos/${route}`, env.VIDEO_CONFIG_TOKEN)
+  const cf = (route, options = {}) => {
+    const stage = route.startsWith('/d1/database')
+      ? options.method === 'POST'
+        ? 'Cloudflare D1创建'
+        : 'Cloudflare D1列表'
+      : route.endsWith('/cors')
+        ? options.method === 'PUT'
+          ? 'Cloudflare 暂存CORS合并'
+          : 'Cloudflare 暂存CORS读取'
+        : route.startsWith('/r2/buckets')
+          ? options.method === 'POST'
+            ? 'Cloudflare 暂存桶创建'
+            : 'Cloudflare R2桶列表'
+          : 'Cloudflare Worker子域读取'
+    return request(`${cfBase}${route}`, env.CLOUDFLARE_API_TOKEN, { ...options, stage })
+  }
+  const gh = route =>
+    request(`https://api.github.com/repos/${route}`, env.VIDEO_CONFIG_TOKEN, {
+      stage: route.includes('/actions/variables/')
+        ? 'GitHub 消费者开关读取'
+        : route.includes('/runs?')
+          ? 'GitHub 视频Runner列表'
+          : 'GitHub Gallery部署工作流读取'
+    })
   const variable = (name, value) =>
     run('gh', ['variable', 'set', name, '--body', value, '--repo', WORKFLOW_REPOSITORY], {
       env: ghEnvironment

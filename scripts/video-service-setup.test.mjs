@@ -97,7 +97,8 @@ function setupFixture({
   headStatus = 404,
   enable = true,
   loseEnableResponse = false,
-  failDisableAfterEnable = false
+  failDisableAfterEnable = false,
+  d1Status = 200
 } = {}) {
   const runner = fs.mkdtempSync(path.join(os.tmpdir(), 'video-setup-fixture-'))
   const scratch = fs.mkdtempSync(path.join(runner, 'video-service-setup.'))
@@ -152,6 +153,11 @@ function setupFixture({
     if (init.method === 'OPTIONS')
       return response(null, 204, { 'Access-Control-Allow-Origin': init.headers.Origin })
     if (parsed.pathname.endsWith('/video/jobs')) return response({ jobs: [] })
+    if (parsed.pathname.endsWith('/d1/database') && d1Status !== 200)
+      return response(
+        { success: false, errors: [{ code: 10000, message: 'fixture response body is private' }] },
+        d1Status
+      )
     if (parsed.pathname.endsWith('/d1/database'))
       return response({
         success: true,
@@ -314,6 +320,27 @@ test('启用结果不明且无法关停时明确要求人工确认，不声称�
     assert.equal(fixture.getGate(), 'true')
     assert.equal(
       fixture.calls.some(call => call.method === 'DELETE'),
+      false
+    )
+  } finally {
+    fixture.cleanup()
+  }
+})
+
+test('Cloudflare鉴权失败明确标出D1列表阶段和数值码，不混淆GitHub或输出正文', async () => {
+  const fixture = setupFixture({ d1Status: 401 })
+  try {
+    const error = await setupVideoService({ ...fixture, root: '/checkout/studio' }).catch(
+      value => value
+    )
+    assert.match(error.message, /Cloudflare D1列表.*HTTP 401.*10000/)
+    assert.doesNotMatch(
+      error.message,
+      /github-fixture-only|cf-fixture-only|fixture response body|https:\/\//
+    )
+    assert.equal(fixture.getGate(), 'false')
+    assert.equal(
+      fixture.calls.some(call => call.method === 'POST'),
       false
     )
   } finally {
