@@ -271,6 +271,6 @@ setup的Cloudflare管理凭据优先使用单独的 `VIDEO_CLOUDFLARE_API_TOKEN`
 4. 在runner专用临时目录生成0600配置和0600批量Secrets JSON；运行局部 `npx --yes wrangler@4.160.1`，仅迁移独立视频D1并部署独立Worker。生成随机 `VIDEO_SERVICE_TOKEN`，Worker中将专用 `VIDEO_CONFIG_TOKEN` 用作 `GITHUB_DISPATCH_TOKEN`，通过stdin同步服务密钥到执行器Secret，不在日志中打印值。
 5. 两桶执行只读签名HEAD探测（不存在的随机探测key接受404，不上传探测内容），检查Worker health、带专用token的 `GET /video/jobs`（真实GitHub权限及D1 SQL）、内部鉴权404探测和来源预检。不会调用claim消费真实任务。若现有R2密钥只覆盖正式桶，暂存桶HEAD会403并终止，需人工批准双桶授权的密钥；不尝试读取Secret或自动扩大权限。
 6. 自检通过才设置执行器 `VIDEO_API_URL`、`VIDEO_GALLERY_WORKFLOW=deploy.yml`；仅当输入显式true才最后启用 `VIDEO_INGEST_ENABLED=true`。默认仍关闭消费者。
-7. 输出仅公开Worker URL、D1 ID及桶名。CLI结果全部捕获，不把可能带签名地址的输出写日志。成功或失败均由Node finally和shell EXIT trap清理本次临时目录；失败不删除已经创建的云资源。任何配置失败都会尽力写回 `VIDEO_INGEST_ENABLED=false` 并独立读回确认，workflow另有failure步骤执行同样保护；这也覆盖“远端启用成功、CLI响应丢失”的情况。无法读回false时明确报告“无法确认消费者已关闭，必须人工确认”，不声称开关已安全关闭。
+7. 成功时输出仅公开Worker URL、D1 ID及桶名；CLI失败会标明独立D1迁移、Worker部署或Worker密钥写入阶段，将stderr先脱敏环境中TOKEN/KEY/SECRET值、临时服务密钥、Bearer及URL查询，再保留最后不超过1200字；不输出完整命令或密钥文件内容。成功或失败均由Node finally和shell EXIT trap清理本次临时目录；失败不删除已经创建的云资源。任何配置失败都会尽力写回 `VIDEO_INGEST_ENABLED=false` 并独立读回确认，workflow另有failure步骤执行同样保护；这也覆盖“远端启用成功、CLI响应丢失”的情况。无法读回false时明确报告“无法确认消费者已关闭，必须人工确认”，不声称开关已安全关闭。
 
-这些检查只说明配置和只读访问可用，不能证明PUT、转码、5帧、正式发布或网站媒体checksum已通过，更不能据此删除5个源文件。实际五视频验收仍按前节逐文件执行。固定Wrangler的secret bulk、cors及migration参数已在本机使用 `--help` 只读核对；本地9项fixture覆盖资源白名单、CORS合并、默认不开消费者、0600密钥临时文件、自检后才启用、失败不删云资源，以及启用响应丢失后的关停/无法确认分支。
+这些检查只说明配置和只读访问可用，不能证明PUT、转码、5帧、正式发布或网站媒体checksum已通过，更不能据此删除5个源文件。实际五视频验收仍按前节逐文件执行。固定Wrangler的secret bulk、cors及migration参数已在本机使用 `--help` 只读核对；本地12项fixture覆盖资源白名单、CORS合并、默认不开消费者、0600密钥临时文件、自检后才启用、失败不删云资源、启用响应丢失后的关停/无法确认分支，以及API阶段与CLI stderr脱敏诊断。

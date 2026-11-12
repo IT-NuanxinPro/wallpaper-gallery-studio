@@ -8,7 +8,9 @@ import {
   mergeStagingCors,
   parseAllowedOrigins,
   createSetupConfig,
-  setupVideoService
+  setupVideoService,
+  redactSetupDiagnostic,
+  executeSetupCommand
 } from './video-service-setup.mjs'
 
 test('只选择明确独立资源，同名异常或资源名越界时拒绝', () => {
@@ -185,7 +187,7 @@ function setupFixture({
     throw new Error('unexpected fixture request')
   }
   const run = (command, args, options = {}) => {
-    commands.push({ command, args, input: options.input })
+    commands.push({ command, args, input: options.input, stage: options.stage })
     if (command === 'git') return env.STUDIO_REF
     if (command === 'gh' && args[0] === 'variable' && args[2] === 'VIDEO_INGEST_ENABLED') {
       if (args[4] === 'true') {
@@ -243,6 +245,10 @@ test('配置fixture只创建独立资源，0600批量密钥不落摘要，自检
     )
     assert.equal(fixture.commands.at(-1).args[2], 'VIDEO_INGEST_ENABLED')
     assert.equal(fixture.commands.at(-1).args[4], 'true')
+    assert.deepEqual(
+      fixture.commands.filter(call => call.command === 'npx').map(call => call.stage),
+      ['独立D1迁移', 'Worker部署', 'Worker密钥写入']
+    )
     assert.deepEqual(fs.readdirSync(fixture.scratch), [])
   } finally {
     fixture.cleanup()
@@ -346,4 +352,49 @@ test('Cloudflare鉴权失败明确标出D1列表阶段和数值码，不混淆Gi
   } finally {
     fixture.cleanup()
   }
+})
+
+test('CLI错误先脱敏环境凭据、Bearer和URL查询，再限制尾部1200字', () => {
+  const output =
+    'head\n' +
+    'x'.repeat(1500) +
+    '\nTOKEN=fake-env-token KEY=fake-env-key SECRET=fake-env-secret Bearer stray-bearer-value https://storage.test/object?X-Amz-Signature=fake-signature&access=fake-access#fragment\n实际迁移错误'
+  const diagnostic = redactSetupDiagnostic(output, {
+    API_TOKEN: 'fake-env-token',
+    ACCESS_KEY: 'fake-env-key',
+    SOME_SECRET: 'fake-env-secret',
+    EMPTY_TOKEN: ''
+  })
+  assert.ok(diagnostic.length <= 1200)
+  assert.match(diagnostic, /实际迁移错误/)
+  assert.doesNotMatch(
+    diagnostic,
+    /fake-env-token|fake-env-key|fake-env-secret|stray-bearer-value|fake-signature|fake-access/
+  )
+  assert.doesNotMatch(
+    redactSetupDiagnostic('{"VIDEO_SERVICE_TOKEN":"fresh-generated-secret"}', {}),
+    /fresh-generated-secret/
+  )
+})
+
+test('实际本地子进程错误保留阶段和脱敏stderr，不输出完整命令参数', () => {
+  const fake = 'fake-child-env-secret'
+  const source =
+    'process.stderr.write("fake-child-env-secret https://storage.test/a?signature=fake-child-signature Bearer fake-child-bearer\\n缺少迁移路径"); process.exit(1)'
+  assert.throws(
+    () =>
+      executeSetupCommand(process.execPath, ['-e', source], {
+        env: { ...process.env, API_TOKEN: fake },
+        stage: '独立D1迁移'
+      }),
+    error => {
+      assert.match(error.message, /独立D1迁移.*退出码1/)
+      assert.match(error.message, /缺少迁移路径/)
+      assert.doesNotMatch(
+        error.message,
+        /fake-child-env-secret|fake-child-signature|fake-child-bearer|process.stderr.write/
+      )
+      return true
+    }
+  )
 })

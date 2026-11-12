@@ -119,7 +119,31 @@ export function createSetupConfig(root, databaseId, origins) {
   }
 }
 
-function execute(command, args, { input, env = process.env, cwd = process.cwd() } = {}) {
+export function redactSetupDiagnostic(output, env = process.env) {
+  let text = String(output || '')
+  const secrets = Object.entries(env)
+    .filter(
+      ([key, value]) => /TOKEN|KEY|SECRET/i.test(key) && typeof value === 'string' && value.length
+    )
+    .map(([, value]) => value)
+    .sort((left, right) => right.length - left.length)
+  for (const secret of secrets) text = text.replaceAll(secret, '[凭据已隐藏]')
+  text = text
+    .replace(/\bBearer\s+[^\s"'<>]+/gi, 'Bearer [凭据已隐藏]')
+    .replace(/https?:\/\/[^\s"'<>]+/gi, url =>
+      url.replace(/\?.*$/, '?[查询已隐藏]').replace(/\/\/[^/@]+:[^/@]+@/, '//[凭据已隐藏]@')
+    )
+    .split('\n')
+    .map(line => (/"[^"]*(?:TOKEN|KEY|SECRET)[^"]*"\s*:/i.test(line) ? '[敏感配置行已隐藏]' : line))
+    .join('\n')
+  return text.slice(-1200)
+}
+
+export function executeSetupCommand(
+  command,
+  args,
+  { input, env = process.env, cwd = process.cwd(), stage = '本地命令', sensitiveValues = [] } = {}
+) {
   const result = spawnSync(command, args, {
     input,
     env,
@@ -128,16 +152,26 @@ function execute(command, args, { input, env = process.env, cwd = process.cwd() 
     maxBuffer: 10 * 1024 * 1024,
     timeout: 600000
   })
-  // CLI的输出可能包含签名地址或secret，全部捕获，失败仅报告命令名称与退出码。
-  if (result.error || result.status !== 0)
-    throw new Error(`${command}步骤失败（退出码${result.status ?? 'unknown'}），未输出敏感命令结果`)
+  if (result.error || result.status !== 0) {
+    const redactions = {
+      ...env,
+      ...Object.fromEntries(sensitiveValues.map((value, index) => [`SETUP_SECRET_${index}`, value]))
+    }
+    const diagnostic = redactSetupDiagnostic(
+      result.stderr || result.stdout || result.error?.code || '',
+      redactions
+    )
+    throw new Error(
+      `${stage}失败（退出码${result.status ?? 'unknown'}）${diagnostic ? `：\n${diagnostic}` : ''}`
+    )
+  }
   return result.stdout
 }
 
 export async function setupVideoService({
   env = process.env,
   fetchImpl = fetch,
-  run = execute,
+  run = executeSetupCommand,
   root = process.cwd()
 } = {}) {
   if (
@@ -233,10 +267,12 @@ export async function setupVideoService({
     run('gh', ['variable', 'set', name, '--body', value, '--repo', WORKFLOW_REPOSITORY], {
       env: ghEnvironment
     })
-  const wrangler = args =>
+  const wrangler = (stage, args, sensitiveValues = []) =>
     run('npx', ['--yes', 'wrangler@4.160.1', ...args], {
       env: { ...env, CI: 'true', WRANGLER_SEND_METRICS: 'false' },
-      cwd: root
+      cwd: root,
+      stage,
+      sensitiveValues
     })
 
   async function confirmConsumersDisabled() {
@@ -320,10 +356,22 @@ export async function setupVideoService({
       { mode: 0o600 }
     )
     try {
-      wrangler(['d1', 'migrations', 'apply', DATABASE, '--remote', '--config', configPath])
+      wrangler('独立D1迁移', [
+        'd1',
+        'migrations',
+        'apply',
+        DATABASE,
+        '--remote',
+        '--config',
+        configPath
+      ])
       // 先发布代码再批量配置secrets；Actions gate保持关闭，任何失败均不启用消费者。
-      wrangler(['deploy', '--config', configPath])
-      wrangler(['secret', 'bulk', secretsPath, '--config', configPath])
+      wrangler('Worker部署', ['deploy', '--config', configPath])
+      wrangler(
+        'Worker密钥写入',
+        ['secret', 'bulk', secretsPath, '--config', configPath],
+        [serviceToken]
+      )
       run('gh', ['secret', 'set', 'VIDEO_SERVICE_TOKEN', '--repo', WORKFLOW_REPOSITORY], {
         input: serviceToken,
         env: ghEnvironment
