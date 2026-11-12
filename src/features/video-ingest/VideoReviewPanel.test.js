@@ -37,6 +37,21 @@ function createPanel() {
 }
 
 describe('视频候选帧审核交互', () => {
+  it('封面图片与视频poster使用匿名CORS，避免污染后续AI读帧缓存', async () => {
+    const panel = createPanel()
+    const job = panel.props('job')
+    await panel.setProps({
+      job: { ...job, result: { ...job.result, preview: { url: 'https://video.test/preview' } } }
+    })
+    expect(panel.find('video').attributes('crossorigin')).toBe('anonymous')
+    expect(panel.find('video').element.crossOrigin).toBe('anonymous')
+    for (const image of panel.findAll('.video-review__frame img')) {
+      expect(image.attributes('crossorigin')).toBe('anonymous')
+      expect(image.element.crossOrigin).toBe('anonymous')
+    }
+    panel.unmount()
+  })
+
   it('仅显示服务端已有视频主题，主题读取失败时保持输入框可编辑', async () => {
     const panel = createPanel()
     await panel.setProps({ topicSuggestions: ['宝可梦', '二次元'], topicsError: '读取失败' })

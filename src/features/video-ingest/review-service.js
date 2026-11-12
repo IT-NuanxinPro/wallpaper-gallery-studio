@@ -7,7 +7,7 @@ export async function frameToBase64(
   const url = frame.url || frame.thumbnailUrl
   if (!url) throw new Error('封面地址已失效，请刷新任务')
   // 资源使用短期签名访问，不把业务 token 发送给对象存储。
-  const response = await fetchImpl(url)
+  const response = await fetchImpl(url, { mode: 'cors', credentials: 'omit', cache: 'no-store' })
   if (!response.ok) throw new Error('封面下载失败，请刷新任务后重试')
   const blob = await response.blob()
   if (blob.size > 20000000) throw new Error('封面图片过大，无法分析')

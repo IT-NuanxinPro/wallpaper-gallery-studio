@@ -13,6 +13,7 @@
         v-if="previewUrl"
         :key="job.id"
         class="video-review__player"
+        crossorigin="anonymous"
         :src="previewUrl"
         :poster="selectedFrame?.url || selectedFrame?.thumbnailUrl"
         controls
@@ -51,6 +52,7 @@
           >
             <img
               v-if="(frame.thumbnailUrl || frame.url) && !failedFrames.includes(frame.id)"
+              crossorigin="anonymous"
               :src="frame.thumbnailUrl || frame.url"
               :alt="`${Number(frame.timestamp).toFixed(1)} 秒候选封面`"
               loading="lazy"

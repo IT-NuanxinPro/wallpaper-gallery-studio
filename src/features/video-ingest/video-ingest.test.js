@@ -159,12 +159,12 @@ describe('可恢复视频上传', () => {
 })
 
 describe('视频接口与 AI 审核租约', () => {
-  it('AI帧读取不携带业务token，并把原图交给1024长边图片压缩器', async () => {
+  it('AI帧以无凭据CORS和no-store读取，保留签名查询并交给1024长边压缩器', async () => {
     const frame = new Blob(['high-resolution-frame'], { type: 'image/jpeg' })
     let request
     let compression
     const result = await frameToBase64(
-      { url: 'https://frame.test/signed' },
+      { url: 'https://frame.test/signed?X-Amz-Signature=fixture-signature' },
       {
         fetchImpl: async (...args) => {
           request = args
@@ -176,7 +176,10 @@ describe('视频接口与 AI 审核租约', () => {
         }
       }
     )
-    expect(request).toEqual(['https://frame.test/signed'])
+    expect(request).toEqual([
+      'https://frame.test/signed?X-Amz-Signature=fixture-signature',
+      { mode: 'cors', credentials: 'omit', cache: 'no-store' }
+    ])
     expect(compression.blob).toBe(frame)
     expect(compression.config).toEqual({ maxSize: 1024, quality: 0.9, format: 'image/jpeg' })
     expect(result).toBe('data:image/jpeg;base64,COMPRESSED')
