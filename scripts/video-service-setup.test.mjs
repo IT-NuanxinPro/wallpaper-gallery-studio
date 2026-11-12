@@ -10,7 +10,9 @@ import {
   createSetupConfig,
   setupVideoService,
   redactSetupDiagnostic,
-  executeSetupCommand
+  executeSetupCommand,
+  probeR2Buckets,
+  resolveSetupR2Credentials
 } from './video-service-setup.mjs'
 
 test('只选择明确独立资源，同名异常或资源名越界时拒绝', () => {
@@ -396,5 +398,59 @@ test('实际本地子进程错误保留阶段和脱敏stderr，不输出完整�
       )
       return true
     }
+  )
+})
+
+test('两桶自检分别完成并聚合，仅报告S3白名单Code而不输出body或签名', async () => {
+  const calls = []
+  const error = await probeR2Buckets(
+    {
+      R2_ACCOUNT_ID: 'a'.repeat(32),
+      R2_ACCESS_KEY_ID: 'fake-access',
+      R2_SECRET_ACCESS_KEY: 'fake-secret'
+    },
+    async (url, options) => {
+      const bucket = new URL(url).pathname.split('/')[1]
+      calls.push({ bucket, method: options.method })
+      return {
+        status: bucket === 'wallpaper-images' ? 404 : 403,
+        text: async () =>
+          '<Error><Code>AccessDenied</Code><RequestId>private-request-id</RequestId><Message>fake-secret?signature=private-signature</Message></Error>'
+      }
+    }
+  ).catch(value => value)
+  assert.deepEqual(calls, [
+    { bucket: 'wallpaper-video-staging', method: 'HEAD' },
+    { bucket: 'wallpaper-video-staging', method: 'GET' },
+    { bucket: 'wallpaper-images', method: 'HEAD' }
+  ])
+  assert.match(error.message, /wallpaper-video-staging.*HEAD HTTP 403.*GET HTTP 403.*AccessDenied/)
+  assert.match(error.message, /wallpaper-images.*HEAD HTTP 404.*通过/)
+  assert.doesNotMatch(
+    error.message,
+    /fake-secret|private-request-id|private-signature|video-setup-probe|https:/
+  )
+})
+
+test('视频R2专用密钥成对优先，缺半对时拒绝与正式旧key混用', () => {
+  const previous = {
+    CLOUDFLARE_R2_ACCESS_KEY: 'old-access',
+    CLOUDFLARE_R2_SECRET_KEY: 'old-secret'
+  }
+  assert.deepEqual(resolveSetupR2Credentials(previous), {
+    accessKey: 'old-access',
+    secretKey: 'old-secret'
+  })
+  assert.deepEqual(
+    resolveSetupR2Credentials({
+      ...previous,
+      VIDEO_R2_ACCESS_KEY: 'new-access',
+      VIDEO_R2_SECRET_KEY: 'new-secret'
+    }),
+    { accessKey: 'new-access', secretKey: 'new-secret' }
+  )
+  assert.throws(
+    () => resolveSetupR2Credentials({ ...previous, VIDEO_R2_ACCESS_KEY: 'only-half' }),
+    /成对/
   )
 })

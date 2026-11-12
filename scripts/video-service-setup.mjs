@@ -15,6 +15,73 @@ const GALLERY_REPOSITORY = 'IT-NuanxinPro/wallpaper-gallery'
 const UUID = /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i
 const CORS_RULE = 'video-studio-upload-v1'
 
+export function resolveSetupR2Credentials(env) {
+  if (env.VIDEO_R2_ACCESS_KEY || env.VIDEO_R2_SECRET_KEY) {
+    if (!env.VIDEO_R2_ACCESS_KEY || !env.VIDEO_R2_SECRET_KEY)
+      throw new Error('视频专用R2密钥必须成对配置，不与既有正式桶key混用')
+    return { accessKey: env.VIDEO_R2_ACCESS_KEY, secretKey: env.VIDEO_R2_SECRET_KEY }
+  }
+  if (!env.CLOUDFLARE_R2_ACCESS_KEY || !env.CLOUDFLARE_R2_SECRET_KEY)
+    throw new Error('缺少R2成对访问密钥')
+  return { accessKey: env.CLOUDFLARE_R2_ACCESS_KEY, secretKey: env.CLOUDFLARE_R2_SECRET_KEY }
+}
+
+export async function probeR2Buckets(signedEnv, fetchImpl = fetch) {
+  const results = []
+  for (const bucket of [STAGING, PUBLIC]) {
+    const key = `video-setup-probe-${crypto.randomUUID()}`
+    const result = { bucket, ok: false, head: '网络失败' }
+    try {
+      const signed = await presign(signedEnv, bucket, key, 'HEAD', {}, 60)
+      const response = await fetchImpl(signed, {
+        method: 'HEAD',
+        redirect: 'error',
+        signal: AbortSignal.timeout(30000)
+      })
+      result.head = `HTTP ${response.status}`
+      result.ok = [200, 404].includes(response.status)
+    } catch {
+      /* 仅报告白名单阶段，不输出异常中的URL。 */
+    }
+    if (!result.ok) {
+      result.get = '网络失败'
+      try {
+        const signed = await presign(signedEnv, bucket, key, 'GET', {}, 60)
+        const response = await fetchImpl(signed, {
+          method: 'GET',
+          redirect: 'error',
+          signal: AbortSignal.timeout(30000)
+        })
+        result.get = `HTTP ${response.status}`
+        // 只提取短小S3 Code，绝不回传XML正文、RequestId、对象key或签名。
+        let xml = ''
+        if (response.body?.getReader) {
+          const reader = response.body.getReader()
+          try {
+            while (xml.length < 8192) {
+              const chunk = await reader.read()
+              if (chunk.done) break
+              xml += new TextDecoder().decode(chunk.value).slice(0, 8192 - xml.length)
+            }
+          } finally {
+            await reader.cancel().catch(() => {})
+          }
+        } else xml = String(await response.text()).slice(0, 8192)
+        result.code = xml.match(/<Code>([A-Za-z0-9]{1,80})<\/Code>/)?.[1] || '不可用'
+      } catch {
+        /* 继续自检另一个桶，保留当前安全状态。 */
+      }
+    }
+    results.push(result)
+  }
+  if (results.some(result => !result.ok)) {
+    throw new Error(
+      `R2签名HEAD自检失败：${results.map(result => `${result.bucket} HEAD ${result.head}${result.ok ? ' 通过' : `，GET ${result.get}，S3 Code ${result.code || '不可用'}`}`).join('；')}。403本身不能确定是密钥范围或签名错误；保持私有桶与既有ACL不变`
+    )
+  }
+  return results
+}
+
 export function findSetupResource(kind, name, payload) {
   if (
     (kind === 'd1' && name !== DATABASE) ||
@@ -184,13 +251,12 @@ export async function setupVideoService({
   const required = [
     'CLOUDFLARE_ACCOUNT_ID',
     'CLOUDFLARE_API_TOKEN',
-    'CLOUDFLARE_R2_ACCESS_KEY',
-    'CLOUDFLARE_R2_SECRET_KEY',
     'VIDEO_CONFIG_TOKEN',
     'VIDEO_SETUP_TEMP_DIR',
     'STUDIO_REF'
   ]
   for (const key of required) if (!env[key]) throw new Error(`缺少部署配置：${key}`)
+  const r2Credentials = resolveSetupR2Credentials(env)
   if (!/^[a-f0-9]{32}$/i.test(env.CLOUDFLARE_ACCOUNT_ID) || !/^[a-f0-9]{40}$/.test(env.STUDIO_REF))
     throw new Error('Cloudflare账户或Studio完整SHA格式无效')
   const actualRef = run('git', ['rev-parse', 'HEAD'], { cwd: root }).trim()
@@ -348,8 +414,8 @@ export async function setupVideoService({
       secretsPath,
       JSON.stringify({
         R2_ACCOUNT_ID: account,
-        R2_ACCESS_KEY_ID: env.CLOUDFLARE_R2_ACCESS_KEY,
-        R2_SECRET_ACCESS_KEY: env.CLOUDFLARE_R2_SECRET_KEY,
+        R2_ACCESS_KEY_ID: r2Credentials.accessKey,
+        R2_SECRET_ACCESS_KEY: r2Credentials.secretKey,
         VIDEO_SERVICE_TOKEN: serviceToken,
         GITHUB_DISPATCH_TOKEN: env.VIDEO_CONFIG_TOKEN
       }),
@@ -382,33 +448,10 @@ export async function setupVideoService({
       const url = `https://${WORKER}.${subdomain}.workers.dev`
       const signedEnv = {
         R2_ACCOUNT_ID: account,
-        R2_ACCESS_KEY_ID: env.CLOUDFLARE_R2_ACCESS_KEY,
-        R2_SECRET_ACCESS_KEY: env.CLOUDFLARE_R2_SECRET_KEY
+        R2_ACCESS_KEY_ID: r2Credentials.accessKey,
+        R2_SECRET_ACCESS_KEY: r2Credentials.secretKey
       }
-      for (const bucket of [STAGING, PUBLIC]) {
-        const signed = await presign(
-          signedEnv,
-          bucket,
-          `video-setup-probe-${crypto.randomUUID()}`,
-          'HEAD',
-          {},
-          60
-        )
-        let response
-        try {
-          response = await fetchImpl(signed, {
-            method: 'HEAD',
-            redirect: 'error',
-            signal: AbortSignal.timeout(30000)
-          })
-        } catch {
-          throw new Error('R2只读签名HEAD自检网络失败')
-        }
-        if (![200, 404].includes(response.status))
-          throw new Error(
-            `R2签名HEAD自检失败（HTTP ${response.status}）：现有密钥可能仅覆盖正式桶，请人工配置同时覆盖暂存/正式两桶的密钥；不读取或自动扩大既有授权`
-          )
-      }
+      await probeR2Buckets(signedEnv, fetchImpl)
       let healthy = false
       for (let attempt = 0; attempt < 6; attempt++) {
         if (attempt) await new Promise(resolve => setTimeout(resolve, 5000))
