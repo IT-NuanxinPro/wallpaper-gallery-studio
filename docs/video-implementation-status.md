@@ -40,3 +40,15 @@
 5. 只有第4步成功的对应源文件才可删除；任何未完成项保留。最终报告明确已部署、已验证、已删除的文件，不混合本地结果。
 
 用户已明确回复“确认，提交推送并上线测试”，授权四仓本次改造提交/推送至main、独立Worker/D1/暂存桶配置、Secrets配置和生产部署，并真实验收5个视频后删除对应本地源。当前开始执行上线阶段，尚未删除源文件。所有用户提供凭据均不写文档或代码。
+
+## 云端进展（20:44后）
+
+- 四仓已提交推送：图床0c58bb84、workflow4a09e1c；Studio与gallery随后有setup授权/诊断修复提交，实际HEAD以Git为准。
+- 网站新部署43216292396真实成功，包含完整数据快照验证、构建、Supabase同步、Pages精确回执。
+- 视频D1 `1a21d603-d9a8-470c-aef6-a70d36adeea0`已创建，video_tasks/video_publication_jobs迁移成功；私有暂存桶wallpaper-video-staging已创建。
+- Worker wallpaper-video-ingest.han1569250882.workers.dev已发布、secrets已设置、workers.dev子域已启用；/health真实200。部分本机CLI默认User-Agent曾触发边缘1010，浏览器User-Agent请求正常。
+- 最新setup43220530903明确两桶结果：正式wallpaper-images HEAD404通过；新staging HEAD403/GET403 S3 AccessDenied。消费者开关已独立读回false。
+- 已请用户在gallery Actions Secrets配置新VIDEO_R2_ACCESS_KEY/VIDEO_R2_SECRET_KEY，仅Object Read & Write覆盖上述两桶。现有R2key能签名但仅正式桶范围，管理OAuth令牌无token-management权限403，不能自动创建S3key。
+- gallery临时VIDEO_CLOUDFLARE_API_TOKEN使用本机现有OAuth安全stdin注入；有效期有限，setup重跑前需要确认/刷新，用完删除专用临时secret。现有站点CLOUDFLARE_API_TOKEN没有被覆盖。
+- /tmp/wallpaper-video-auth-state.json是0600临时浏览器登录状态，用完必须删除；不得提交或输出。Playwright新会话video-cloud已开但尚未加载该登录。
+- 五个源仍全部保留；没有真实上传视频、没有删除本地源。output/video-e2e-20261112/source-manifest.json记录原大小/sha/mtime，用于最终删除前核对。

@@ -37,3 +37,5 @@ wrangler.video.local.toml
 output/video-e2e-*/
 output/playwright/
 docs/video-staging-cors.local.json
+__pycache__/
+*.py[cod]
