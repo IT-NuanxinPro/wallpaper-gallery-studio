@@ -52,3 +52,12 @@
 - gallery临时VIDEO_CLOUDFLARE_API_TOKEN使用本机现有OAuth安全stdin注入；有效期有限，setup重跑前需要确认/刷新，用完删除专用临时secret。现有站点CLOUDFLARE_API_TOKEN没有被覆盖。
 - /tmp/wallpaper-video-auth-state.json是0600临时浏览器登录状态，用完必须删除；不得提交或输出。Playwright新会话video-cloud已开但尚未加载该登录。
 - 五个源仍全部保留；没有真实上传视频、没有删除本地源。output/video-e2e-20261112/source-manifest.json记录原大小/sha/mtime，用于最终删除前核对。
+
+## 完整真实验收及源文件清理
+
+- 五视频批次60be517b-dc48-4313-99ba-38e487a586e9已published。媒体处理43232563362、发布43236290724、网站部署43236507971均成功。图床dataSha=7bd2257190267fc8bd0830d6fc1fd8ccf734ba2f，Pages部署49201a7e-e2e1-4fa6-af71-8a5fc4b34d26。
+- 5个详情页实际播放、5个浏览器实际下载全部成功，下载size/SHA256对应云端产物；10个预览/缩略图流式摘要匹配。只读完整验收ok=true（GitHub artifact因本机urllib链路不稳改用gh GET传输，所有原内容/祖先/回执校验保留）。
+- 历史61条全部字段不变，新增后66条；线上Studio域名与Pages域名已配置视频API和CORS，5任务可恢复已发布。
+- 用户明确授权的Downloads五个原片已逐个核对原SHA/size/mtime后删除，共47431430字节；本任务专属媒体测试副本清理186095120字节，报告截图保留。删除凭证output/video-e2e-20261112/deletion-receipt.json，完整证据final-acceptance.json/cloud-verification.json。
+- 临时VIDEO*CLOUDFLARE_API_TOKEN仓库secret已删除。仅staging范围的新S3 key已安全配置为VIDEO_STAGING_R2*_并映射Worker R2*STAGING*_，正式桶凭据未替换。
+- 用户随后报告详情循环反复显示加载遮罩；正在修复VideoWallpaperPlayer首次播放状态与详情waiting处理，作为新反馈继续部署验证。

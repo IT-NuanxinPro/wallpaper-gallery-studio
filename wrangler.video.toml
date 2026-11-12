@@ -10,12 +10,12 @@ WORKFLOW_REPO = "wallpaper-gallery-workflow"
 STAGING_BUCKET_NAME = "wallpaper-video-staging"
 PUBLIC_BUCKET_NAME = "wallpaper-images"
 # 部署时替换为实际工作台来源，多个来源用逗号分隔。
-ALLOWED_ORIGINS = "http://localhost:5174,http://127.0.0.1:5174"
+ALLOWED_ORIGINS = "http://localhost:5174,http://127.0.0.1:5174,http://127.0.0.1:5176,https://wallpaper-gallery-studio.pages.dev,https://wallpaper-gallery-studio.061129.xyz"
 
 [[d1_databases]]
 binding = "DB"
 database_name = "wallpaper-video-tasks"
-database_id = "REPLACE_WITH_CREATED_D1_DATABASE_ID"
+database_id = "1a21d603-d9a8-470c-aef6-a70d36adeea0"
 migrations_dir = "worker/video/migrations"
 
 [[r2_buckets]]
@@ -31,3 +31,4 @@ crons = ["*/5 * * * *"]
 
 # 必需 secrets：R2_ACCOUNT_ID、R2_ACCESS_KEY_ID、R2_SECRET_ACCESS_KEY、
 # VIDEO_SERVICE_TOKEN、GITHUB_DISPATCH_TOKEN。不要添加到浏览器 VITE_*。
+# 暂存桶独立授权：R2_STAGING_ACCESS_KEY_ID、R2_STAGING_SECRET_ACCESS_KEY。
