@@ -13,6 +13,7 @@ import { useCredentialsStore } from './credentials'
 import { AI_PROVIDERS } from '@/services/ai/core'
 import { previewManager } from '@/utils/previewManager'
 import { hashWorker } from '@/utils/hashWorker'
+import { sha256Hex } from '@/utils/file-hash'
 import { imageCompressor } from '@/utils/imageCompressor'
 import {
   analyzeImage as classifierAnalyze,
@@ -116,6 +117,10 @@ export const useUploadStore = defineStore('upload', () => {
 
   function getPreferredUploadModel(credentialsStore = useCredentialsStore()) {
     const availableModels = getUploadModelList(credentialsStore)
+    const configured = availableModels.find(model => model.key === CLASSIFIER_CONFIG.defaultModel)
+    if (configured && credentialsStore.getCredentialsByProvider(configured.provider)?.apiKey) {
+      return configured
+    }
     return availableModels[0] || getRecommendedModel(AI_PROVIDERS.ZHIPU)
   }
 
@@ -333,9 +338,7 @@ export const useUploadStore = defineStore('upload', () => {
       console.error('Hash计算失败，回退到主线程:', error)
       // 回退方案：主线程计算
       const buffer = await file.arrayBuffer()
-      const hashBuffer = await crypto.subtle.digest('SHA-256', buffer)
-      const hashArray = Array.from(new Uint8Array(hashBuffer))
-      return hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
+      return sha256Hex(buffer)
     }
   }
 
@@ -555,7 +558,7 @@ export const useUploadStore = defineStore('upload', () => {
       groq: { name: 'Groq AI', icon: '⚡' },
       zhipu: { name: '智谱 GLM', icon: '🧠' },
       cloudflare: { name: 'Cloudflare AI', icon: '☁️' },
-      sub2api: { name: 'Grok', icon: '🤖' }
+      sub2api: { name: 'Sub2API', icon: '🤖' }
     }
     const display = providerDisplay[provider] || { name: provider, icon: '🤖' }
 

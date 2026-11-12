@@ -11,8 +11,10 @@ const zhipuRateLimiter = createZhipuRateLimiter()
 export class ZhipuProvider extends BaseAIProvider {
   constructor(config = {}) {
     super(config)
-    // 智谱 BigModel 官方 API，OpenAI 兼容协议，支持 CORS
-    this.baseUrl = config.baseUrl || 'https://open.bigmodel.cn/api/paas/v4'
+    // 本地开发使用同源代理，避免上游预检响应缺少跨域放行头。
+    this.baseUrl =
+      config.baseUrl ||
+      (import.meta.env.DEV ? '/zhipu/api/paas/v4' : 'https://open.bigmodel.cn/api/paas/v4')
   }
 
   validateCredentials(credentials) {
@@ -24,15 +26,22 @@ export class ZhipuProvider extends BaseAIProvider {
       throw new Error('Zhipu credentials are invalid')
     }
 
-    const { apiKey, model } = credentials
+    const { apiKey, model, maxTokens, temperature } = credentials
 
     return zhipuRateLimiter.execute(
-      () => this.requestAnalysis({ imageBase64, prompt, apiKey, model }),
+      () => this.requestAnalysis({ imageBase64, prompt, apiKey, model, maxTokens, temperature }),
       { provider: 'zhipu', model }
     )
   }
 
-  async requestAnalysis({ imageBase64, prompt, apiKey, model }) {
+  async requestAnalysis({
+    imageBase64,
+    prompt,
+    apiKey,
+    model,
+    maxTokens = 1024,
+    temperature = 0.7
+  }) {
     // 处理 base64 数据：如果已经包含 data URL 前缀，直接使用；否则添加前缀
     let imageUrl = imageBase64
     if (!imageBase64.startsWith('data:')) {
@@ -64,9 +73,8 @@ export class ZhipuProvider extends BaseAIProvider {
             ]
           }
         ],
-        temperature: 0.7,
-        // glm-4v-flash 免费模型 max_tokens 上限为 1024
-        max_tokens: 1024
+        temperature,
+        max_tokens: maxTokens
       })
     })
 
@@ -105,6 +113,9 @@ export class ZhipuProvider extends BaseAIProvider {
   }
 
   parseResponse(data) {
+    if (data.choices?.[0]?.finish_reason === 'length') {
+      throw new Error('智谱分析结果被输出额度截断，请提高模型输出上限或切换普通 Flash 模型。')
+    }
     let aiText = data.choices?.[0]?.message?.content || ''
 
     if (!aiText) {

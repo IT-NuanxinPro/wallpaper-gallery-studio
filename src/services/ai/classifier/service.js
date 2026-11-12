@@ -60,7 +60,8 @@ export async function analyzeImage({
         ...credentials,
         model: modelConfig.id,
         maxTokens: modelConfig.maxTokens,
-        temperature: modelConfig.temperature
+        temperature: modelConfig.temperature,
+        reasoningEffort: modelConfig.reasoningEffort
       }
     })
 

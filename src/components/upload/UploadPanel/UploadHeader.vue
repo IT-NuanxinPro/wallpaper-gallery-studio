@@ -349,7 +349,7 @@ function getCompactModelDescription(model) {
 
 function getProviderLabel(provider) {
   const labels = {
-    sub2api: 'Grok',
+    sub2api: 'Sub2API',
     groq: 'Groq',
     zhipu: '智谱 GLM',
     cloudflare: 'Cloudflare'

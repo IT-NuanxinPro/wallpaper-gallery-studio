@@ -59,7 +59,10 @@ export const useAIStore = defineStore('ai', () => {
       prompt,
       credentials: {
         ...credentials,
-        model: modelConfig.id
+        model: modelConfig.id,
+        maxTokens: modelConfig.maxTokens,
+        temperature: modelConfig.temperature,
+        reasoningEffort: modelConfig.reasoningEffort
       }
     })
 

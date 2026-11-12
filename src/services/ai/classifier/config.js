@@ -9,6 +9,20 @@ import { AI_PROVIDERS } from '../core'
  * 分类服务的模型配置
  */
 export const CLASSIFIER_MODELS = {
+  'sub2api-gpt-6.1-sol': {
+    id: 'gpt-6.1-sol',
+    name: 'GPT-6.1 Sol',
+    provider: AI_PROVIDERS.SUB2API,
+    description: '通过 sub2api 识别壁纸内容，生成分类、描述和文件名',
+    speed: 'fast',
+    accuracy: 'high',
+    cost: 'medium',
+    maxTokens: 4096,
+    temperature: 0.7,
+    reasoningEffort: 'low',
+    recommended: true
+  },
+
   // sub2api Grok 视觉模型（本地 Docker 与远程 API 共用模型标识）
   'sub2api-grok-4.6': {
     id: 'grok-4.6',
@@ -76,7 +90,8 @@ export const CLASSIFIER_MODELS = {
     speed: 'medium',
     accuracy: 'high',
     cost: 'low',
-    maxTokens: 1024,
+    // 思考与最终答案共享输出预算，1024 会在思考阶段截断。
+    maxTokens: 8192,
     temperature: 0.7,
     recommended: false
   },
@@ -112,12 +127,16 @@ export const CLASSIFIER_MODELS = {
 /**
  * 分类服务默认配置
  */
+const defaultModel = CLASSIFIER_MODELS[import.meta.env.VITE_AI_DEFAULT_MODEL]
+  ? import.meta.env.VITE_AI_DEFAULT_MODEL
+  : 'zhipu-glm-4v-flash'
+
 export const CLASSIFIER_CONFIG = {
-  // 默认 Provider（智谱 GLM 免费层无限流，优先于 Groq）
-  defaultProvider: AI_PROVIDERS.ZHIPU,
+  // 本地环境可以指定默认模型，Provider 与模型保持一致。
+  defaultProvider: CLASSIFIER_MODELS[defaultModel].provider,
 
   // 默认模型
-  defaultModel: 'zhipu-glm-4v-flash',
+  defaultModel,
 
   // 默认提示词模板
   defaultPromptTemplate: 'default',
@@ -134,8 +153,8 @@ export const CLASSIFIER_CONFIG = {
  * AI 助手默认配置（与分类服务共享模型列表）
  */
 export const ASSISTANT_CONFIG = {
-  defaultProvider: AI_PROVIDERS.ZHIPU,
-  defaultModel: 'zhipu-glm-4v-flash',
+  defaultProvider: CLASSIFIER_CONFIG.defaultProvider,
+  defaultModel,
   defaultSystemPrompt: 'default',
   conversation: {
     maxHistory: 20

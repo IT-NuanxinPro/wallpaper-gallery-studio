@@ -15,7 +15,7 @@ class HashWorker {
     if (this.worker) return
 
     // eslint-disable-next-line no-undef
-    this.worker = new Worker('/hash-worker.js')
+    this.worker = new Worker(new URL('./hash.worker.js', import.meta.url), { type: 'module' })
     this.worker.onmessage = e => {
       const { id, hash, success, error } = e.data
       const pending = this.pending.get(id)

@@ -25,6 +25,7 @@ export class OpenAICompatibleProvider extends BaseAIProvider {
       model,
       maxTokens = 4096,
       temperature = 0.7,
+      reasoningEffort,
       timeoutMs = Number(import.meta.env.VITE_SUB2API_TIMEOUT_MS) || 120000
     } = credentials
 
@@ -57,7 +58,8 @@ export class OpenAICompatibleProvider extends BaseAIProvider {
             }
           ],
           temperature,
-          max_tokens: maxTokens
+          max_tokens: maxTokens,
+          ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {})
         })
       })
     } catch (error) {
@@ -150,14 +152,14 @@ export class OpenAICompatibleProvider extends BaseAIProvider {
 
 /**
  * sub2api Provider
- * 开发环境通过 Vite 同源代理访问本地 Docker，生产环境直连远程 API。
+ * 开发环境通过 Vite 同源代理访问配置的网关，生产环境直连远程 API。
  */
 export class Sub2apiProvider extends OpenAICompatibleProvider {
   constructor(config = {}) {
     const defaultBaseUrl = import.meta.env.DEV ? '/sub2api/v1' : 'https://api.061129.xyz/v1'
 
     super({
-      name: 'Grok',
+      name: 'Sub2API',
       baseUrl: import.meta.env.VITE_SUB2API_BASE_URL || defaultBaseUrl,
       ...config
     })

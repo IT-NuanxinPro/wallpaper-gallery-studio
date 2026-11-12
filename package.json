@@ -27,6 +27,7 @@
   },
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.2",
+    "@noble/hashes": "2.4.0",
     "@vueuse/core": "^14.1.0",
     "element-plus": "^2.13.1",
     "gsap": "^3.14.2",

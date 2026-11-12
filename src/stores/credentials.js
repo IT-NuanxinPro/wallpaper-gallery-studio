@@ -206,7 +206,7 @@ export const useCredentialsStore = defineStore('credentials', () => {
     if (hasSub2apiEnvCredentials.value || sub2apiApiKey.value) {
       providers.push({
         key: AI_PROVIDERS.SUB2API,
-        name: 'Grok',
+        name: 'Sub2API',
         icon: '🤖',
         source: hasSub2apiEnvCredentials.value ? '环境变量' : '手动配置'
       })

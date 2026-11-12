@@ -87,10 +87,10 @@ export const PROVIDER_DISPLAY = {
     ]
   },
   [AI_PROVIDERS.SUB2API]: {
-    name: 'Grok',
+    name: 'Sub2API',
     icon: '🤖',
     color: '#13C2C2',
-    description: 'Grok 视觉模型，支持图片分类与元数据生成',
+    description: '兼容视觉模型网关，支持图片分类与元数据生成',
     credentialFields: [{ key: 'apiKey', label: 'API Key', type: 'password', required: true }]
   }
 }

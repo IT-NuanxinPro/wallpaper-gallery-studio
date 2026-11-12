@@ -85,7 +85,7 @@ const visibleTasks = computed(() =>
 )
 
 function getProviderLabel(provider) {
-  if (provider === 'sub2api') return 'Grok'
+  if (provider === 'sub2api') return 'Sub2API'
   if (provider === 'zhipu') return '智谱 GLM'
   if (provider === 'groq') return 'Groq'
   return provider || 'AI'
