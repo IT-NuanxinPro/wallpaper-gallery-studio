@@ -1,0 +1,208 @@
+:root {
+  --studio-motion-quick: 140ms;
+  --studio-motion-normal: 240ms;
+  --studio-motion-slow: 300ms;
+  --studio-ease-out: cubic-bezier(0.2, 0.75, 0.25, 1);
+  --studio-ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --el-transition-duration: 240ms;
+  --el-transition-duration-fast: 140ms;
+  --el-transition-function-ease-in-out-bezier: cubic-bezier(0.2, 0.75, 0.25, 1);
+  --el-transition-function-fast-bezier: cubic-bezier(0.2, 0.75, 0.25, 1);
+}
+
+.studio-page-enter-active,
+.studio-panel-enter-active {
+  transition:
+    opacity 220ms var(--studio-ease-out),
+    transform 220ms var(--studio-ease-out);
+}
+.studio-page-leave-active,
+.studio-panel-leave-active {
+  transition:
+    opacity 100ms var(--studio-ease-in),
+    transform 100ms var(--studio-ease-in);
+  pointer-events: none;
+}
+.studio-page-enter-from,
+.studio-panel-enter-from {
+  opacity: 0;
+  transform: translateY(7px);
+}
+.studio-page-leave-to,
+.studio-panel-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+.studio-feedback-enter-active {
+  transition:
+    opacity 180ms var(--studio-ease-out),
+    transform 180ms var(--studio-ease-out);
+}
+.studio-feedback-leave-active {
+  transition:
+    opacity 120ms var(--studio-ease-in),
+    transform 120ms var(--studio-ease-in);
+  pointer-events: none;
+}
+.studio-feedback-enter-from,
+.studio-feedback-leave-to {
+  opacity: 0;
+  transform: translateY(-4px) scale(0.985);
+}
+.studio-list-enter-active,
+.studio-list-leave-active,
+.studio-list-move {
+  transition:
+    opacity 220ms var(--studio-ease-out),
+    transform 240ms var(--studio-ease-out);
+}
+.studio-list-enter-from {
+  opacity: 0;
+  transform: translateY(8px);
+}
+.studio-list-leave-to {
+  opacity: 0;
+  transform: translateY(-5px) scale(0.985);
+}
+.studio-list-leave-active {
+  position: absolute;
+  left: 0;
+  right: 0;
+  pointer-events: none;
+}
+
+:where(
+  .studio-shell button:not(:disabled),
+  .studio-shell a,
+  .el-dialog .el-button,
+  .el-message-box .el-button
+) {
+  transition:
+    background-color 140ms ease,
+    color 140ms ease,
+    border-color 140ms ease,
+    box-shadow 180ms ease,
+    scale 140ms var(--studio-ease-out);
+}
+.studio-shell button:not(:disabled):active,
+.el-dialog .el-button:not(:disabled):active,
+.el-message-box .el-button:not(:disabled):active {
+  scale: 0.975;
+}
+:where(.studio-shell input, .studio-shell textarea) {
+  transition:
+    border-color 140ms ease,
+    box-shadow 180ms ease;
+}
+
+.el-zoom-in-top-enter-active,
+.el-zoom-in-top-leave-active,
+.el-zoom-in-bottom-enter-active,
+.el-zoom-in-bottom-leave-active {
+  transition:
+    opacity 180ms var(--studio-ease-out),
+    transform 220ms var(--studio-ease-out);
+}
+.el-zoom-in-top-enter-from,
+.el-zoom-in-top-leave-active {
+  opacity: 0;
+  transform: translateY(-4px) scale(0.97);
+}
+.el-zoom-in-bottom-enter-from,
+.el-zoom-in-bottom-leave-active {
+  opacity: 0;
+  transform: translateY(4px) scale(0.97);
+}
+.el-collapse-transition-enter-active,
+.el-collapse-transition-leave-active,
+.collapse-transition {
+  transition-timing-function: var(--studio-ease-out);
+}
+.el-segmented__item-selected {
+  transition:
+    width 240ms var(--studio-ease-out),
+    transform 240ms var(--studio-ease-out),
+    opacity 140ms ease;
+}
+
+.studio-shell [data-scroll-region] {
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(190, 207, 231, 0.3) transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html
+    :is(
+      .modal-enter-active,
+      .modal-leave-active,
+      .dialog-enter-active,
+      .dialog-leave-active,
+      .dropdown-enter-active,
+      .dropdown-leave-active,
+      .preview-enter-active,
+      .preview-leave-active,
+      .slide-enter-active,
+      .slide-leave-active,
+      .fade-enter-active,
+      .fade-leave-active,
+      .toast-enter-active,
+      .toast-leave-active,
+      .toast-move,
+      .el-dialog,
+      .el-message-box,
+      .el-overlay,
+      .el-drawer,
+      .el-message,
+      .el-notification,
+      .el-popper
+    ),
+  html :is(.modal-enter-active, .modal-leave-active, .dialog-enter-active, .dialog-leave-active) * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+    transition-delay: 0ms !important;
+  }
+  .studio-page-enter-active,
+  .studio-page-leave-active,
+  .studio-panel-enter-active,
+  .studio-panel-leave-active,
+  .studio-feedback-enter-active,
+  .studio-feedback-leave-active,
+  .studio-list-enter-active,
+  .studio-list-leave-active,
+  .studio-list-move,
+  .el-zoom-in-top-enter-active,
+  .el-zoom-in-top-leave-active,
+  .el-zoom-in-bottom-enter-active,
+  .el-zoom-in-bottom-leave-active,
+  .el-collapse-transition-enter-active,
+  .el-collapse-transition-leave-active,
+  .collapse-transition,
+  .el-segmented__item-selected {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+  .studio-page-enter-from,
+  .studio-page-leave-to,
+  .studio-panel-enter-from,
+  .studio-panel-leave-to,
+  .studio-feedback-enter-from,
+  .studio-feedback-leave-to,
+  .studio-list-enter-from,
+  .studio-list-leave-to {
+    transform: none;
+  }
+  .studio-shell button,
+  .studio-shell a,
+  .studio-shell input,
+  .studio-shell textarea {
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .studio-shell button:active,
+  .el-dialog .el-button:active,
+  .el-message-box .el-button:active {
+    scale: 1;
+  }
+}

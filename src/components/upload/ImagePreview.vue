@@ -1,16 +1,19 @@
 <template>
   <div class="image-preview" :class="{ 'image-preview--collapsed': collapsed }">
-    <!-- 预览区域 -->
     <div class="image-preview__section">
       <div class="image-preview__header">
-        <h3>📷 预览</h3>
+        <h3>
+          <el-icon><Picture /></el-icon>预览
+        </h3>
         <button
           v-if="collapsed"
           class="image-preview__toggle"
           :aria-label="collapsed ? '展开预览' : '收起预览'"
           @click="$emit('toggle')"
         >
-          <span class="image-preview__toggle-icon">{{ collapsed ? '▾' : '▴' }}</span>
+          <el-icon class="image-preview__toggle-icon"
+            ><ArrowDown v-if="collapsed" /><ArrowUp v-else
+          /></el-icon>
         </button>
       </div>
       <div class="image-preview__body" :class="{ 'image-preview__body--hidden': collapsed }">
@@ -29,7 +32,7 @@
               </div>
             </div>
             <div v-else class="image-preview__empty">
-              <span class="image-preview__empty-icon">👆</span>
+              <el-icon class="image-preview__empty-icon"><Picture /></el-icon>
               <p>点击左侧图片预览</p>
             </div>
           </Transition>
@@ -40,6 +43,7 @@
 </template>
 
 <script setup>
+import { Picture, ArrowDown, ArrowUp } from '@element-plus/icons-vue'
 defineProps({
   collapsed: { type: Boolean, default: false },
   file: { type: Object, default: null }
@@ -72,10 +76,9 @@ function getFileType(type) {
     flex: 1;
     display: flex;
     flex-direction: column;
-    background: $glass-bg;
-    backdrop-filter: blur($glass-blur);
-    border: 1px solid $glass-border;
-    border-radius: $radius-xl;
+    background: var(--studio-surface);
+    border: 1px solid var(--studio-border);
+    border-radius: 16px;
     padding: $spacing-4;
     min-height: 0;
     overflow: hidden;
@@ -90,6 +93,9 @@ function getFileType(type) {
     margin-bottom: $spacing-3;
 
     h3 {
+      display: flex;
+      align-items: center;
+      gap: 8px;
       font-size: $font-size-sm;
       font-weight: 600;
       color: $white;
@@ -204,10 +210,10 @@ function getFileType(type) {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    color: $gray-600;
+    color: var(--studio-muted);
     &-icon {
-      font-size: 40px;
-      opacity: 0.4;
+      font-size: 30px;
+      opacity: 1;
       margin-bottom: $spacing-3;
     }
     p {
@@ -228,7 +234,6 @@ function getFileType(type) {
   }
 }
 
-// 过渡动画
 .preview-enter-active,
 .preview-leave-active {
   transition: all $duration-normal $ease-out;

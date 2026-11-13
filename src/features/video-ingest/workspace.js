@@ -15,6 +15,7 @@ export function createVideoWorkspace({ api, owner, storage = globalThis.localSto
   const reviewBusy = ref(false)
   const publishing = ref(false)
   const sessions = reactive({})
+  const publishedIds = new Set()
   const storageKey = `video-publications:${owner || 'unknown'}`
   let refreshPromise
   let topicsPromise
@@ -27,15 +28,17 @@ export function createVideoWorkspace({ api, owner, storage = globalThis.localSto
     if (Array.isArray(restored))
       trackedIds = restored.filter(id => typeof id === 'string').slice(-100)
   } catch {
-    /* 本地缓存损坏不影响从服务端任务恢复。 */
+    trackedIds = []
   }
 
   const selectedJob = computed(() => jobs.value.find(job => job.id === selectedJobId.value) || null)
   const activeSession = computed(() => sessions[selectedJobId.value])
   const reviewDraft = computed({
-    get: () => activeSession.value?.draft || null,
+    get: () =>
+      activeSession.value?.draft ||
+      (selectedJob.value ? createReviewDraft(selectedJob.value) : null),
     set: value => {
-      if (activeSession.value) activeSession.value.draft = value
+      if (activeSession.value && canReview(selectedJob.value)) activeSession.value.draft = value
     }
   })
   const draftRevision = computed(() => activeSession.value?.revision)
@@ -49,8 +52,14 @@ export function createVideoWorkspace({ api, owner, storage = globalThis.localSto
     Object.values(sessions).some(session => JSON.stringify(session.draft) !== session.baseline)
   )
   const publishableJobs = computed(() => jobs.value.filter(canPublish))
+  const pendingJobs = computed(() => jobs.value.filter(job => job.status !== 'published'))
+  const publishedJobs = computed(() => jobs.value.filter(job => job.status === 'published'))
 
   function resetSession(job) {
+    if (!canReview(job)) {
+      delete sessions[job.id]
+      return
+    }
     const draft = createReviewDraft(job)
     sessions[job.id] = {
       draft,
@@ -86,19 +95,33 @@ export function createVideoWorkspace({ api, owner, storage = globalThis.localSto
   }
 
   function selectJob(id) {
-    selectedJobId.value = id
+    selectedJobId.value = jobs.value.some(job => job.id === id) ? id : ''
     const job = selectedJob.value
     if (job && !sessions[id]) resetSession(job)
+  }
+
+  function selectNextPending() {
+    selectJob(pendingJobs.value[0]?.id || '')
   }
 
   function upsertJob(job, { acceptReview = false } = {}) {
     const existing = jobs.value.find(item => item.id === job.id)
     if (existing && existing.revision > job.revision) return
+    if (job.status === 'published') publishedIds.add(job.id)
+    if (publishedIds.has(job.id) && job.status !== 'published')
+      job = { ...job, status: 'published' }
     jobs.value = existing
       ? jobs.value.map(item => (item.id === job.id ? job : item))
       : [job, ...jobs.value]
+    if (job.status === 'published') {
+      delete sessions[job.id]
+      selectedIds.value = selectedIds.value.filter(id => id !== job.id)
+
+      if (selectedJobId.value === job.id && existing?.status !== 'published') selectNextPending()
+      return
+    }
     const session = sessions[job.id]
-    if (acceptReview) resetSession(job)
+    if (acceptReview || (!session && canReview(job))) resetSession(job)
     else if (session && session.revision !== job.revision) {
       if (JSON.stringify(session.draft) === session.baseline) resetSession(job)
       else
@@ -115,7 +138,7 @@ export function createVideoWorkspace({ api, owner, storage = globalThis.localSto
     try {
       storage?.setItem(storageKey, JSON.stringify(trackedIds))
     } catch {
-      /* 存储不可用时仍通过job恢复。 */
+      return
     }
   }
 
@@ -125,6 +148,14 @@ export function createVideoWorkspace({ api, owner, storage = globalThis.localSto
       ...publications.value.filter(item => item.id !== publication.id)
     ].sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))
     rememberPublication(publication.id)
+    if (publication.status === 'published') {
+      for (const frozen of publication.jobs || []) {
+        const current = jobs.value.find(
+          job => job.id === frozen.id && job.publicationId === publication.id
+        )
+        if (current) upsertJob({ ...current, status: 'published' })
+      }
+    }
   }
 
   async function refresh() {
@@ -136,12 +167,13 @@ export function createVideoWorkspace({ api, owner, storage = globalThis.localSto
         if (disposed) return
         const ids = new Set(data.jobs.map(job => job.id))
         jobs.value = jobs.value.filter(job => ids.has(job.id))
+        for (const id of Object.keys(sessions)) if (!ids.has(id)) delete sessions[id]
         data.jobs.forEach(job => upsertJob(job))
         jobs.value.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))
         selectedIds.value = selectedIds.value.filter(id =>
           jobs.value.some(job => job.id === id && canPublish(job))
         )
-        if (!selectedJob.value) selectJob(jobs.value[0]?.id || '')
+        if (!selectedJob.value) selectNextPending()
         for (const job of jobs.value) if (job.publicationId) rememberPublication(job.publicationId)
         const results = await Promise.allSettled(trackedIds.map(id => api.getPublication(id)))
         const failures = {}
@@ -168,11 +200,10 @@ export function createVideoWorkspace({ api, owner, storage = globalThis.localSto
 
   async function recordConflict(failure, id) {
     if (failure.status !== 409 && !/CONFLICT|LEASE/.test(failure.code || '')) return
-    try {
-      upsertJob(await api.getJob(id))
-    } catch {
-      /* 保留原始冲突错误。 */
-    }
+    await api
+      .getJob(id)
+      .then(job => upsertJob(job))
+      .catch(() => undefined)
     if (sessions[id])
       sessions[id].conflict = {
         remoteRevision: jobs.value.find(job => job.id === id)?.revision,
@@ -222,12 +253,11 @@ export function createVideoWorkspace({ api, owner, storage = globalThis.localSto
       return updated
     } catch (failure) {
       await recordConflict(failure, job.id)
-      // 领取/释放AI租约也可能提升版本，失败后刷新但保留未保存草稿。
-      try {
-        upsertJob(await api.getJob(job.id))
-      } catch {
-        /* 主错误由调用方展示。 */
-      }
+
+      await api
+        .getJob(job.id)
+        .then(updated => upsertJob(updated))
+        .catch(() => undefined)
       throw failure
     } finally {
       reviewBusy.value = false
@@ -308,6 +338,8 @@ export function createVideoWorkspace({ api, owner, storage = globalThis.localSto
     isDirty,
     hasUnsavedDrafts,
     publishableJobs,
+    pendingJobs,
+    publishedJobs,
     reviewBusy,
     publishing,
     refresh,

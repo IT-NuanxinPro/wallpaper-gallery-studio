@@ -8,7 +8,11 @@ import { previewManager } from '@/utils/previewManager'
 
 // 本组验证文件入列与重复检测，不触发外部模型调用。
 vi.mock('./credentials', () => ({
-  useCredentialsStore: () => ({ hasCredentials: false })
+  useCredentialsStore: () => ({
+    hasCredentials: false,
+    loadCredentials: async () => {},
+    getCredentialsByProvider: () => ({ apiKey: '' })
+  })
 }))
 
 beforeEach(() => {

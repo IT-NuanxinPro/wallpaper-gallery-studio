@@ -11,11 +11,9 @@ describe('固定 AI 模型', () => {
     async previousModel => {
       vi.stubEnv('VITE_AI_DEFAULT_MODEL', previousModel)
       vi.resetModules()
-      const { CLASSIFIER_CONFIG, ASSISTANT_CONFIG, getModelByKey, getModelList } =
-        await import('./config')
+      const { CLASSIFIER_CONFIG, getModelByKey, getModelList } = await import('./config')
       expect(CLASSIFIER_CONFIG.defaultProvider).toBe('sub2api')
       expect(CLASSIFIER_CONFIG.defaultModel).toBe('sub2api-gpt-6.1-sol')
-      expect(ASSISTANT_CONFIG.defaultProvider).toBe('sub2api')
       expect(getModelByKey(CLASSIFIER_CONFIG.defaultModel).id).toBe('gpt-6.1-sol')
       expect(getModelList().map(model => model.key)).toEqual(['sub2api-gpt-6.1-sol'])
       expect(getModelByKey(previousModel)).toBeNull()

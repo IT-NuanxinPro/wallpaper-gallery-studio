@@ -1,41 +1,32 @@
-// ============================================
-// 壁纸上传管理系统 - 设计系统变量
-// ============================================
+$primary-start: #8eb7ee;
+$primary-end: #6d9bd7;
+$primary-gradient: linear-gradient(135deg, #386db4 0%, #386db4 100%);
 
-// 主色调 - 紫色渐变
-$primary-start: #8b5cf6;
-$primary-end: #6366f1;
-$primary-gradient: linear-gradient(135deg, $primary-start 0%, $primary-end 100%);
-
-// 辅助色
 $success: #10b981;
 $warning: #f59e0b;
 $danger: #ef4444;
 $info: #3b82f6;
 
-// 中性色
 $white: #ffffff;
 $gray-50: #f9fafb;
 $gray-100: #f3f4f6;
 $gray-200: #e5e7eb;
-$gray-300: #d1d5db;
-$gray-400: #9ca3af;
-$gray-500: #6b7280;
-$gray-600: #4b5563;
-$gray-700: #374151;
-$gray-800: #1f2937;
-$gray-900: #111827;
+$gray-300: #bdc2cc;
+$gray-400: #a1a6b0;
+$gray-500: #858d99;
+$gray-600: #555d69;
+$gray-700: #30343b;
+$gray-800: #22252a;
+$gray-900: #111214;
 $black: #000000;
 
-// 毛玻璃效果
-$glass-bg: rgba(255, 255, 255, 0.1);
-$glass-bg-light: rgba(255, 255, 255, 0.15);
-$glass-bg-dark: rgba(255, 255, 255, 0.05);
+$glass-bg: #191b1e;
+$glass-bg-light: #22252a;
+$glass-bg-dark: #15171a;
 $glass-blur: 20px;
-$glass-border: rgba(255, 255, 255, 0.2);
+$glass-border: #30343b;
 $glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
 
-// 间距 (8px 网格)
 $spacing-1: 4px;
 $spacing-2: 8px;
 $spacing-3: 12px;
@@ -47,7 +38,6 @@ $spacing-10: 40px;
 $spacing-12: 48px;
 $spacing-16: 64px;
 
-// 圆角
 $radius-sm: 8px;
 $radius-md: 12px;
 $radius-lg: 16px;
@@ -55,25 +45,21 @@ $radius-xl: 24px;
 $radius-2xl: 32px;
 $radius-full: 9999px;
 
-// 阴影
 $shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
 $shadow-md: 0 4px 6px rgba(0, 0, 0, 0.1);
 $shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.1);
 $shadow-xl: 0 20px 25px rgba(0, 0, 0, 0.15);
 $shadow-glow: 0 0 40px rgba(139, 92, 246, 0.3);
 
-// 动画时长
 $duration-fast: 0.15s;
 $duration-normal: 0.3s;
 $duration-slow: 0.5s;
 $duration-slower: 0.8s;
 
-// 缓动函数
 $ease-out: cubic-bezier(0.33, 1, 0.68, 1);
 $ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
 $ease-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
 
-// 字体
 $font-family:
   'PingFang SC',
   'Microsoft YaHei',
@@ -88,7 +74,6 @@ $font-size-xl: 20px;
 $font-size-2xl: 24px;
 $font-size-3xl: 30px;
 
-// 层级
 $z-dropdown: 100;
 $z-modal: 200;
 $z-toast: 300;

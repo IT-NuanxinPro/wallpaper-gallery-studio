@@ -1,798 +1,371 @@
-// ============================================
-// Element Plus 暗色主题覆盖
-// 配合项目紫色渐变主题
-// ============================================
-
 @use 'sass:color';
 @use './variables' as *;
 
-// 暗色模式 CSS 变量覆盖
 html.dark {
-  // 主色 - 紫色
-  --el-color-primary: #{$primary-start};
-  --el-color-primary-light-3: #{color.adjust($primary-start, $lightness: 10%)};
-  --el-color-primary-light-5: #{color.adjust($primary-start, $lightness: 20%)};
-  --el-color-primary-light-7: #{color.adjust($primary-start, $lightness: 30%)};
-  --el-color-primary-light-8: #{color.adjust($primary-start, $lightness: 35%)};
-  --el-color-primary-light-9: #{color.adjust($primary-start, $lightness: 40%)};
-  --el-color-primary-dark-2: #{color.adjust($primary-start, $lightness: -10%)};
-
-  // 成功色
-  --el-color-success: #{$success};
-  --el-color-success-light-3: #{color.adjust($success, $lightness: 15%)};
-  --el-color-success-light-5: #{color.adjust($success, $lightness: 25%)};
-  --el-color-success-light-7: #{color.adjust($success, $lightness: 35%)};
-  --el-color-success-light-8: #{color.adjust($success, $lightness: 40%)};
-  --el-color-success-light-9: #{color.adjust($success, $lightness: 45%)};
-
-  // 警告色
-  --el-color-warning: #{$warning};
-  --el-color-warning-light-3: #{color.adjust($warning, $lightness: 15%)};
-  --el-color-warning-light-5: #{color.adjust($warning, $lightness: 25%)};
-  --el-color-warning-light-7: #{color.adjust($warning, $lightness: 35%)};
-  --el-color-warning-light-8: #{color.adjust($warning, $lightness: 40%)};
-  --el-color-warning-light-9: #{color.adjust($warning, $lightness: 45%)};
-
-  // 危险色
-  --el-color-danger: #{$danger};
-  --el-color-danger-light-3: #{color.adjust($danger, $lightness: 15%)};
-  --el-color-danger-light-5: #{color.adjust($danger, $lightness: 25%)};
-  --el-color-danger-light-7: #{color.adjust($danger, $lightness: 35%)};
-  --el-color-danger-light-8: #{color.adjust($danger, $lightness: 40%)};
-  --el-color-danger-light-9: #{color.adjust($danger, $lightness: 45%)};
-
-  // 信息色
-  --el-color-info: #{$gray-400};
-
-  // 背景色 - 深色
-  --el-bg-color: #{$gray-900};
-  --el-bg-color-page: #{$gray-900};
-  --el-bg-color-overlay: #{$gray-800};
-
-  // 文字色
-  --el-text-color-primary: #{$white};
-  --el-text-color-regular: #{$gray-200};
-  --el-text-color-secondary: #{$gray-400};
-  --el-text-color-placeholder: #{$gray-500};
-  --el-text-color-disabled: #{$gray-600};
-
-  // 边框色
-  --el-border-color: #{$gray-700};
-  --el-border-color-light: #{$gray-700};
-  --el-border-color-lighter: #{$gray-800};
-  --el-border-color-extra-light: #{$gray-800};
-  --el-border-color-dark: #{$gray-600};
-  --el-border-color-darker: #{$gray-500};
-
-  // 填充色
-  --el-fill-color: #{$gray-800};
-  --el-fill-color-light: #{$gray-800};
-  --el-fill-color-lighter: #{$gray-900};
-  --el-fill-color-extra-light: #{$gray-900};
-  --el-fill-color-dark: #{$gray-700};
-  --el-fill-color-darker: #{$gray-600};
-  --el-fill-color-blank: #{$gray-900};
-
-  // 遮罩
-  --el-mask-color: rgba(0, 0, 0, 0.8);
-  --el-mask-color-extra-light: rgba(0, 0, 0, 0.5);
-
-  // 阴影
-  --el-box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
-  --el-box-shadow-light: 0 2px 8px rgba(0, 0, 0, 0.3);
-  --el-box-shadow-lighter: 0 1px 4px rgba(0, 0, 0, 0.2);
-  --el-box-shadow-dark: 0 8px 32px rgba(0, 0, 0, 0.5);
+  --el-color-primary: #8eb7ee;
+  --el-color-primary-dark-2: #709bda;
+  @each $level in 3, 5, 7, 8, 9 {
+    --el-color-primary-light-#{$level}: #{color.mix(#191b1e, #8eb7ee, $level * 10%)};
+  }
+  --el-color-success: #6dccac;
+  --el-color-warning: #e6ba71;
+  --el-color-danger: #eb9298;
+  --el-color-info: #a1a6b0;
+  --el-bg-color: #191b1e;
+  --el-bg-color-page: #111214;
+  --el-bg-color-overlay: #22252a;
+  --el-text-color-primary: #f3f4f6;
+  --el-text-color-regular: #c7cbd3;
+  --el-text-color-secondary: #a1a6b0;
+  --el-text-color-placeholder: #939aa6;
+  --el-text-color-disabled: #78808c;
+  --el-border-color: #30343b;
+  --el-border-color-light: #30343b;
+  --el-border-color-lighter: #282b30;
+  --el-border-color-extra-light: #24272c;
+  --el-border-color-dark: #424853;
+  --el-border-color-darker: #555d69;
+  --el-fill-color: #282c32;
+  --el-fill-color-light: #22252a;
+  --el-fill-color-lighter: #1c1f23;
+  --el-fill-color-extra-light: #17191c;
+  --el-fill-color-dark: #30343b;
+  --el-fill-color-darker: #3a4049;
+  --el-fill-color-blank: #191b1e;
+  --el-mask-color: rgba(0, 0, 0, 0.68);
+  --el-mask-color-extra-light: rgba(0, 0, 0, 0.45);
+  --el-border-radius-base: 12px;
+  --el-border-radius-small: 8px;
+  --el-box-shadow: 0 10px 28px rgba(0, 0, 0, 0.24);
+  --el-box-shadow-light: 0 6px 16px rgba(0, 0, 0, 0.2);
+  --el-box-shadow-lighter: 0 2px 6px rgba(0, 0, 0, 0.15);
+  --el-box-shadow-dark: 0 16px 40px rgba(0, 0, 0, 0.35);
 }
 
-// ============================================
-// 组件样式覆盖
-// ============================================
-
-// 按钮 - 圆角化设计
 .el-button {
-  border-radius: $radius-lg !important;
-  transition: all $duration-normal $ease-out !important;
-  font-weight: 500 !important;
-
-  &:not(.is-text):not(.is-link):hover {
-    transform: translateY(-2px);
+  border-radius: 999px;
+  font-weight: 550;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease;
+  &:focus-visible {
+    outline: 2px solid var(--studio-accent);
+    outline-offset: 3px;
   }
-
-  &--primary {
-    background: $primary-gradient !important;
-    border: none !important;
-    box-shadow: 0 4px 16px rgba($primary-start, 0.3);
-
-    &:hover,
-    &:focus {
-      background: linear-gradient(
-        135deg,
-        color.adjust($primary-start, $lightness: 5%) 0%,
-        color.adjust($primary-end, $lightness: 5%) 100%
-      ) !important;
-      box-shadow: 0 6px 20px rgba($primary-start, 0.4);
-    }
-  }
-
-  &--success {
-    box-shadow: 0 4px 12px rgba($success, 0.3);
-    border-radius: $radius-lg !important;
-  }
-
-  &--warning {
-    box-shadow: 0 4px 12px rgba($warning, 0.3);
-    border-radius: $radius-lg !important;
-  }
-
-  &--danger {
-    box-shadow: 0 4px 12px rgba($danger, 0.3);
-    border-radius: $radius-lg !important;
-  }
-
-  &.is-plain {
-    background: rgba(255, 255, 255, 0.05) !important;
-    border: 1px solid rgba(255, 255, 255, 0.2) !important;
-
-    &.el-button--primary {
-      color: $primary-start !important;
-      border-color: rgba($primary-start, 0.5) !important;
-
-      &:hover {
-        background: rgba($primary-start, 0.1) !important;
-        border-color: $primary-start !important;
-      }
-    }
-  }
-
-  &.is-round {
-    border-radius: $radius-full !important;
+  &--primary:not(.is-text):not(.is-link):not(.is-plain) {
+    --el-button-bg-color: #0a67d4;
+    --el-button-border-color: #438ce3;
+    --el-button-text-color: #fff;
+    --el-button-hover-bg-color: #1b7ce9;
+    --el-button-hover-border-color: #6096db;
+    --el-button-hover-text-color: #fff;
+    --el-button-active-bg-color: #3262a3;
+    --el-button-active-border-color: #467fc8;
+    --el-button-disabled-bg-color: #27374d;
+    --el-button-disabled-border-color: #303d50;
+    --el-button-disabled-text-color: #9aa7bc;
   }
 }
 
-// 输入框 - 圆角化
-.el-input {
-  .el-input__wrapper {
-    background: rgba(255, 255, 255, 0.05) !important;
-    border-radius: $radius-lg !important;
-    box-shadow: none !important;
-    border: 1px solid rgba(255, 255, 255, 0.15) !important;
-    transition: all $duration-normal !important;
-
-    &:hover {
-      border-color: rgba(255, 255, 255, 0.25) !important;
-    }
-
-    &.is-focus {
-      border-color: $primary-start !important;
-      box-shadow: 0 0 0 3px rgba($primary-start, 0.2) !important;
-    }
-  }
-
-  .el-input__inner {
-    color: $white !important;
-
-    &::placeholder {
-      color: $gray-500 !important;
-    }
-  }
+.el-input__wrapper,
+.el-select__wrapper,
+.el-textarea__inner,
+.el-input-number {
+  border-radius: 12px;
+  background: rgba(7, 12, 22, 0.27);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.12) inset,
+    0 1px 1px rgba(0, 0, 0, 0.1);
+  transition:
+    box-shadow 160ms ease,
+    background-color 160ms ease;
 }
-
-// 选择器 - 圆角化
-.el-select {
-  .el-select__wrapper {
-    background: rgba(255, 255, 255, 0.05) !important;
-    border-radius: $radius-lg !important;
-    border: 1px solid rgba(255, 255, 255, 0.15) !important;
-    box-shadow: none !important;
-
-    &:hover {
-      border-color: rgba(255, 255, 255, 0.25) !important;
-    }
-
-    &.is-focused {
-      border-color: $primary-start !important;
-      box-shadow: 0 0 0 3px rgba($primary-start, 0.2) !important;
-    }
-  }
-
-  .el-select__input {
-    color: $white !important;
-  }
-
-  .el-select__placeholder {
-    color: $gray-500 !important;
-  }
+.el-input__wrapper.is-focus,
+.el-select__wrapper.is-focused,
+.el-textarea__inner:focus {
+  box-shadow:
+    0 0 0 1px #8eb7ee inset,
+    0 0 0 3px rgba(142, 183, 238, 0.12);
 }
-
-// 下拉菜单 - 毛玻璃
-.el-select-dropdown,
-.el-dropdown-menu,
-.el-popper {
-  background: rgba(31, 41, 55, 0.95) !important;
-  backdrop-filter: blur(20px) !important;
-  border: 1px solid rgba(255, 255, 255, 0.15) !important;
-  border-radius: $radius-xl !important;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4) !important;
-
-  .el-select-dropdown__item,
-  .el-dropdown-menu__item {
-    color: $gray-200 !important;
-    border-radius: $radius-md !important;
-    margin: 4px 8px !important;
-
-    &:hover,
-    &.hover {
-      background: rgba(255, 255, 255, 0.1) !important;
-      color: $white !important;
-    }
-
-    &.is-selected,
-    &.selected {
-      background: rgba($primary-start, 0.15) !important;
-      color: $primary-start !important;
-      font-weight: 500;
-    }
-  }
-
-  .el-popper__arrow::before {
-    background: rgba(31, 41, 55, 0.95) !important;
-    border-color: rgba(255, 255, 255, 0.15) !important;
-  }
+.el-input__inner,
+.el-select__input,
+.el-textarea__inner {
+  color: var(--studio-text);
 }
-
-// 对话框 - 毛玻璃风格
-.el-dialog {
-  background: rgba(31, 41, 55, 0.95) !important;
-  backdrop-filter: blur(20px) !important;
-  border: 1px solid rgba(255, 255, 255, 0.15) !important;
-  border-radius: $radius-xl !important;
-  box-shadow: 0 25px 50px rgba(0, 0, 0, 0.5) !important;
-
-  .el-dialog__header {
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
-    padding: $spacing-5 $spacing-6 !important;
-  }
-
-  .el-dialog__title {
-    color: $white !important;
-    font-weight: 600;
-  }
-
-  .el-dialog__body {
-    color: $gray-200 !important;
-    padding: $spacing-6 !important;
-  }
-
-  .el-dialog__footer {
-    border-top: 1px solid rgba(255, 255, 255, 0.1) !important;
-    padding: $spacing-4 $spacing-6 !important;
-  }
-
-  .el-dialog__headerbtn {
-    width: 32px !important;
-    height: 32px !important;
-    top: 16px !important;
-    right: 16px !important;
-    background: rgba(255, 255, 255, 0.1) !important;
-    border-radius: $radius-md !important;
-
-    .el-dialog__close {
-      color: $gray-400 !important;
-
-      &:hover {
-        color: $white !important;
-      }
-    }
-  }
+.el-select__placeholder:not(.is-transparent) {
+  color: var(--studio-text);
 }
-
-// 消息框 - 毛玻璃风格
-.el-message-box {
-  background: rgba(31, 41, 55, 0.95) !important;
-  backdrop-filter: blur(20px) !important;
-  border: 1px solid rgba(255, 255, 255, 0.15) !important;
-  border-radius: $radius-xl !important;
-  box-shadow: 0 25px 50px rgba(0, 0, 0, 0.5) !important;
-
-  .el-message-box__header {
-    padding: $spacing-5 $spacing-6 $spacing-3 !important;
-  }
-
-  .el-message-box__title {
-    color: $white !important;
-    font-weight: 600 !important;
-  }
-
-  .el-message-box__content {
-    color: $gray-300 !important;
-    padding: $spacing-3 $spacing-6 !important;
-  }
-
-  .el-message-box__btns {
-    padding: $spacing-4 $spacing-6 $spacing-5 !important;
-
-    .el-button--primary {
-      background: $primary-gradient !important;
-      border: none !important;
-      border-radius: $radius-lg !important;
-    }
-
-    .el-button:not(.el-button--primary) {
-      background: rgba(255, 255, 255, 0.1) !important;
-      border: 1px solid rgba(255, 255, 255, 0.2) !important;
-      border-radius: $radius-lg !important;
-      color: $gray-300 !important;
-
-      &:hover {
-        background: rgba(255, 255, 255, 0.15) !important;
-        color: $white !important;
-      }
-    }
-  }
-
-  .el-message-box__headerbtn {
-    width: 32px !important;
-    height: 32px !important;
-    top: 12px !important;
-    right: 12px !important;
-    background: rgba(255, 255, 255, 0.1) !important;
-    border-radius: $radius-md !important;
-
-    .el-message-box__close {
-      color: $gray-400 !important;
-
-      &:hover {
-        color: $white !important;
-      }
-    }
-  }
+.el-form-item__label {
+  font-size: 13px;
+  color: #c7cbd3;
 }
-
-// 消息提示 - 毛玻璃风格
-.el-message {
-  background: rgba(31, 41, 55, 0.95) !important;
-  backdrop-filter: blur(20px) !important;
-  border: 1px solid rgba(255, 255, 255, 0.15) !important;
-  border-radius: $radius-lg !important;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4) !important;
-  padding: $spacing-3 $spacing-5 !important;
-
-  .el-message__content {
-    color: $gray-200 !important;
-  }
-
-  &--success {
-    background: rgba(16, 185, 129, 0.15) !important;
-    border-color: rgba(16, 185, 129, 0.3) !important;
-
-    .el-message__content {
-      color: #34d399 !important;
-    }
-  }
-
-  &--warning {
-    background: rgba(245, 158, 11, 0.15) !important;
-    border-color: rgba(245, 158, 11, 0.3) !important;
-
-    .el-message__content {
-      color: #fbbf24 !important;
-    }
-  }
-
-  &--error {
-    background: rgba(239, 68, 68, 0.15) !important;
-    border-color: rgba(239, 68, 68, 0.3) !important;
-
-    .el-message__content {
-      color: #f87171 !important;
-    }
-  }
-
-  &--info {
-    background: rgba(59, 130, 246, 0.15) !important;
-    border-color: rgba(59, 130, 246, 0.3) !important;
-
-    .el-message__content {
-      color: #60a5fa !important;
-    }
-  }
-}
-
-// 警告提示 - 圆角化
-.el-alert {
-  border-radius: $radius-xl !important;
-
-  &--success {
-    background: rgba($success, 0.1) !important;
-    border: 1px solid rgba($success, 0.2) !important;
-
-    .el-alert__title,
-    .el-alert__description {
-      color: #34d399 !important;
-    }
-  }
-
-  &--warning {
-    background: rgba($warning, 0.1) !important;
-    border: 1px solid rgba($warning, 0.2) !important;
-
-    .el-alert__title,
-    .el-alert__description {
-      color: #fbbf24 !important;
-    }
-  }
-
-  &--error {
-    background: rgba($danger, 0.1) !important;
-    border: 1px solid rgba($danger, 0.2) !important;
-
-    .el-alert__title,
-    .el-alert__description {
-      color: #f87171 !important;
-    }
-  }
-
-  &--info {
-    background: rgba($info, 0.1) !important;
-    border: 1px solid rgba($info, 0.2) !important;
-
-    .el-alert__title,
-    .el-alert__description {
-      color: #60a5fa !important;
-    }
-  }
-}
-
-// 进度条
-.el-progress {
-  .el-progress-bar__outer {
-    background: $gray-700 !important;
-    border-radius: $radius-full !important;
-  }
-
-  .el-progress-bar__inner {
-    background: $primary-gradient !important;
-    border-radius: $radius-full !important;
-  }
-
-  .el-progress__text {
-    color: $gray-300 !important;
-  }
-
-  &--circle {
-    .el-progress-circle__track {
-      stroke: $gray-700 !important;
-    }
-
-    .el-progress-circle__path {
-      stroke: $primary-start !important;
-    }
-  }
-}
-
-// 标签 - 圆角化
-.el-tag {
-  border-radius: $radius-md !important;
-
-  &--primary {
-    background: rgba($primary-start, 0.15) !important;
-    border-color: rgba($primary-start, 0.3) !important;
-    color: $primary-start !important;
-  }
-
-  &--success {
-    background: rgba($success, 0.15) !important;
-    border-color: rgba($success, 0.3) !important;
-    color: #34d399 !important;
-  }
-
-  &--warning {
-    background: rgba($warning, 0.15) !important;
-    border-color: rgba($warning, 0.3) !important;
-    color: #fbbf24 !important;
-  }
-
-  &--danger {
-    background: rgba($danger, 0.15) !important;
-    border-color: rgba($danger, 0.3) !important;
-    color: #f87171 !important;
-  }
-
-  &--info {
-    background: rgba($gray-400, 0.15) !important;
-    border-color: rgba($gray-400, 0.3) !important;
-    color: $gray-400 !important;
-  }
-
-  &.el-tag--dark {
-    border: none !important;
-  }
-}
-
-// 树形控件
-.el-tree {
-  background: transparent !important;
-  color: $gray-200 !important;
-
-  .el-tree-node__content {
-    border-radius: $radius-sm !important;
-
-    &:hover {
-      background: $gray-700 !important;
-    }
-  }
-
-  .el-tree-node.is-current > .el-tree-node__content {
-    background: rgba($primary-start, 0.15) !important;
-    color: $primary-start !important;
-  }
-
-  .el-tree-node__expand-icon {
-    color: $gray-400 !important;
-  }
-}
-
-// 表单
 .el-form-item {
-  .el-form-item__label {
-    color: $gray-300 !important;
-    font-weight: 500;
-  }
+  margin-bottom: 20px;
 }
 
-// 单选框
-.el-radio {
-  .el-radio__input {
-    .el-radio__inner {
-      background: $gray-800 !important;
-      border-color: $gray-600 !important;
-    }
-  }
-
-  .el-radio__label {
-    color: $gray-200 !important;
-  }
-
-  &.is-checked {
-    .el-radio__input {
-      .el-radio__inner {
-        background: $primary-start !important;
-        border-color: $primary-start !important;
-      }
-    }
-
-    .el-radio__label {
-      color: $primary-start !important;
-    }
+.el-popper.is-light {
+  background: rgba(48, 58, 75, 0.84);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 18px;
+  backdrop-filter: blur(36px) saturate(160%);
+  -webkit-backdrop-filter: blur(36px) saturate(160%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 14px 40px rgba(0, 0, 0, 0.32);
+  .el-popper__arrow::before {
+    background: #303a4b;
+    border-color: rgba(255, 255, 255, 0.18);
   }
 }
-
-// 复选框
-.el-checkbox {
-  .el-checkbox__input {
-    .el-checkbox__inner {
-      background: $gray-800 !important;
-      border-color: $gray-600 !important;
-    }
+.el-select-dropdown,
+.el-dropdown-menu {
+  background: transparent;
+  border: 0;
+  border-radius: 18px;
+  padding: 7px 0;
+}
+.el-select-dropdown__item,
+.el-dropdown-menu__item {
+  margin: 2px 7px;
+  border-radius: 10px;
+  min-height: 32px;
+  font-size: 13px;
+  color: #d5d9e0;
+  &.is-hovering,
+  &:not(.is-disabled):hover,
+  &:focus {
+    background: rgba(255, 255, 255, 0.13);
+    color: #fff;
   }
-
-  .el-checkbox__label {
-    color: $gray-200 !important;
-  }
-
-  &.is-checked {
-    .el-checkbox__input {
-      .el-checkbox__inner {
-        background: $primary-start !important;
-        border-color: $primary-start !important;
-      }
-    }
+  &.is-selected {
+    background: rgba(28, 118, 234, 0.3);
+    color: #b8d2f5;
+    font-weight: 550;
   }
 }
-
-// 开关
-.el-switch {
-  .el-switch__core {
-    background: $gray-600 !important;
-    border-color: $gray-600 !important;
-  }
-
-  &.is-checked {
-    .el-switch__core {
-      background: $primary-start !important;
-      border-color: $primary-start !important;
-      box-shadow: 0 0 8px rgba($primary-start, 0.4);
-    }
-  }
+.el-dropdown-menu__item--divided {
+  margin-top: 7px;
+}
+.el-dropdown-menu__item.is-disabled {
+  color: #a1a6b0;
 }
 
-// 加载
-.el-loading-mask {
-  background: rgba($gray-900, 0.9) !important;
+.el-dialog,
+.el-message-box {
+  background: rgba(31, 39, 53, 0.94);
+  backdrop-filter: blur(28px) saturate(140%);
+  -webkit-backdrop-filter: blur(28px) saturate(140%);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 24px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
 }
-
-.el-loading-spinner {
-  .circular {
-    .path {
-      stroke: $primary-start !important;
-    }
-  }
-
-  .el-loading-text {
-    color: $gray-300 !important;
-  }
+.el-dialog {
+  --el-dialog-padding-primary: 24px;
 }
-
-// 空状态
-.el-empty {
-  .el-empty__description {
-    color: $gray-400 !important;
-  }
+.el-dialog__title,
+.el-message-box__title {
+  font-weight: 600;
+  color: #f3f4f6;
 }
-
-// 工具提示 - 圆角化
-.el-tooltip__popper {
-  background: rgba(31, 41, 55, 0.95) !important;
-  backdrop-filter: blur(12px) !important;
-  border: 1px solid rgba(255, 255, 255, 0.15) !important;
-  border-radius: $radius-lg !important;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4) !important;
-  color: $gray-200 !important;
+.el-dialog__footer {
+  padding-top: 20px;
 }
-
-// 弹出框 - 毛玻璃
-.el-popover {
-  background: rgba(31, 41, 55, 0.95) !important;
-  backdrop-filter: blur(20px) !important;
-  border: 1px solid rgba(255, 255, 255, 0.15) !important;
-  border-radius: $radius-xl !important;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4) !important;
-}
-
-// 抽屉 - 毛玻璃
-.el-drawer {
-  background: rgba(31, 41, 55, 0.95) !important;
-  backdrop-filter: blur(20px) !important;
-
-  .el-drawer__header {
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
-    color: $white !important;
-  }
-
-  .el-drawer__body {
-    color: $gray-200 !important;
-  }
-}
-
-// 卡片 - 毛玻璃圆角
-.el-card {
-  background: rgba(31, 41, 55, 0.8) !important;
-  backdrop-filter: blur(20px) !important;
-  border: 1px solid rgba(255, 255, 255, 0.1) !important;
-  border-radius: $radius-xl !important;
-}
-
-// 遮罩层
 .el-overlay {
-  background: rgba(0, 0, 0, 0.7) !important;
+  backdrop-filter: blur(3px);
+}
+.el-drawer {
+  background: #191b1e;
+}
+.el-card {
+  background: #191b1e;
+  border-color: #282b30;
+  border-radius: 20px;
 }
 
-// 分割线
-.el-divider {
-  border-color: $gray-700 !important;
-
-  .el-divider__text {
-    background: $gray-800 !important;
-    color: $gray-400 !important;
-  }
-}
-
-// 图标按钮
-.el-icon {
-  &.el-icon--close,
-  &.el-icon--arrow-down,
-  &.el-icon--arrow-up {
-    color: $gray-400 !important;
-
-    &:hover {
-      color: $white !important;
-    }
-  }
-}
-
-// 通知 - 毛玻璃圆角
+.el-message,
 .el-notification {
-  background: rgba(31, 41, 55, 0.95) !important;
-  backdrop-filter: blur(20px) !important;
-  border: 1px solid rgba(255, 255, 255, 0.15) !important;
-  border-radius: $radius-xl !important;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4) !important;
+  border: 1px solid #3a4049;
+  border-radius: 10px;
+  background: #22252a;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.3);
+}
+.el-message {
+  padding: 13px 18px;
+  max-width: calc(100vw - 32px);
+  border-radius: 999px;
+  background: rgba(43, 53, 70, 0.92);
+  backdrop-filter: blur(24px) saturate(150%);
+  -webkit-backdrop-filter: blur(24px) saturate(150%);
+}
+.studio-action-notice .el-message__content {
+  min-width: 0;
+}
+.studio-action-notice__content {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+}
+.studio-action-notice__action {
+  padding: 3px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #c8e2ff;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.el-notification__content,
+.el-message__content {
+  line-height: 1.6;
+}
+.el-alert {
+  border-radius: 8px;
+}
+.el-alert__description {
+  line-height: 1.6;
+}
 
-  .el-notification__title {
-    color: $white !important;
-    font-weight: 600 !important;
+.el-tag {
+  border-radius: 6px;
+  font-weight: 500;
+  --el-tag-bg-color: #242a34;
+  --el-tag-border-color: #354257;
+  --el-tag-text-color: #b5cfee;
+}
+@each $name, $ink,
+  $ground
+    in (
+      'success' #81d7b8 #1e332c,
+      'warning' #e9c488 #362e23,
+      'danger' #f0a2a7 #39262b,
+      'info' #b4bbc6 #292d34
+    )
+{
+  .el-tag--#{$name} {
+    --el-tag-bg-color: #{$ground};
+    --el-tag-border-color: transparent;
+    --el-tag-text-color: #{$ink};
   }
-
-  .el-notification__content {
-    color: $gray-300 !important;
+  .el-alert--#{$name}.is-light {
+    background: $ground;
+    color: $ink;
+    .el-alert__description {
+      color: $ink;
+    }
   }
-
-  .el-notification__closeBtn {
-    color: $gray-400 !important;
-
-    &:hover {
-      color: $white !important;
+  .el-message--#{$name} {
+    background: $ground;
+    border-color: color.mix($ground, $ink, 75%);
+    .el-message__content {
+      color: $ink;
     }
   }
 }
 
-// 表格
+.el-segmented {
+  --el-segmented-bg-color: rgba(6, 12, 22, 0.25);
+  --el-segmented-color: #a1a6b0;
+  --el-segmented-item-selected-color: #f3f4f6;
+  --el-segmented-item-selected-bg-color: rgba(124, 145, 176, 0.4);
+  --el-segmented-item-hover-bg-color: #252a31;
+  --el-segmented-item-hover-color: #f3f4f6;
+  --el-segmented-padding: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+  font-size: 12px;
+}
+.el-segmented__item,
+.el-segmented__item-selected {
+  border-radius: 999px;
+}
+.el-segmented__item-selected {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 2px 5px rgba(0, 0, 0, 0.18);
+}
+.el-segmented__item:has(input:focus-visible) {
+  outline: 2px solid #a8c7fa;
+  outline-offset: -2px;
+}
+html.dark .el-checkbox__inner::after {
+  border-color: #111214;
+}
+html.dark .el-checkbox__inner {
+  width: 16px;
+  height: 16px;
+  border-radius: 5px;
+  border-color: #7f8ea5;
+  background: rgba(255, 255, 255, 0.07);
+}
+html.dark .el-checkbox__input.is-checked .el-checkbox__inner,
+html.dark .el-checkbox__input.is-indeterminate .el-checkbox__inner {
+  background: #8ec2ff;
+  border-color: #b1d6ff;
+}
+.el-radio-button__original-radio:checked + .el-radio-button__inner {
+  color: #111214;
+}
+
+.el-tree {
+  background: transparent;
+  color: #c7cbd3;
+}
+.el-tree-node__content {
+  border-radius: 6px;
+}
+.el-tree-node.is-current > .el-tree-node__content {
+  background: #273346;
+  color: #b8d2f5;
+}
+
 .el-table {
-  background: transparent !important;
-
-  &::before {
-    background: $gray-700 !important;
-  }
-
-  tr {
-    background: transparent !important;
-  }
-
-  th.el-table__cell {
-    background: $gray-800 !important;
-    color: $gray-300 !important;
-    border-bottom: 1px solid $gray-700 !important;
-  }
-
-  td.el-table__cell {
-    border-bottom: 1px solid $gray-700 !important;
-    color: $gray-200 !important;
-  }
-
-  .el-table__row:hover > td.el-table__cell {
-    background: $gray-700 !important;
-  }
+  --el-table-bg-color: transparent;
+  --el-table-tr-bg-color: transparent;
+  --el-table-header-bg-color: #22252a;
+  --el-table-row-hover-bg-color: #24282e;
+  --el-table-border-color: #30343b;
 }
-
-// 分页
 .el-pagination {
-  .el-pager li {
-    background: $gray-800 !important;
-    color: $gray-300 !important;
-
-    &:hover {
-      color: $primary-start !important;
-    }
-
-    &.is-active {
-      background: $primary-start !important;
-      color: $white !important;
-    }
-  }
-
-  .btn-prev,
-  .btn-next {
-    background: $gray-800 !important;
-    color: $gray-300 !important;
+  --el-pagination-button-bg-color: #22252a;
+}
+.el-pagination.is-background .el-pager li.is-active {
+  background: #386db4;
+  color: #fff;
+}
+.el-progress-bar__outer {
+  background: #30343b;
+}
+.el-progress__text {
+  color: #bdc2cc;
+  font-variant-numeric: tabular-nums;
+}
+.el-upload-dragger {
+  background: #15171a;
+  border: 1px dashed #49515d;
+  border-radius: 10px;
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease;
+  &:hover {
+    border-color: #8eb7ee;
+    background: #1c2532;
   }
 }
-
-// 上传 - 圆角化
-.el-upload {
-  &-dragger {
-    background: rgba(255, 255, 255, 0.05) !important;
-    border: 2px dashed rgba(255, 255, 255, 0.2) !important;
-    border-radius: $radius-xl !important;
-    transition: all $duration-normal !important;
-
-    &:hover {
-      border-color: $primary-start !important;
-      background: rgba($primary-start, 0.05) !important;
-    }
-  }
+.el-empty__description p {
+  color: #a1a6b0;
 }
-
-// 图片预览
 .el-image-viewer__wrapper {
-  background: rgba(0, 0, 0, 0.9) !important;
+  background: rgba(0, 0, 0, 0.9);
+}
+@media (prefers-reduced-motion: reduce) {
+  .el-button,
+  .el-input__wrapper,
+  .el-select__wrapper,
+  .el-upload-dragger,
+  .el-segmented__item-selected {
+    transition: none;
+  }
 }

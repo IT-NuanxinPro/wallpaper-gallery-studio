@@ -1,6 +1,19 @@
-// 全局样式入口
 @use './variables' as *;
 @use './element-dark';
+@use './motion';
+
+:root {
+  color-scheme: dark;
+  --studio-bg: #11151d;
+  --studio-surface: rgba(28, 33, 44, 0.86);
+  --studio-raised: rgba(70, 79, 98, 0.55);
+  --studio-border: rgba(255, 255, 255, 0.13);
+  --studio-border-subtle: rgba(255, 255, 255, 0.075);
+  --studio-text: #f4f6fb;
+  --studio-muted: #b1b9c9;
+  --studio-accent: #7db7ff;
+  --studio-action: #0a67d4;
+}
 
 * {
   margin: 0;
@@ -13,10 +26,13 @@ body,
 #app {
   width: 100%;
   height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
 }
 
 body {
-  font-family: $font-family;
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', 'PingFang SC', sans-serif;
   font-size: $font-size-base;
   color: $white;
   background: $gray-900;
@@ -24,14 +40,37 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-// 滚动条样式
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+button,
+a,
+input,
+textarea {
+  -webkit-tap-highlight-color: transparent;
+}
+input,
+textarea {
+  caret-color: var(--studio-accent);
+}
+a {
+  text-underline-offset: 3px;
+}
+:focus-visible {
+  outline: 2px solid var(--studio-accent);
+  outline-offset: 3px;
+}
+
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: rgba(255, 255, 255, 0.05);
+  background: transparent;
   border-radius: $radius-full;
 }
 
@@ -44,7 +83,6 @@ body {
   }
 }
 
-// 选中文本样式
 ::selection {
   background: rgba($primary-start, 0.3);
   color: $white;

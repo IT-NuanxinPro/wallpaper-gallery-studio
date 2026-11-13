@@ -1,6 +1,5 @@
 <template>
   <div class="result-card" :class="layoutClass">
-    <!-- Desktop: 上下结构 -->
     <template v-if="result.primary === 'desktop'">
       <div class="desktop-layout">
         <div class="image-section">
@@ -12,167 +11,130 @@
           </div>
         </div>
         <div class="info-section">
-          <!-- Cloudflare Markdown 渲染模式 -->
-          <template v-if="isMarkdownResponse">
-            <div class="markdown-result-section">
-              <div class="markdown-header">
-                <el-tag type="success" size="small">
-                  <span class="tag-icon">🤖</span>
-                  {{ modelName }} - Markdown 分析结果
-                </el-tag>
-              </div>
-              <div class="markdown-content-inline" v-html="renderedMarkdown"></div>
-            </div>
-          </template>
-
-          <!-- 标准结构化显示模式 -->
-          <template v-else>
-            <div v-if="result.promptTemplate !== 'filenameOnly'" class="category-row">
-              <el-tag type="primary" effect="dark">{{ result.primary }}</el-tag>
-              <span class="arrow">›</span>
-              <el-tag type="success" effect="dark">{{ result.secondary }}</el-tag>
-              <span class="arrow">›</span>
-              <el-tag type="warning" effect="dark">{{ result.third }}</el-tag>
-            </div>
-            <div class="filename-section">
-              <div class="section-label">文件名建议</div>
-              <div class="filename-chips">
-                <div
-                  v-for="(name, index) in result.filenameSuggestions"
-                  :key="index"
-                  class="filename-chip"
-                  :class="{ active: selectedFilename === name }"
-                  @click="selectFilename(name)"
-                >
-                  <span class="filename-text">{{ name }}</span>
-                  <el-icon class="copy-icon" @click.stop="copyFilename(name)"
-                    ><CopyDocument
-                  /></el-icon>
-                </div>
+          <div v-if="result.promptTemplate !== 'filenameOnly'" class="category-row">
+            <el-tag type="primary" effect="dark">{{ result.primary }}</el-tag>
+            <span class="arrow">›</span>
+            <el-tag type="success" effect="dark">{{ result.secondary }}</el-tag>
+            <span class="arrow">›</span>
+            <el-tag type="warning" effect="dark">{{ result.third }}</el-tag>
+          </div>
+          <div class="filename-section">
+            <div class="section-label">文件名建议</div>
+            <div class="filename-chips">
+              <div
+                v-for="(name, index) in result.filenameSuggestions"
+                :key="index"
+                class="filename-chip"
+                :class="{ active: selectedFilename === name }"
+                @click="selectFilename(name)"
+              >
+                <span class="filename-text">{{ name }}</span>
+                <el-icon class="copy-icon" @click.stop="copyFilename(name)"
+                  ><CopyDocument
+                /></el-icon>
               </div>
             </div>
+          </div>
 
-            <!-- 格式化文件名 (仅电脑壁纸) -->
-            <div v-if="result.primary === 'desktop'" class="formatted-filename-section">
-              <div class="section-label">格式化文件名</div>
-              <div class="filename-chips">
-                <div
-                  v-for="(name, index) in formattedFilenames"
-                  :key="`formatted-${index}`"
-                  class="filename-chip formatted"
-                >
-                  <span class="filename-text">{{ name }}</span>
-                  <el-icon class="copy-icon" @click.stop="copyFilename(name)"
-                    ><CopyDocument
-                  /></el-icon>
-                </div>
+          <div v-if="result.primary === 'desktop'" class="formatted-filename-section">
+            <div class="section-label">格式化文件名</div>
+            <div class="filename-chips">
+              <div
+                v-for="(name, index) in formattedFilenames"
+                :key="`formatted-${index}`"
+                class="filename-chip formatted"
+              >
+                <span class="filename-text">{{ name }}</span>
+                <el-icon class="copy-icon" @click.stop="copyFilename(name)"
+                  ><CopyDocument
+                /></el-icon>
               </div>
             </div>
+          </div>
 
-            <!-- 诗意标题 -->
-            <div v-if="result.displayTitle" class="title-section">
-              <div class="section-label">诗意标题</div>
-              <div class="display-title">{{ result.displayTitle }}</div>
+          <div v-if="result.displayTitle" class="title-section">
+            <div class="section-label">诗意标题</div>
+            <div class="display-title">{{ result.displayTitle }}</div>
+          </div>
+
+          <div class="detail-row">
+            <div class="description">
+              <span class="label">描述</span>
+              <span class="value">{{ result.description }}</span>
             </div>
+            <div v-if="result.keywords.length" class="keywords">
+              <el-tag v-for="kw in result.keywords" :key="kw" size="small" effect="plain">{{
+                kw
+              }}</el-tag>
+            </div>
+          </div>
 
-            <div class="detail-row">
-              <div class="description">
-                <span class="label">描述</span>
-                <span class="value">{{ result.description }}</span>
-              </div>
-              <div v-if="result.keywords.length" class="keywords">
-                <el-tag v-for="kw in result.keywords" :key="kw" size="small" effect="plain">{{
-                  kw
+          <div v-if="result.is_perfect_match !== undefined" class="match-section">
+            <el-tag :type="result.is_perfect_match ? 'success' : 'warning'" size="small">
+              {{ result.is_perfect_match ? '匹配分类' : '近似分类' }}
+            </el-tag>
+          </div>
+
+          <div
+            v-if="result.new_category_proposal && result.new_category_proposal.suggested_third"
+            class="proposal-section"
+          >
+            <div class="section-label">新分类建议</div>
+            <div class="proposal-content">
+              <div class="proposal-path">
+                <el-tag type="info" size="small">{{
+                  result.new_category_proposal.suggested_secondary || result.secondary
+                }}</el-tag>
+                <span class="arrow">›</span>
+                <el-tag type="info" size="small">{{
+                  result.new_category_proposal.suggested_third
                 }}</el-tag>
               </div>
+              <div class="proposal-reason">{{ result.new_category_proposal.reason }}</div>
             </div>
+          </div>
 
-            <!-- 分类匹配度 -->
-            <div v-if="result.is_perfect_match !== undefined" class="match-section">
-              <el-tag :type="result.is_perfect_match ? 'success' : 'warning'" size="small">
-                {{ result.is_perfect_match ? '✓ 完美匹配' : '⚠ 近似匹配' }}
-              </el-tag>
-            </div>
+          <div v-if="result.reasoning" class="reasoning-section">
+            <div class="section-label">分类逻辑</div>
+            <div class="reasoning-content">{{ result.reasoning }}</div>
+          </div>
 
-            <!-- 新分类提案 -->
-            <div
-              v-if="result.new_category_proposal && result.new_category_proposal.suggested_third"
-              class="proposal-section"
-            >
-              <div class="section-label">💡 新分类建议</div>
-              <div class="proposal-content">
-                <div class="proposal-path">
-                  <el-tag type="info" size="small">{{
-                    result.new_category_proposal.suggested_secondary || result.secondary
-                  }}</el-tag>
-                  <span class="arrow">›</span>
-                  <el-tag type="info" size="small">{{
-                    result.new_category_proposal.suggested_third
-                  }}</el-tag>
-                </div>
-                <div class="proposal-reason">{{ result.new_category_proposal.reason }}</div>
+          <div class="footer-section">
+            <div class="meta-row">
+              <div class="meta-item">
+                <span class="meta-value model-name">{{ modelName }}</span>
               </div>
-            </div>
-
-            <!-- 分类逻辑 -->
-            <div v-if="result.reasoning" class="reasoning-section">
-              <div class="section-label">🧠 分类逻辑</div>
-              <div class="reasoning-content">{{ result.reasoning }}</div>
-            </div>
-
-            <div class="footer-section">
-              <div class="meta-row">
-                <div class="meta-item">
-                  <span class="meta-icon">🤖</span>
-                  <span class="meta-value model-name">{{ modelName }}</span>
-                </div>
-                <div class="meta-item">
-                  <span class="meta-icon">⏱️</span>
-                  <span class="meta-value">{{ formatTime(result.timestamp) }}</span>
-                </div>
-                <div class="meta-item">
-                  <span class="meta-icon">📊</span>
-                  <el-tag :type="confidenceType" size="small" effect="dark"
-                    >{{ (result.confidence * 100).toFixed(0) }}%</el-tag
-                  >
-                </div>
-                <div class="meta-item">
-                  <span class="meta-icon">📁</span>
-                  <span class="meta-value">{{ formatSize(result.imageSize) }}</span>
-                </div>
-                <div class="meta-item">
-                  <span class="meta-icon">🏷️</span>
-                  <span class="meta-value">{{ result.keywords?.length || 0 }} 标签</span>
-                </div>
-                <div class="meta-item">
-                  <span class="meta-icon">📝</span>
-                  <span class="meta-value">{{ result.filenameSuggestions?.length || 0 }} 建议</span>
-                </div>
+              <div class="meta-item">
+                <span class="meta-value">{{ formatTime(result.timestamp) }}</span>
               </div>
-              <div class="action-row">
-                <el-button size="small" type="primary" @click="copyPath">
-                  <el-icon><CopyDocument /></el-icon> 复制路径
-                </el-button>
-                <el-button size="small" @click="copyFullInfo">
-                  <el-icon><Document /></el-icon> 复制全部
-                </el-button>
-                <el-button
-                  v-if="isMarkdownResponse"
-                  size="small"
-                  type="success"
-                  @click="showMarkdown = true"
+              <div class="meta-item">
+                <el-tag :type="confidenceType" size="small" effect="dark"
+                  >{{ (result.confidence * 100).toFixed(0) }}%</el-tag
                 >
-                  📝 查看 Markdown
-                </el-button>
-                <el-button size="small" text @click="showRaw = true"> 原始数据 </el-button>
+              </div>
+              <div class="meta-item">
+                <span class="meta-value">{{ formatSize(result.imageSize) }}</span>
+              </div>
+              <div class="meta-item">
+                <span class="meta-value">{{ result.keywords?.length || 0 }} 标签</span>
+              </div>
+              <div class="meta-item">
+                <span class="meta-value">{{ result.filenameSuggestions?.length || 0 }} 建议</span>
               </div>
             </div>
-          </template>
+            <div class="action-row">
+              <el-button size="small" type="primary" @click="copyPath">
+                <el-icon><CopyDocument /></el-icon> 复制路径
+              </el-button>
+              <el-button size="small" @click="copyFullInfo">
+                <el-icon><Document /></el-icon> 复制全部
+              </el-button>
+            </div>
+          </div>
         </div>
       </div>
     </template>
 
-    <!-- Mobile: 左右结构 -->
     <template v-else-if="result.primary === 'mobile'">
       <div class="mobile-layout">
         <div class="image-section">
@@ -182,133 +144,100 @@
           </el-tag>
         </div>
         <div class="info-section">
-          <!-- Cloudflare Markdown 渲染模式 -->
-          <template v-if="isMarkdownResponse">
-            <div class="markdown-result-section">
-              <div class="markdown-header">
-                <el-tag type="success" size="small">
-                  <span class="tag-icon">🤖</span>
-                  {{ modelName }} - Markdown 分析结果
-                </el-tag>
-              </div>
-              <div class="markdown-content-inline" v-html="renderedMarkdown"></div>
-            </div>
-          </template>
-
-          <!-- 标准结构化显示模式 -->
-          <template v-else>
-            <div v-if="result.promptTemplate !== 'filenameOnly'" class="category-row">
-              <el-tag type="primary" size="small" effect="dark">{{ result.primary }}</el-tag>
-              <span class="arrow">›</span>
-              <el-tag type="success" size="small" effect="dark">{{ result.secondary }}</el-tag>
-              <span class="arrow">›</span>
-              <el-tag type="warning" size="small" effect="dark">{{ result.third }}</el-tag>
-            </div>
-            <div class="filename-section">
-              <div class="section-label">文件名</div>
-              <div class="filename-chips">
-                <div
-                  v-for="(name, index) in result.filenameSuggestions"
-                  :key="index"
-                  class="filename-chip"
-                  :class="{ active: selectedFilename === name }"
-                  @click="selectFilename(name)"
-                >
-                  <span class="filename-text">{{ name }}</span>
-                  <el-icon class="copy-icon" @click.stop="copyFilename(name)"
-                    ><CopyDocument
-                  /></el-icon>
-                </div>
+          <div v-if="result.promptTemplate !== 'filenameOnly'" class="category-row">
+            <el-tag type="primary" size="small" effect="dark">{{ result.primary }}</el-tag>
+            <span class="arrow">›</span>
+            <el-tag type="success" size="small" effect="dark">{{ result.secondary }}</el-tag>
+            <span class="arrow">›</span>
+            <el-tag type="warning" size="small" effect="dark">{{ result.third }}</el-tag>
+          </div>
+          <div class="filename-section">
+            <div class="section-label">文件名</div>
+            <div class="filename-chips">
+              <div
+                v-for="(name, index) in result.filenameSuggestions"
+                :key="index"
+                class="filename-chip"
+                :class="{ active: selectedFilename === name }"
+                @click="selectFilename(name)"
+              >
+                <span class="filename-text">{{ name }}</span>
+                <el-icon class="copy-icon" @click.stop="copyFilename(name)"
+                  ><CopyDocument
+                /></el-icon>
               </div>
             </div>
+          </div>
 
-            <!-- 诗意标题 -->
-            <div v-if="result.displayTitle" class="title-section">
-              <div class="section-label">诗意标题</div>
-              <div class="display-title">{{ result.displayTitle }}</div>
-            </div>
+          <div v-if="result.displayTitle" class="title-section">
+            <div class="section-label">诗意标题</div>
+            <div class="display-title">{{ result.displayTitle }}</div>
+          </div>
 
-            <div class="description-row">
-              <span class="label">描述：</span>
-              <span class="value">{{ result.description }}</span>
+          <div class="description-row">
+            <span class="label">描述：</span>
+            <span class="value">{{ result.description }}</span>
+          </div>
+          <div v-if="result.keywords.length" class="keywords-row">
+            <span class="label">关键词：</span>
+            <div class="keywords-list">
+              <el-tag v-for="kw in result.keywords" :key="kw" size="small" effect="plain">{{
+                kw
+              }}</el-tag>
             </div>
-            <div v-if="result.keywords.length" class="keywords-row">
-              <span class="label">关键词：</span>
-              <div class="keywords-list">
-                <el-tag v-for="kw in result.keywords" :key="kw" size="small" effect="plain">{{
-                  kw
+          </div>
+
+          <div v-if="result.is_perfect_match !== undefined" class="match-section">
+            <el-tag :type="result.is_perfect_match ? 'success' : 'warning'" size="small">
+              {{ result.is_perfect_match ? '匹配分类' : '近似分类' }}
+            </el-tag>
+          </div>
+
+          <div
+            v-if="result.new_category_proposal && result.new_category_proposal.suggested_third"
+            class="proposal-section"
+          >
+            <div class="section-label">新分类建议</div>
+            <div class="proposal-content">
+              <div class="proposal-path">
+                <el-tag type="info" size="small">{{
+                  result.new_category_proposal.suggested_secondary || result.secondary
+                }}</el-tag>
+                <span class="arrow">›</span>
+                <el-tag type="info" size="small">{{
+                  result.new_category_proposal.suggested_third
                 }}</el-tag>
               </div>
+              <div class="proposal-reason">{{ result.new_category_proposal.reason }}</div>
             </div>
+          </div>
 
-            <!-- 分类匹配度 -->
-            <div v-if="result.is_perfect_match !== undefined" class="match-section">
-              <el-tag :type="result.is_perfect_match ? 'success' : 'warning'" size="small">
-                {{ result.is_perfect_match ? '✓ 完美匹配' : '⚠ 近似匹配' }}
-              </el-tag>
-            </div>
+          <div v-if="result.reasoning" class="reasoning-section">
+            <div class="section-label">分类逻辑</div>
+            <div class="reasoning-content">{{ result.reasoning }}</div>
+          </div>
 
-            <!-- 新分类提案 -->
-            <div
-              v-if="result.new_category_proposal && result.new_category_proposal.suggested_third"
-              class="proposal-section"
-            >
-              <div class="section-label">💡 新分类建议</div>
-              <div class="proposal-content">
-                <div class="proposal-path">
-                  <el-tag type="info" size="small">{{
-                    result.new_category_proposal.suggested_secondary || result.secondary
-                  }}</el-tag>
-                  <span class="arrow">›</span>
-                  <el-tag type="info" size="small">{{
-                    result.new_category_proposal.suggested_third
-                  }}</el-tag>
-                </div>
-                <div class="proposal-reason">{{ result.new_category_proposal.reason }}</div>
+          <div class="footer-section">
+            <div class="meta-row">
+              <div class="meta-item">
+                <span class="meta-value model-name">{{ modelName }}</span>
+              </div>
+              <div class="meta-item">
+                <span class="meta-value">{{ formatTime(result.timestamp) }}</span>
+              </div>
+              <div class="meta-item">
+                <span class="meta-value">{{ formatSize(result.imageSize) }}</span>
               </div>
             </div>
-
-            <!-- 分类逻辑 -->
-            <div v-if="result.reasoning" class="reasoning-section">
-              <div class="section-label">🧠 分类逻辑</div>
-              <div class="reasoning-content">{{ result.reasoning }}</div>
+            <div class="action-row">
+              <el-button size="small" type="primary" @click="copyPath">复制路径</el-button>
+              <el-button size="small" @click="copyFullInfo">复制全部</el-button>
             </div>
-
-            <div class="footer-section">
-              <div class="meta-row">
-                <div class="meta-item">
-                  <span class="meta-icon">🤖</span>
-                  <span class="meta-value model-name">{{ modelName }}</span>
-                </div>
-                <div class="meta-item">
-                  <span class="meta-icon">⏱️</span>
-                  <span class="meta-value">{{ formatTime(result.timestamp) }}</span>
-                </div>
-                <div class="meta-item">
-                  <span class="meta-icon">📁</span>
-                  <span class="meta-value">{{ formatSize(result.imageSize) }}</span>
-                </div>
-              </div>
-              <div class="action-row">
-                <el-button size="small" type="primary" @click="copyPath">复制路径</el-button>
-                <el-button size="small" @click="copyFullInfo">复制全部</el-button>
-                <el-button
-                  v-if="isMarkdownResponse"
-                  size="small"
-                  type="success"
-                  @click="showMarkdown = true"
-                >
-                  📝 Markdown
-                </el-button>
-                <el-button size="small" text @click="showRaw = true">详情</el-button>
-              </div>
-            </div>
-          </template>
+          </div>
         </div>
       </div>
     </template>
 
-    <!-- Avatar: 居中结构 -->
     <template v-else>
       <div class="avatar-layout">
         <div class="image-section">
@@ -318,140 +247,99 @@
           </el-tag>
         </div>
         <div class="info-section">
-          <!-- Cloudflare Markdown 渲染模式 -->
-          <template v-if="isMarkdownResponse">
-            <div class="markdown-result-section">
-              <div class="markdown-header">
-                <el-tag type="success" size="small">
-                  <span class="tag-icon">🤖</span>
-                  {{ modelName }} - Markdown 分析结果
-                </el-tag>
-              </div>
-              <div class="markdown-content-inline" v-html="renderedMarkdown"></div>
-            </div>
-          </template>
-
-          <!-- 标准结构化显示模式 -->
-          <template v-else>
-            <div v-if="result.promptTemplate !== 'filenameOnly'" class="category-row">
-              <el-tag type="primary" size="small" effect="dark">{{ result.primary }}</el-tag>
-              <span class="arrow">›</span>
-              <el-tag type="success" size="small" effect="dark">{{ result.secondary }}</el-tag>
-              <span class="arrow">›</span>
-              <el-tag type="warning" size="small" effect="dark">{{ result.third }}</el-tag>
-            </div>
-            <div class="filename-section">
-              <div class="section-label centered">文件名</div>
-              <div class="filename-chips centered">
-                <div
-                  v-for="(name, index) in result.filenameSuggestions"
-                  :key="index"
-                  class="filename-chip"
-                  :class="{ active: selectedFilename === name }"
-                  @click="selectFilename(name)"
-                >
-                  <span class="filename-text">{{ name }}</span>
-                  <el-icon class="copy-icon" @click.stop="copyFilename(name)"
-                    ><CopyDocument
-                  /></el-icon>
-                </div>
+          <div v-if="result.promptTemplate !== 'filenameOnly'" class="category-row">
+            <el-tag type="primary" size="small" effect="dark">{{ result.primary }}</el-tag>
+            <span class="arrow">›</span>
+            <el-tag type="success" size="small" effect="dark">{{ result.secondary }}</el-tag>
+            <span class="arrow">›</span>
+            <el-tag type="warning" size="small" effect="dark">{{ result.third }}</el-tag>
+          </div>
+          <div class="filename-section">
+            <div class="section-label centered">文件名</div>
+            <div class="filename-chips centered">
+              <div
+                v-for="(name, index) in result.filenameSuggestions"
+                :key="index"
+                class="filename-chip"
+                :class="{ active: selectedFilename === name }"
+                @click="selectFilename(name)"
+              >
+                <span class="filename-text">{{ name }}</span>
+                <el-icon class="copy-icon" @click.stop="copyFilename(name)"
+                  ><CopyDocument
+                /></el-icon>
               </div>
             </div>
+          </div>
 
-            <!-- 诗意标题 -->
-            <div v-if="result.displayTitle" class="title-section centered">
-              <div class="section-label">诗意标题</div>
-              <div class="display-title">{{ result.displayTitle }}</div>
-            </div>
+          <div v-if="result.displayTitle" class="title-section centered">
+            <div class="section-label">诗意标题</div>
+            <div class="display-title">{{ result.displayTitle }}</div>
+          </div>
 
-            <div class="description-row centered">
-              <span class="label">描述：</span>
-              <span class="value">{{ result.description }}</span>
+          <div class="description-row centered">
+            <span class="label">描述：</span>
+            <span class="value">{{ result.description }}</span>
+          </div>
+          <div v-if="result.keywords.length" class="keywords-row centered">
+            <span class="label">关键词：</span>
+            <div class="keywords-list">
+              <el-tag v-for="kw in result.keywords" :key="kw" size="small" effect="plain">{{
+                kw
+              }}</el-tag>
             </div>
-            <div v-if="result.keywords.length" class="keywords-row centered">
-              <span class="label">关键词：</span>
-              <div class="keywords-list">
-                <el-tag v-for="kw in result.keywords" :key="kw" size="small" effect="plain">{{
-                  kw
+          </div>
+
+          <div v-if="result.is_perfect_match !== undefined" class="match-section centered">
+            <el-tag :type="result.is_perfect_match ? 'success' : 'warning'" size="small">
+              {{ result.is_perfect_match ? '匹配分类' : '近似分类' }}
+            </el-tag>
+          </div>
+
+          <div
+            v-if="result.new_category_proposal && result.new_category_proposal.suggested_third"
+            class="proposal-section centered"
+          >
+            <div class="section-label">新分类建议</div>
+            <div class="proposal-content">
+              <div class="proposal-path">
+                <el-tag type="info" size="small">{{
+                  result.new_category_proposal.suggested_secondary || result.secondary
+                }}</el-tag>
+                <span class="arrow">›</span>
+                <el-tag type="info" size="small">{{
+                  result.new_category_proposal.suggested_third
                 }}</el-tag>
               </div>
+              <div class="proposal-reason">{{ result.new_category_proposal.reason }}</div>
             </div>
+          </div>
 
-            <!-- 分类匹配度 -->
-            <div v-if="result.is_perfect_match !== undefined" class="match-section centered">
-              <el-tag :type="result.is_perfect_match ? 'success' : 'warning'" size="small">
-                {{ result.is_perfect_match ? '✓ 完美匹配' : '⚠ 近似匹配' }}
-              </el-tag>
-            </div>
+          <div v-if="result.reasoning" class="reasoning-section centered">
+            <div class="section-label">分类逻辑</div>
+            <div class="reasoning-content">{{ result.reasoning }}</div>
+          </div>
 
-            <!-- 新分类提案 -->
-            <div
-              v-if="result.new_category_proposal && result.new_category_proposal.suggested_third"
-              class="proposal-section centered"
-            >
-              <div class="section-label">💡 新分类建议</div>
-              <div class="proposal-content">
-                <div class="proposal-path">
-                  <el-tag type="info" size="small">{{
-                    result.new_category_proposal.suggested_secondary || result.secondary
-                  }}</el-tag>
-                  <span class="arrow">›</span>
-                  <el-tag type="info" size="small">{{
-                    result.new_category_proposal.suggested_third
-                  }}</el-tag>
-                </div>
-                <div class="proposal-reason">{{ result.new_category_proposal.reason }}</div>
+          <div class="footer-section centered">
+            <div class="meta-row">
+              <div class="meta-item">
+                <span class="meta-value model-name">{{ modelName }}</span>
+              </div>
+              <div class="meta-item">
+                <span class="meta-value">{{ formatTime(result.timestamp) }}</span>
+              </div>
+              <div class="meta-item">
+                <span class="meta-value">{{ formatSize(result.imageSize) }}</span>
               </div>
             </div>
-
-            <!-- 分类逻辑 -->
-            <div v-if="result.reasoning" class="reasoning-section centered">
-              <div class="section-label">🧠 分类逻辑</div>
-              <div class="reasoning-content">{{ result.reasoning }}</div>
+            <div class="action-row">
+              <el-button size="small" type="primary" @click="copyPath">复制路径</el-button>
+              <el-button size="small" @click="copyFullInfo">复制全部</el-button>
             </div>
-
-            <div class="footer-section centered">
-              <div class="meta-row">
-                <div class="meta-item">
-                  <span class="meta-icon">🤖</span>
-                  <span class="meta-value model-name">{{ modelName }}</span>
-                </div>
-                <div class="meta-item">
-                  <span class="meta-icon">⏱️</span>
-                  <span class="meta-value">{{ formatTime(result.timestamp) }}</span>
-                </div>
-                <div class="meta-item">
-                  <span class="meta-icon">📁</span>
-                  <span class="meta-value">{{ formatSize(result.imageSize) }}</span>
-                </div>
-              </div>
-              <div class="action-row">
-                <el-button size="small" type="primary" @click="copyPath">复制路径</el-button>
-                <el-button size="small" @click="copyFullInfo">复制全部</el-button>
-                <el-button
-                  v-if="isMarkdownResponse"
-                  size="small"
-                  type="success"
-                  @click="showMarkdown = true"
-                >
-                  📝 Markdown
-                </el-button>
-                <el-button size="small" text @click="showRaw = true">原始数据</el-button>
-              </div>
-            </div>
-          </template>
+          </div>
         </div>
       </div>
     </template>
-
-    <el-dialog v-model="showRaw" title="原始 AI 响应" width="70%" top="5vh">
-      <pre class="raw-data">{{ JSON.stringify(result.raw, null, 2) }}</pre>
-    </el-dialog>
-
-    <!-- Markdown 渲染对话框 (Cloudflare) -->
-    <el-dialog v-model="showMarkdown" title="🤖 AI 分析结果 (Markdown)" width="70%" top="5vh">
-      <div class="markdown-content" v-html="renderedMarkdown"></div>
-    </el-dialog>
   </div>
 </template>
 
@@ -460,15 +348,12 @@ import { ref, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import { CopyDocument, Document } from '@element-plus/icons-vue'
 import { getModelByKey } from '@/services/ai/classifier'
-import { marked } from 'marked'
 
 const props = defineProps({
   result: { type: Object, required: true }
 })
 
 const selectedFilename = ref(props.result.selectedFilename || props.result.filenameSuggestions[0])
-const showRaw = ref(false)
-const showMarkdown = ref(false)
 
 const layoutClass = computed(() => `layout-${props.result.primary}`)
 const confidenceType = computed(() => {
@@ -483,30 +368,14 @@ const modelName = computed(() => {
   return modelConfig?.name || props.result.model || '未知模型'
 })
 
-// 检测是否是 Cloudflare 返回的 Markdown 格式
-const isMarkdownResponse = computed(() => {
-  // 直接检测是否使用 Cloudflare provider
-  return props.result.provider === 'cloudflare'
-})
-
-// 渲染 Markdown
-const renderedMarkdown = computed(() => {
-  if (!isMarkdownResponse.value) return ''
-  const rawResponse = props.result.raw?.result?.response || ''
-  return marked(rawResponse)
-})
-
-// 格式化文件名 (仅电脑壁纸)
 const formattedFilenames = computed(() => {
   if (props.result.primary !== 'desktop') return []
 
   return (
     props.result.filenameSuggestions?.map(filename => {
-      // 获取文件名和扩展名
       const lastDotIndex = filename.lastIndexOf('.')
       const nameWithoutExt = lastDotIndex > 0 ? filename.substring(0, lastDotIndex) : filename
 
-      // 格式: {secondary}--{third}_{originalName}.png
       const formattedName = `${props.result.secondary}--${props.result.third}_${nameWithoutExt}.png`
       return formattedName
     }) || []
@@ -570,758 +439,251 @@ function copyFullInfo() {
 
 <style lang="scss" scoped>
 .result-card {
-  background: rgba(255, 255, 255, 0.06);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 16px;
-  overflow: visible;
+  container-type: inline-size;
+  background: transparent;
+  border: 1px solid var(--studio-border, #30343b);
+  border-radius: 14px;
+  overflow: hidden;
+  color: var(--studio-text, #f3f4f6);
 }
-
-.category-row {
+.category-row,
+.keywords-row,
+.keywords-list,
+.keywords {
   display: flex;
   align-items: center;
-  gap: 6px;
   flex-wrap: wrap;
-  .arrow {
-    color: rgba(255, 255, 255, 0.4);
-    font-size: 14px;
-  }
+  gap: 6px;
 }
-
-.section-label {
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.5);
+.category-row .arrow,
+.proposal-path .arrow {
+  color: var(--studio-muted, #a1a6b0);
+  font-size: 14px;
+}
+.category-row :deep(.el-tag),
+.keywords :deep(.el-tag),
+.keywords-row :deep(.el-tag) {
+  background: var(--studio-raised, #22252a);
+  border-color: var(--studio-border, #30343b);
+  color: var(--studio-muted, #a1a6b0);
+}
+.section-label,
+.label {
+  font-size: 11px;
+  color: var(--studio-muted, #a1a6b0);
   margin-bottom: 8px;
-
-  &.centered {
-    text-align: center;
-  }
 }
-
-.filename-section {
-  .filename-chips {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    &.centered {
-      justify-content: center;
-    }
-  }
-  .filename-chip {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 8px 12px;
-    background: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: 8px;
-    cursor: pointer;
-    transition: all 0.2s;
-    &:hover {
-      background: rgba(255, 255, 255, 0.12);
-      border-color: rgba(102, 126, 234, 0.5);
-    }
-    &.active {
-      background: linear-gradient(135deg, rgba(102, 126, 234, 0.3), rgba(118, 75, 162, 0.3));
-      border-color: #667eea;
-    }
-    &.formatted {
-      background: rgba(52, 211, 153, 0.08);
-      border-color: rgba(52, 211, 153, 0.2);
-      &:hover {
-        background: rgba(52, 211, 153, 0.12);
-        border-color: rgba(52, 211, 153, 0.4);
-      }
-    }
-    .filename-text {
-      font-size: 13px;
-      color: rgba(255, 255, 255, 0.9);
-      font-family: 'Monaco', 'Consolas', monospace;
-    }
-    .copy-icon {
-      font-size: 14px;
-      color: rgba(255, 255, 255, 0.5);
-      &:hover {
-        color: #667eea;
-      }
-    }
-  }
+.filename-chips {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
 }
-
-.formatted-filename-section {
-  .filename-chips {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    &.centered {
-      justify-content: center;
-    }
-  }
-  .filename-chip {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 8px 12px;
-    background: rgba(52, 211, 153, 0.08);
-    border: 1px solid rgba(52, 211, 153, 0.2);
-    border-radius: 8px;
-    cursor: pointer;
-    transition: all 0.2s;
-    &:hover {
-      background: rgba(52, 211, 153, 0.12);
-      border-color: rgba(52, 211, 153, 0.4);
-    }
-    .filename-text {
-      font-size: 13px;
-      color: rgba(255, 255, 255, 0.9);
-      font-family: 'Monaco', 'Consolas', monospace;
-    }
-    .copy-icon {
-      font-size: 14px;
-      color: rgba(52, 211, 153, 0.6);
-      &:hover {
-        color: rgba(52, 211, 153, 0.8);
-      }
-    }
-  }
+.filename-chip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  background: var(--studio-bg, #111214);
+  border: 1px solid var(--studio-border, #30343b);
+  border-radius: 6px;
+  min-width: 0;
+  cursor: pointer;
+  transition: border-color 0.16s;
 }
-
+.filename-chip:hover,
+.filename-chip.active {
+  border-color: var(--studio-accent, #a8c7fa);
+}
+.filename-text {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--studio-text, #f3f4f6);
+  overflow-wrap: anywhere;
+  min-width: 0;
+  flex: 1;
+}
+.copy-icon {
+  flex-shrink: 0;
+  font-size: 14px;
+  color: var(--studio-muted, #a1a6b0);
+  cursor: pointer;
+}
+.copy-icon:hover {
+  color: var(--studio-accent, #a8c7fa);
+}
 .description-row,
 .detail-row .description {
-  .label {
-    font-size: 12px;
-    color: rgba(255, 255, 255, 0.5);
-    margin-right: 6px;
-    flex-shrink: 0;
-  }
-  .value {
-    font-size: 13px;
-    color: rgba(255, 255, 255, 0.8);
-    line-height: 1.5;
-  }
-  &.centered {
-    text-align: center;
-  }
-}
-
-.keywords-row {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  align-items: flex-start;
-
-  .label {
-    font-size: 12px;
-    color: rgba(255, 255, 255, 0.5);
-    margin-right: 6px;
-    flex-shrink: 0;
-    line-height: 22px;
-  }
-
-  .keywords-list {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    flex: 1;
-  }
-
-  &.centered {
-    justify-content: center;
-  }
-  .el-tag {
-    background: rgba(255, 255, 255, 0.08);
-    border-color: rgba(255, 255, 255, 0.15);
-    color: rgba(255, 255, 255, 0.7);
-  }
+  flex-direction: column;
+  gap: 4px;
 }
-
-.spacer {
-  flex: 1;
-  min-height: 8px;
+.description-row .value,
+.detail-row .value {
+  color: var(--studio-muted, #a1a6b0);
+  font-size: 12px;
+  line-height: 1.7;
 }
-
-.action-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding-top: 12px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-  &.centered {
-    justify-content: center;
-    gap: 12px;
-  }
-  .meta {
-    font-size: 11px;
-    color: rgba(255, 255, 255, 0.4);
-  }
-  .actions {
-    display: flex;
-    gap: 8px;
-  }
-}
-
-.footer-section {
-  padding-top: 14px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+.detail-row {
   display: flex;
   flex-direction: column;
   gap: 12px;
-
-  &.centered {
-    align-items: center;
-  }
-
-  .meta-row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 12px 16px;
-    align-items: center;
-  }
-
-  .meta-item {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    padding: 4px 8px;
-    background: rgba(255, 255, 255, 0.05);
-    border-radius: 6px;
-    transition: background 0.2s;
-
-    &:hover {
-      background: rgba(255, 255, 255, 0.1);
-    }
-
-    .meta-icon {
-      font-size: 12px;
-    }
-
-    .meta-label {
-      font-size: 11px;
-      color: rgba(255, 255, 255, 0.4);
-    }
-
-    .meta-value {
-      font-size: 12px;
-      color: rgba(255, 255, 255, 0.8);
-
-      &.model-name {
-        font-weight: 500;
-        color: #667eea;
-      }
-    }
-  }
-
-  .action-row {
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-  }
 }
-
-// Desktop: 上下结构
-.desktop-layout {
-  .image-section {
-    position: relative;
-    width: 100%;
-    max-height: 200px;
-    overflow: hidden;
-    img {
-      width: 100%;
-      height: auto;
-      max-height: 200px;
-      object-fit: cover;
-      display: block;
-    }
-    .image-overlay {
-      position: absolute;
-      top: 12px;
-      right: 12px;
-    }
-  }
-  .info-section {
-    padding: 16px;
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
-  }
-  .detail-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    gap: 16px;
-    .description {
-      flex: 1;
-    }
-    .keywords {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-      max-width: 40%;
-    }
-  }
+.keywords-row .label {
+  margin-bottom: 0;
 }
-
-// Mobile: 左右结构
+.spacer {
+  flex: 1;
+}
+.footer-section {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  border-top: 1px solid var(--studio-border, #30343b);
+  padding-top: 14px;
+}
+.meta-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+.meta-item,
+.meta {
+  color: var(--studio-muted, #a1a6b0);
+  font-size: 11px;
+}
+.meta-value.model-name {
+  color: var(--studio-muted, #a1a6b0);
+}
+.action-row,
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.action-row :deep(.el-button + .el-button) {
+  margin-left: 0;
+}
+.action-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid var(--studio-border, #30343b);
+}
+.image-section {
+  position: relative;
+  overflow: hidden;
+  background: var(--studio-bg, #111214);
+}
+.image-section img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.image-overlay,
+.confidence-badge {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+}
+.info-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+.desktop-layout .image-section {
+  width: 100%;
+  height: 240px;
+}
+.desktop-layout .info-section {
+  padding: 16px;
+}
 .mobile-layout {
   display: flex;
-  gap: 16px;
+  align-items: flex-start;
   padding: 16px;
-
-  .image-section {
-    position: relative;
-    flex-shrink: 0;
-    width: 140px;
-    height: 280px;
-    border-radius: 12px;
-    overflow: hidden;
-    img {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-    }
-    .confidence-badge {
-      position: absolute;
-      top: 8px;
-      right: 8px;
-    }
-  }
-  .info-section {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
-    min-width: 0;
-  }
+  gap: 16px;
 }
-
-// Avatar: 居中结构
+.mobile-layout .image-section {
+  flex-shrink: 0;
+  width: 112px;
+  height: 224px;
+  border-radius: 7px;
+}
+.mobile-layout .info-section {
+  flex: 1;
+}
 .avatar-layout {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 20px;
-  gap: 16px;
-  .image-section {
-    position: relative;
-    width: 160px;
-    height: 160px;
-    border-radius: 50%;
-    overflow: hidden;
-    border: 3px solid rgba(255, 255, 255, 0.15);
-    img {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-    }
-    .confidence-badge {
-      position: absolute;
-      bottom: 8px;
-      left: 50%;
-      transform: translateX(-50%);
-    }
-  }
-  .info-section {
-    width: 100%;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 12px;
-  }
-  .category-row {
-    justify-content: center;
-  }
+  padding: 18px;
+  gap: 20px;
 }
-
-.raw-data {
-  padding: 16px;
-  background: #1a1a2e;
-  border-radius: 8px;
-  font-size: 12px;
-  line-height: 1.6;
-  overflow-x: auto;
-  max-height: 500px;
-  margin: 0;
-  color: #e0e0e0;
+.avatar-layout .image-section {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
 }
-
-.title-section {
-  .display-title {
-    font-size: 14px;
-    color: rgba(255, 255, 255, 0.9);
-    font-weight: 500;
-    line-height: 1.5;
-  }
-  &.centered {
-    text-align: center;
-  }
+.avatar-layout .info-section {
+  width: 100%;
 }
-
-.match-section {
-  display: flex;
-  align-items: center;
-  &.centered {
-    justify-content: center;
-  }
+.avatar-layout .confidence-badge {
+  top: auto;
+  bottom: 8px;
+  right: auto;
+  left: 50%;
+  transform: translateX(-50%);
 }
-
-.proposal-section {
-  padding: 10px;
-  background: rgba(102, 126, 234, 0.1);
-  border: 1px solid rgba(102, 126, 234, 0.3);
-  border-radius: 8px;
-
-  .proposal-content {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .proposal-path {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    flex-wrap: wrap;
-    .arrow {
-      color: rgba(255, 255, 255, 0.4);
-      font-size: 14px;
-    }
-  }
-
-  .proposal-reason {
-    font-size: 12px;
-    color: rgba(255, 255, 255, 0.7);
-    line-height: 1.5;
-  }
-
-  &.centered {
-    .proposal-content {
-      align-items: center;
-    }
-  }
-}
-
-.reasoning-section {
-  padding: 10px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 8px;
-
-  .reasoning-content {
-    font-size: 12px;
-    color: rgba(255, 255, 255, 0.7);
-    line-height: 1.6;
-  }
-
-  &.centered {
-    text-align: center;
-  }
-}
-
-.markdown-content {
-  padding: 20px;
-  background: rgba(255, 255, 255, 0.95);
-  border-radius: 12px;
-  color: #333;
-  line-height: 1.8;
+.display-title {
+  color: var(--studio-text, #f3f4f6);
   font-size: 14px;
-
-  :deep(h1),
-  :deep(h2),
-  :deep(h3),
-  :deep(h4) {
-    margin-top: 1.5em;
-    margin-bottom: 0.5em;
-    font-weight: 600;
-    color: #667eea;
-  }
-
-  :deep(h1) {
-    font-size: 1.8em;
-    border-bottom: 2px solid #667eea;
-    padding-bottom: 0.3em;
-  }
-
-  :deep(h2) {
-    font-size: 1.5em;
-    border-bottom: 1px solid rgba(102, 126, 234, 0.3);
-    padding-bottom: 0.3em;
-  }
-
-  :deep(h3) {
-    font-size: 1.3em;
-  }
-
-  :deep(p) {
-    margin: 0.8em 0;
-  }
-
-  :deep(ul),
-  :deep(ol) {
-    margin: 0.8em 0;
-    padding-left: 2em;
-  }
-
-  :deep(li) {
-    margin: 0.4em 0;
-  }
-
-  :deep(strong) {
-    font-weight: 600;
-    color: #667eea;
-  }
-
-  :deep(code) {
-    background: rgba(102, 126, 234, 0.1);
-    padding: 0.2em 0.4em;
-    border-radius: 4px;
-    font-family: 'Monaco', 'Consolas', monospace;
-    font-size: 0.9em;
-    color: #764ba2;
-  }
-
-  :deep(pre) {
-    background: #1a1a2e;
-    padding: 1em;
-    border-radius: 8px;
-    overflow-x: auto;
-    margin: 1em 0;
-
-    code {
-      background: none;
-      padding: 0;
-      color: #e0e0e0;
-    }
-  }
-
-  :deep(blockquote) {
-    border-left: 4px solid #667eea;
-    padding-left: 1em;
-    margin: 1em 0;
-    color: #666;
-    font-style: italic;
-  }
-
-  :deep(table) {
-    border-collapse: collapse;
-    width: 100%;
-    margin: 1em 0;
-
-    th,
-    td {
-      border: 1px solid rgba(0, 0, 0, 0.1);
-      padding: 0.5em 1em;
-      text-align: left;
-    }
-
-    th {
-      background: rgba(102, 126, 234, 0.1);
-      font-weight: 600;
-    }
-  }
-
-  :deep(hr) {
-    border: none;
-    border-top: 1px solid rgba(102, 126, 234, 0.2);
-    margin: 1.5em 0;
-  }
+  font-weight: 500;
+  line-height: 1.6;
 }
-
-// Markdown 内联显示样式
-.markdown-result-section {
+.proposal-section,
+.reasoning-section {
+  padding-top: 14px;
+  border-top: 1px solid var(--studio-border, #30343b);
+}
+.proposal-content {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 10px;
 }
-
-.markdown-header {
+.proposal-path {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-
-  .tag-icon {
-    margin-right: 4px;
+  gap: 6px;
+}
+.proposal-reason,
+.reasoning-content {
+  color: var(--studio-muted, #a1a6b0);
+  font-size: 12px;
+  line-height: 1.7;
+}
+@container (max-width: 440px) {
+  .mobile-layout {
+    flex-direction: column;
+  }
+  .mobile-layout .image-section {
+    align-self: center;
+  }
+  .mobile-layout .info-section {
+    width: 100%;
   }
 }
-
-.markdown-content-inline {
-  padding: 20px;
-  background: rgba(30, 30, 50, 0.6);
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 12px;
-  color: rgba(255, 255, 255, 0.9);
-  line-height: 1.8;
-  font-size: 14px;
-  max-height: 600px;
-  overflow-y: auto;
-
-  // 自定义滚动条
-  &::-webkit-scrollbar {
-    width: 6px;
-  }
-
-  &::-webkit-scrollbar-track {
-    background: rgba(0, 0, 0, 0.05);
-    border-radius: 3px;
-  }
-
-  &::-webkit-scrollbar-thumb {
-    background: rgba(102, 126, 234, 0.3);
-    border-radius: 3px;
-
-    &:hover {
-      background: rgba(102, 126, 234, 0.5);
-    }
-  }
-
-  :deep(h1),
-  :deep(h2),
-  :deep(h3),
-  :deep(h4) {
-    margin-top: 1.2em;
-    margin-bottom: 0.5em;
-    font-weight: 600;
-    color: #a8b5ff;
-
-    &:first-child {
-      margin-top: 0;
-    }
-  }
-
-  :deep(h1) {
-    font-size: 1.6em;
-    border-bottom: 2px solid rgba(168, 181, 255, 0.4);
-    padding-bottom: 0.4em;
-    color: #c5d0ff;
-  }
-
-  :deep(h2) {
-    font-size: 1.4em;
-    border-bottom: 1px solid rgba(168, 181, 255, 0.25);
-    padding-bottom: 0.3em;
-    color: #b8c5ff;
-  }
-
-  :deep(h3) {
-    font-size: 1.2em;
-    color: #a8b5ff;
-  }
-
-  :deep(h4) {
-    font-size: 1.05em;
-    color: #9aa8ff;
-  }
-
-  :deep(p) {
-    margin: 0.7em 0;
-    line-height: 1.7;
-    color: rgba(255, 255, 255, 0.85);
-  }
-
-  :deep(ul),
-  :deep(ol) {
-    margin: 0.7em 0;
-    padding-left: 2em;
-    color: rgba(255, 255, 255, 0.85);
-  }
-
-  :deep(li) {
-    margin: 0.4em 0;
-    line-height: 1.6;
-  }
-
-  :deep(strong) {
-    font-weight: 600;
-    color: #c5d0ff;
-  }
-
-  :deep(em) {
-    font-style: italic;
-    color: #d4a5ff;
-  }
-
-  :deep(code) {
-    background: rgba(168, 181, 255, 0.15);
-    padding: 0.2em 0.5em;
-    border-radius: 4px;
-    font-family: 'Monaco', 'Consolas', monospace;
-    font-size: 0.9em;
-    color: #d4a5ff;
-    border: 1px solid rgba(168, 181, 255, 0.2);
-  }
-
-  :deep(pre) {
-    background: rgba(10, 10, 20, 0.6);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    padding: 1em;
-    border-radius: 8px;
-    overflow-x: auto;
-    margin: 1em 0;
-
-    code {
-      background: none;
-      padding: 0;
-      border: none;
-      color: #e0e0e0;
-      font-size: 0.9em;
-    }
-  }
-
-  :deep(blockquote) {
-    border-left: 3px solid #a8b5ff;
-    padding-left: 1em;
-    margin: 1em 0;
-    color: rgba(255, 255, 255, 0.7);
-    font-style: italic;
-    background: rgba(168, 181, 255, 0.05);
-    padding: 0.8em 1em;
-    border-radius: 4px;
-  }
-
-  :deep(hr) {
-    border: none;
-    border-top: 1px solid rgba(255, 255, 255, 0.2);
-    margin: 1.5em 0;
-  }
-
-  :deep(table) {
-    border-collapse: collapse;
-    width: 100%;
-    margin: 1em 0;
-    font-size: 0.9em;
-    border: 1px solid rgba(255, 255, 255, 0.15);
-
-    th,
-    td {
-      border: 1px solid rgba(255, 255, 255, 0.15);
-      padding: 0.6em 1em;
-      text-align: left;
-    }
-
-    th {
-      background: rgba(168, 181, 255, 0.15);
-      font-weight: 600;
-      color: #c5d0ff;
-    }
-
-    td {
-      color: rgba(255, 255, 255, 0.85);
-    }
-
-    tr:hover {
-      background: rgba(168, 181, 255, 0.08);
-    }
-  }
-
-  :deep(a) {
-    color: #a8b5ff;
-    text-decoration: underline;
-
-    &:hover {
-      color: #c5d0ff;
-    }
+@media (prefers-reduced-motion: reduce) {
+  .filename-chip {
+    transition: none;
   }
 }
 </style>

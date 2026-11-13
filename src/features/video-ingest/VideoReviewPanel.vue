@@ -3,9 +3,16 @@
     <div class="video-review__heading">
       <div>
         <h2 id="video-review-title">{{ job.filename }}</h2>
-        <p>审核版本 {{ revision }} · {{ JOB_STATUS[job.status] || job.status }}</p>
+        <p>
+          {{ job.status === 'published' ? '发布记录' : '内容审核' }} ·
+          {{ JOB_STATUS[job.status] || job.status }}<span v-if="revision"> · v{{ revision }}</span>
+        </p>
       </div>
-      <el-tag v-if="dirty" type="warning" size="small">草稿未保存</el-tag>
+      <Transition name="studio-feedback"
+        ><el-tag v-if="dirty && !isPublished" type="warning" size="small"
+          >草稿未保存</el-tag
+        ></Transition
+      >
     </div>
 
     <template v-if="job.result">
@@ -23,11 +30,13 @@
       >
         浏览器不支持视频预览。
       </video>
-      <p v-if="previewFailed" class="video-review__hint" role="status">
-        预览地址可能已过期。<button type="button" class="text-action" @click="refreshResources">
-          刷新资源地址
-        </button>
-      </p>
+      <Transition name="studio-feedback"
+        ><p v-if="previewFailed" class="video-review__hint" role="status">
+          预览地址可能已过期。<button type="button" class="text-action" @click="refreshResources">
+            刷新资源地址
+          </button>
+        </p></Transition
+      >
       <p class="video-review__metadata">
         {{ job.result.metadata?.width }} × {{ job.result.metadata?.height }} ·
         {{ Number(job.result.metadata?.duration || 0).toFixed(1) }} 秒 ·
@@ -35,7 +44,7 @@
         {{ job.result.metadata?.codec || 'MP4' }}
       </p>
 
-      <fieldset class="video-review__frames" :disabled="!editable || busy">
+      <fieldset v-if="!isPublished" class="video-review__frames" :disabled="!editable || busy">
         <legend>
           选择封面 <span>云端候选 {{ job.result.frames?.length || 0 }} 帧</span>
         </legend>
@@ -66,44 +75,44 @@
           </button>
         </div>
       </fieldset>
-      <p v-if="failedFrames.length" class="video-review__hint">
-        封面加载失败。<button type="button" class="text-action" @click="refreshResources">
-          刷新候选帧
-        </button>
-      </p>
+      <Transition name="studio-feedback"
+        ><p v-if="failedFrames.length" class="video-review__hint">
+          封面加载失败。<button type="button" class="text-action" @click="refreshResources">
+            刷新候选帧
+          </button>
+        </p></Transition
+      >
 
-      <div v-if="conflict" class="video-review__conflict" role="alert">
-        <strong>{{ conflict.message }}</strong>
-        <p>
-          当前服务端版本
-          {{ conflict.remoteRevision }}。核对后可以采纳远端内容，或使用最新版本提交这份草稿。
-        </p>
-        <div class="video-review__actions">
-          <el-button size="small" :disabled="busy" @click="$emit('accept-remote')"
-            >采纳远端内容</el-button
-          >
-          <el-button
-            size="small"
-            type="warning"
-            :disabled="busy || !editable"
-            @click="$emit('reapply')"
-            >提交本地草稿</el-button
-          >
-        </div>
-      </div>
+      <el-collapse-transition
+        ><div v-if="conflict && !isPublished" class="video-review__conflict" role="alert">
+          <strong>{{ conflict.message }}</strong>
+          <p>
+            当前服务端版本
+            {{ conflict.remoteRevision }}。核对后可以采纳远端内容，或使用最新版本提交这份草稿。
+          </p>
+          <div class="video-review__actions">
+            <el-button size="small" :disabled="busy" @click="$emit('accept-remote')"
+              >采纳远端内容</el-button
+            >
+            <el-button
+              size="small"
+              type="warning"
+              :disabled="busy || !editable"
+              @click="$emit('reapply')"
+              >提交本地草稿</el-button
+            >
+          </div>
+        </div></el-collapse-transition
+      >
 
-      <div v-if="editable" class="video-review__ai">
-        <span>AI 分类模型</span>
+      <div v-if="editable && !isPublished" class="video-review__ai">
+        <span class="video-review__section-label">辅助填写</span>
         <div class="video-review__ai-controls">
           <strong>GPT-6.1 Sol</strong>
           <el-tag :type="hasCredentials ? 'success' : 'warning'" size="small">
             {{ hasCredentials ? '当前标签页已配置' : '未配置 API Key' }}
           </el-tag>
-          <el-button
-            :loading="busy"
-            :disabled="busy || !hasCredentials || !!conflict"
-            @click="$emit('analyze')"
-          >
+          <el-button :loading="busy" :disabled="busy || !!conflict" @click="$emit('analyze')">
             分析所选封面
           </el-button>
         </div>
@@ -114,94 +123,139 @@
         </p>
       </div>
 
-      <form class="video-review__form" @submit.prevent="$emit('save')">
-        <fieldset :disabled="!editable || busy">
-          <div class="video-review__fields">
-            <label>
-              视频用途
-              <select :value="draft.usage" @change="update('usage', $event.target.value)">
-                <option v-for="usage in VIDEO_USAGES" :key="usage.value" :value="usage.value">
-                  {{ usage.label }}
-                </option>
-              </select>
-            </label>
-            <label>
-              主题分类
-              <input
-                :value="draft.topic"
-                list="video-topics"
-                maxlength="80"
-                placeholder="选择已有视频分类或直接输入"
-                @input="update('topic', $event.target.value)"
-              />
-              <datalist id="video-topics">
-                <option v-for="topic in topicSuggestions" :key="topic" :value="topic" />
-              </datalist>
-              <span v-if="topicsError" class="video-review__hint"
-                >已有视频分类暂时无法读取，仍可直接输入主题；刷新任务后重试。</span
-              >
-            </label>
-            <label class="video-review__wide">
-              发布文件名
-              <input
-                :value="draft.filename"
-                maxlength="150"
-                placeholder="描述性的文件名.mp4"
-                @input="update('filename', $event.target.value)"
-              />
-            </label>
-            <label class="video-review__wide">
-              展示标题
-              <input
-                :value="draft.displayTitle"
-                maxlength="200"
-                placeholder="面向访客的视频标题"
-                @input="update('displayTitle', $event.target.value)"
-              />
-            </label>
-            <label class="video-review__wide">
-              描述
-              <textarea
-                :value="draft.description"
-                rows="3"
-                maxlength="2000"
-                placeholder="描述画面内容与氛围"
-                @input="update('description', $event.target.value)"
-              />
-            </label>
-            <label class="video-review__wide">
-              关键词
-              <input
-                :value="keywordText"
-                maxlength="600"
-                placeholder="多个关键词用逗号分隔"
-                @focus="keywordEditing = true"
-                @blur="keywordEditing = false"
-                @input="updateKeywords($event.target.value)"
-              />
-            </label>
+      <Transition name="studio-panel" mode="out-in"
+        ><div v-if="isPublished" class="video-review__published" role="status">
+          <div class="video-review__published-heading">
+            <el-icon><CircleCheck /></el-icon>
+            <div>
+              <h3>已发布到画廊</h3>
+              <p>内容审核与发布已完成，可在已发布历史中查看。</p>
+            </div>
           </div>
-        </fieldset>
-        <p v-if="draft.ai" class="video-review__hint">
-          AI：{{ draft.ai.model }} · 置信度 {{ Math.round((draft.ai.confidence || 0) * 100) }}%
-          <span v-if="draft.ai.frameId !== draft.selectedFrameId">
-            · 封面已更换，保存时清除旧分析标记</span
-          >
-        </p>
-        <div class="video-review__footer">
-          <p class="video-review__hint">
-            {{ editable ? '保存审核后，可在左侧勾选并批量发布。' : '该任务当前不可编辑。' }}
-          </p>
-          <el-button
-            v-if="editable"
-            type="primary"
-            native-type="submit"
-            :loading="busy"
-            :disabled="busy || !!conflict"
-            >保存审核</el-button
-          >
+          <dl class="video-review__summary">
+            <div>
+              <dt>展示标题</dt>
+              <dd>{{ draft.displayTitle || job.filename }}</dd>
+            </div>
+            <div>
+              <dt>分类</dt>
+              <dd>{{ usageLabel }} · {{ draft.topic }}</dd>
+            </div>
+            <div>
+              <dt>文件名</dt>
+              <dd>{{ draft.filename }}</dd>
+            </div>
+            <div>
+              <dt>描述</dt>
+              <dd>{{ draft.description || '—' }}</dd>
+            </div>
+            <div>
+              <dt>关键词</dt>
+              <dd>{{ (draft.keywords || []).join(' · ') || '—' }}</dd>
+            </div>
+          </dl>
+          <el-button @click="$emit('back-to-pending')">返回待办</el-button>
         </div>
-      </form>
+
+        <form v-else class="video-review__form" @submit.prevent="$emit('save')">
+          <fieldset :disabled="!editable || busy">
+            <div class="video-review__fields">
+              <div class="video-review__field video-review__wide">
+                <span id="video-usage-label">视频用途</span>
+                <el-segmented
+                  :model-value="draft.usage"
+                  :options="VIDEO_USAGES"
+                  :disabled="!editable || busy"
+                  aria-labelledby="video-usage-label"
+                  @update:model-value="update('usage', $event)"
+                />
+              </div>
+              <div class="video-review__field video-review__wide">
+                <label for="video-topic">主题分类</label>
+                <el-select
+                  id="video-topic"
+                  :model-value="draft.topic"
+                  filterable
+                  allow-create
+                  default-first-option
+                  :reserve-keyword="false"
+                  :disabled="!editable || busy"
+                  placeholder="搜索已有分类，或输入新主题后按 Enter"
+                  @update:model-value="update('topic', $event)"
+                >
+                  <el-option
+                    v-for="topic in topicSuggestions"
+                    :key="topic"
+                    :label="topic"
+                    :value="topic"
+                  />
+                </el-select>
+                <span v-if="topicsError" class="video-review__hint"
+                  >已有分类暂时无法读取，仍可直接输入主题后按 Enter 确认。</span
+                >
+              </div>
+              <label class="video-review__wide">
+                发布文件名
+                <input
+                  :value="draft.filename"
+                  maxlength="150"
+                  placeholder="描述性的文件名.mp4"
+                  @input="update('filename', $event.target.value)"
+                />
+              </label>
+              <label class="video-review__wide">
+                展示标题
+                <input
+                  :value="draft.displayTitle"
+                  maxlength="200"
+                  placeholder="面向访客的视频标题"
+                  @input="update('displayTitle', $event.target.value)"
+                />
+              </label>
+              <label class="video-review__wide">
+                描述
+                <textarea
+                  :value="draft.description"
+                  rows="3"
+                  maxlength="2000"
+                  placeholder="描述画面内容与氛围"
+                  @input="update('description', $event.target.value)"
+                />
+              </label>
+              <label class="video-review__wide">
+                关键词
+                <input
+                  :value="keywordText"
+                  maxlength="600"
+                  placeholder="多个关键词用逗号分隔"
+                  @focus="keywordEditing = true"
+                  @blur="keywordEditing = false"
+                  @input="updateKeywords($event.target.value)"
+                />
+              </label>
+            </div>
+          </fieldset>
+          <p v-if="draft.ai" class="video-review__hint">
+            AI：{{ draft.ai.model }} · 置信度 {{ Math.round((draft.ai.confidence || 0) * 100) }}%
+            <span v-if="draft.ai.frameId !== draft.selectedFrameId">
+              · 封面已更换，保存时清除旧分析标记</span
+            >
+          </p>
+          <div class="video-review__footer">
+            <p class="video-review__hint">
+              {{ editable ? '保存审核后，可在左侧勾选并批量发布。' : '该任务当前不可编辑。' }}
+            </p>
+            <el-button
+              v-if="editable"
+              type="primary"
+              native-type="submit"
+              :loading="busy"
+              :disabled="busy || !!conflict"
+              >保存审核</el-button
+            >
+          </div>
+        </form></Transition
+      >
     </template>
     <div v-else class="video-review__waiting">
       <el-icon :size="36"><VideoCamera /></el-icon>
@@ -213,7 +267,7 @@
 
 <script setup>
 import { computed, ref, watch } from 'vue'
-import { VideoCamera } from '@element-plus/icons-vue'
+import { VideoCamera, CircleCheck } from '@element-plus/icons-vue'
 import { JOB_STATUS, VIDEO_USAGES, formatBytes } from './domain'
 
 const props = defineProps({
@@ -228,7 +282,19 @@ const props = defineProps({
   topicSuggestions: { type: Array, default: () => [] },
   topicsError: String
 })
-const emit = defineEmits(['update:draft', 'save', 'analyze', 'accept-remote', 'reapply', 'refresh'])
+const emit = defineEmits([
+  'update:draft',
+  'save',
+  'analyze',
+  'accept-remote',
+  'reapply',
+  'refresh',
+  'back-to-pending'
+])
+const isPublished = computed(() => props.job.status === 'published')
+const usageLabel = computed(
+  () => VIDEO_USAGES.find(usage => usage.value === props.draft.usage)?.label || props.draft.usage
+)
 const failedFrames = ref([])
 const previewFailed = ref(false)
 const previewUrl = ref('')
@@ -288,79 +354,92 @@ watch(
 </script>
 
 <style scoped lang="scss">
-@use '@/styles/variables' as *;
 .video-review {
-  color: $gray-100;
+  --review-text: var(--studio-text, #f4f6fb);
+  --review-muted: var(--studio-muted, #b1b9c9);
+  --review-border: var(--studio-border, rgba(255, 255, 255, 0.13));
+  --review-accent: var(--studio-accent, #7db7ff);
+  color: var(--review-text);
   &__heading {
     display: flex;
-    align-items: start;
     justify-content: space-between;
-    gap: 12px;
+    align-items: start;
+    gap: 16px;
     margin-bottom: 20px;
   }
   h2 {
+    margin: 0 0 5px;
     font-size: 18px;
-    margin: 0 0 6px;
+    font-weight: 600;
+    letter-spacing: -0.018em;
+    line-height: 1.4;
     overflow-wrap: anywhere;
   }
   &__heading p,
   &__metadata {
-    color: $gray-300;
-    font-size: 13px;
     margin: 0;
+    color: var(--review-muted);
+    font-size: 12px;
+    line-height: 1.5;
     font-variant-numeric: tabular-nums;
   }
   &__player {
     display: block;
     width: 100%;
-    max-height: 320px;
-    background: #090d18;
-    border-radius: 12px;
+    max-height: 430px;
+    aspect-ratio: 16 / 9;
+    background: #080b11;
+    border-radius: 17px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
   }
   &__metadata {
-    margin: 12px 0 24px;
+    margin: 10px 0 22px;
   }
   fieldset {
-    min-width: 0;
     border: 0;
     padding: 0;
     margin: 0;
+    min-width: 0;
   }
   legend {
-    font-weight: 600;
-    font-size: 14px;
-    margin-bottom: 12px;
+    font-weight: 500;
+    font-size: 13px;
+    margin-bottom: 10px;
   }
   legend span {
-    font-size: 12px;
-    color: $gray-300;
-    font-weight: 400;
+    color: var(--review-muted);
     margin-left: 8px;
+    font-size: 12px;
+    font-weight: 400;
   }
   &__frame-grid {
     display: grid;
     grid-template-columns: repeat(5, minmax(0, 1fr));
-    gap: 8px;
+    gap: 10px;
   }
   &__frame {
     border: 2px solid transparent;
-    padding: 0;
+    padding: 3px;
+    border-radius: 13px;
     overflow: hidden;
-    background: rgba(0, 0, 0, 0.2);
-    border-radius: 8px;
-    color: $gray-100;
+    background: rgba(255, 255, 255, 0.035);
+    color: var(--review-text);
     cursor: pointer;
+    transition:
+      border-color 160ms,
+      background 160ms;
   }
   &__frame.is-selected {
-    border-color: $primary-start;
-    background: rgba($primary-start, 0.18);
+    border-color: var(--review-accent);
+    background: rgba(125, 183, 255, 0.12);
   }
   &__frame img,
   &__frame-fallback {
     display: block;
     width: 100%;
-    aspect-ratio: 16 / 10;
+    aspect-ratio: 4 / 3;
     object-fit: cover;
+    border-radius: 8px;
   }
   &__frame-fallback {
     font-size: 11px;
@@ -370,7 +449,7 @@ watch(
   &__frame-caption {
     display: flex;
     justify-content: space-between;
-    padding: 6px;
+    padding: 7px 3px 4px;
     font-size: 11px;
     font-variant-numeric: tabular-nums;
   }
@@ -380,13 +459,12 @@ watch(
   &__conflict {
     margin-top: 20px;
     padding: 16px;
-    border: 1px solid rgba($warning, 0.5);
-    background: rgba($warning, 0.08);
-    border-radius: 12px;
+    border: 1px solid #6d593c;
+    background: #2e281e;
+    border-radius: 16px;
     font-size: 13px;
   }
   &__conflict p {
-    color: $gray-200;
     line-height: 1.6;
   }
   &__actions,
@@ -395,21 +473,26 @@ watch(
     display: flex;
     gap: 10px;
     align-items: center;
+    flex-wrap: wrap;
   }
   &__ai {
-    margin-top: 24px;
-    padding-bottom: 20px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+    margin-top: 22px;
+    padding: 15px 16px;
+    background: rgba(120, 139, 168, 0.065);
+    border-radius: 17px;
   }
-  &__ai > label {
+  &__section-label {
     display: block;
-    margin-bottom: 8px;
-    color: $gray-200;
-    font-size: 13px;
+    color: var(--review-muted);
+    font-size: 12px;
+    margin-bottom: 10px;
   }
-  &__ai-controls select {
-    min-width: 0;
-    flex: 1;
+  &__ai-controls strong {
+    font-size: 13px;
+    font-weight: 500;
+  }
+  &__ai-controls .el-button {
+    margin-left: auto;
   }
   &__form {
     margin-top: 20px;
@@ -419,61 +502,73 @@ watch(
     grid-template-columns: 1fr 1fr;
     gap: 16px;
   }
-  &__fields label {
+  &__fields label,
+  &__field {
     display: flex;
     flex-direction: column;
     gap: 8px;
-    color: $gray-200;
     font-size: 13px;
+    color: #d0d7e3;
   }
   &__wide {
     grid-column: 1 / -1;
   }
+  &__field :deep(.el-segmented) {
+    align-self: flex-start;
+    border-radius: 999px;
+    padding: 4px;
+    background: rgba(91, 106, 130, 0.22);
+    box-shadow: inset 0 1px rgba(255, 255, 255, 0.09);
+    --el-segmented-item-selected-color: #fff;
+    --el-segmented-item-selected-bg-color: rgba(177, 197, 226, 0.19);
+  }
+  &__field :deep(.el-segmented__item),
+  &__field :deep(.el-segmented__item-selected) {
+    border-radius: 999px;
+  }
   input,
-  select,
   textarea {
     box-sizing: border-box;
     width: 100%;
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    border-radius: 8px;
+    min-height: 38px;
+    border: 1px solid var(--review-border);
+    border-radius: 11px;
     padding: 10px 12px;
-    background: rgba(0, 0, 0, 0.18);
-    color: $white;
+    background: rgba(8, 13, 23, 0.24);
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.08);
+    color: var(--review-text);
     font: inherit;
-    caret-color: $primary-start;
+    line-height: 1.5;
+    caret-color: var(--review-accent);
+    transition: border-color 160ms;
   }
   input::placeholder,
   textarea::placeholder {
-    color: $gray-400;
-  }
-  select {
-    color-scheme: dark;
+    color: #919aab;
   }
   textarea {
     resize: vertical;
-    min-height: 82px;
+    min-height: 84px;
   }
   input:disabled,
-  select:disabled,
   textarea:disabled {
-    opacity: 0.7;
+    opacity: 0.65;
   }
   button:focus-visible,
   input:focus-visible,
-  select:focus-visible,
   textarea:focus-visible {
-    outline: 2px solid $primary-start;
+    outline: 2px solid var(--review-accent);
     outline-offset: 3px;
   }
   &__hint {
-    color: $gray-300;
+    color: var(--review-muted);
     font-size: 12px;
     line-height: 1.65;
     margin: 10px 0 0;
   }
   &__hint a,
   .text-action {
-    color: #c4b5fd;
+    color: #a8d0ff;
     text-decoration: underline;
     text-underline-offset: 3px;
   }
@@ -485,28 +580,92 @@ watch(
     cursor: pointer;
   }
   &__footer {
-    margin-top: 20px;
+    margin-top: 22px;
+    padding-top: 16px;
+    border-top: 1px solid var(--review-border);
     justify-content: space-between;
   }
+  &__footer .video-review__hint {
+    margin: 0;
+  }
   &__waiting {
-    padding: 64px 16px;
-    color: $gray-300;
+    padding: 72px 20px;
+    color: var(--review-muted);
     text-align: center;
+  }
+  &__published {
+    border-top: 1px solid var(--review-border);
+    padding-top: 20px;
+  }
+  &__published-heading {
+    display: flex;
+    align-items: start;
+    gap: 10px;
+  }
+  &__published-heading .el-icon {
+    color: #89b6a0;
+    font-size: 22px;
+  }
+  &__published-heading h3 {
+    margin: 0 0 5px;
+    font-size: 16px;
+  }
+  &__published-heading p {
+    margin: 0;
+    color: var(--review-muted);
+    font-size: 12px;
+    line-height: 1.6;
+  }
+  &__summary {
+    margin: 24px 0;
+    display: grid;
+    gap: 16px;
+  }
+  &__summary div {
+    display: grid;
+    grid-template-columns: 70px 1fr;
+    gap: 14px;
+    font-size: 13px;
+    line-height: 1.6;
+  }
+  &__summary dt {
+    color: var(--review-muted);
+  }
+  &__summary dd {
+    margin: 0;
+    overflow-wrap: anywhere;
   }
   @media (max-width: 520px) {
     &__frame-grid {
-      grid-template-columns: repeat(3, minmax(0, 1fr));
+      display: flex;
+      overflow-x: auto;
+      padding-bottom: 5px;
+    }
+    &__frame {
+      flex: 0 0 108px;
     }
     &__fields {
       grid-template-columns: 1fr;
     }
-    &__ai-controls,
+    &__ai-controls .el-button {
+      margin-left: 0;
+      width: 100%;
+    }
     &__footer {
       align-items: stretch;
       flex-direction: column;
     }
-    &__actions {
-      flex-wrap: wrap;
+    &__field :deep(.el-segmented) {
+      width: 100%;
+      font-size: 12px;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      transition: none !important;
+      animation: none !important;
     }
   }
 }

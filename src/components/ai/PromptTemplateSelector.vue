@@ -1,17 +1,16 @@
 <template>
   <div class="prompt-template-selector">
-    <el-card shadow="hover">
-      <template #header>
+    <section class="template-section">
+      <header>
         <div class="card-header">
-          <span>📝 提示词模板</span>
+          <h2>提示词模板</h2>
           <el-tag v-if="modelValue" type="primary" size="small">
             {{ currentTemplateName }}
           </el-tag>
         </div>
-      </template>
+      </header>
 
-      <!-- 模板选择 -->
-      <el-form label-width="100px">
+      <el-form label-position="top">
         <el-form-item label="选择模板">
           <el-select
             :model-value="modelValue"
@@ -33,25 +32,25 @@
           </el-select>
         </el-form-item>
 
-        <!-- 自定义提示词编辑器 -->
-        <el-form-item v-if="modelValue === 'custom'" label="自定义提示词">
-          <el-input
-            :model-value="customPrompt"
-            type="textarea"
-            :rows="12"
-            placeholder="输入自定义提示词..."
-            @update:model-value="handleCustomPromptChange"
-          />
-          <div class="form-tip">提示词长度：{{ customPrompt.length }} 字符</div>
-          <div
-            class="form-tip"
-            v-text="
-              '动态变量：{{primaryCategory}} 主分类、{{secondaryList}} 最新二级分类、{{thirdHints}} 最新三级分类。'
-            "
-          />
-        </el-form-item>
+        <el-collapse-transition>
+          <el-form-item v-if="modelValue === 'custom'" label="自定义提示词">
+            <el-input
+              :model-value="customPrompt"
+              type="textarea"
+              :rows="12"
+              placeholder="输入自定义提示词..."
+              @update:model-value="handleCustomPromptChange"
+            />
+            <div class="form-tip">提示词长度：{{ customPrompt.length }} 字符</div>
+            <div
+              class="form-tip"
+              v-text="
+                '动态变量：{{primaryCategory}} 主分类、{{secondaryList}} 最新二级分类、{{thirdHints}} 最新三级分类。'
+              "
+            />
+          </el-form-item>
+        </el-collapse-transition>
 
-        <!-- 实时预览 -->
         <el-form-item v-if="showPreview" label="预览">
           <el-button size="small" @click="togglePreview">
             {{ previewExpanded ? '收起预览' : '展开预览' }}
@@ -74,21 +73,23 @@
                 <el-tag :type="preview.isValid ? 'success' : 'warning'" size="small">
                   {{ preview.isValid ? '有效' : '无效' }}
                 </el-tag>
-                <span class="copy-btn" @click="copyPrompt">复制</span>
+                <button type="button" class="copy-btn" @click="copyPrompt">复制</button>
               </div>
             </div>
             <pre class="preview-content">{{ preview.prompt }}</pre>
           </div>
         </el-collapse-transition>
 
-        <el-alert
-          v-if="previewExpanded && !previewLoading && !preview.success"
-          type="error"
-          :title="preview.error"
-          :closable="false"
-        />
+        <Transition name="studio-feedback">
+          <el-alert
+            v-if="previewExpanded && !previewLoading && !preview.success"
+            type="error"
+            :title="preview.error"
+            :closable="false"
+          />
+        </Transition>
       </el-form>
-    </el-card>
+    </section>
   </div>
 </template>
 
@@ -123,11 +124,9 @@ const props = defineProps({
 
 const emit = defineEmits(['update:modelValue', 'update:customPrompt'])
 
-// State
 const previewExpanded = ref(false)
 const templateList = ref(getTemplateList())
 
-// Computed
 const currentTemplateName = computed(() => {
   const template = templateList.value.find(t => t.id === props.modelValue)
   return template?.name || '未选择'
@@ -152,7 +151,6 @@ async function loadPreview(force = false) {
   previewLoading.value = false
 }
 
-// Methods
 function handleTemplateChange(templateId) {
   emit('update:modelValue', templateId)
 }
@@ -176,7 +174,6 @@ async function copyPrompt() {
   }
 }
 
-// Watch
 watch(
   () => [
     previewExpanded.value,
@@ -194,140 +191,103 @@ watch(
 
 <style lang="scss" scoped>
 .prompt-template-selector {
-  flex-shrink: 0;
-
-  :deep(.el-card) {
-    background: rgba(30, 30, 50, 0.95);
-    backdrop-filter: blur(10px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 12px;
-  }
-
-  :deep(.el-card__header) {
-    padding: 16px 20px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  }
-
-  :deep(.el-card__body) {
-    padding: 16px;
-  }
-
-  // 修复表单标签颜色为白色
-  :deep(.el-form-item__label) {
-    color: rgba(255, 255, 255, 0.9) !important;
-  }
-
-  // 修复输入框文字颜色为白色
-  :deep(.el-select) {
-    .el-input__wrapper {
-      background: rgba(255, 255, 255, 0.1);
-      box-shadow: none;
-      border: 1px solid rgba(255, 255, 255, 0.2);
-    }
-
-    .el-input__inner,
-    .el-select__input,
-    .el-select__placeholder {
-      color: #ffffff !important;
-    }
-
-    .el-input__suffix {
-      color: rgba(255, 255, 255, 0.7);
-    }
-  }
-
-  :deep(.el-textarea__inner) {
-    color: #ffffff !important;
-    background: rgba(255, 255, 255, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-
-    &::placeholder {
-      color: rgba(255, 255, 255, 0.5);
-    }
-  }
-
-  .card-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    font-size: 16px;
-    font-weight: 600;
-    color: #ffffff;
-  }
-
-  .template-option {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-
-    .template-name {
-      font-size: 14px;
-      font-weight: 500;
-    }
-
-    .template-desc {
-      font-size: 12px;
-      color: var(--el-text-color-secondary);
-    }
-  }
-
-  .form-tip {
-    font-size: 12px;
-    color: var(--el-text-color-secondary);
-    margin-top: 4px;
-  }
-
-  .preview-box {
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    border-radius: 8px;
-    overflow: hidden;
-    background: rgba(255, 255, 255, 0.1);
-
-    .preview-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 12px;
-      background: rgba(255, 255, 255, 0.1);
-      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-
-      :deep(.el-text) {
-        color: rgba(255, 255, 255, 0.7);
-      }
-
-      .preview-actions {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-      }
-
-      .copy-btn {
-        color: #fff;
-        font-size: 12px;
-        cursor: pointer;
-        padding: 4px 10px;
-        border-radius: 10px;
-        background: rgba(255, 255, 255, 0.15);
-        transition: all 0.2s;
-
-        &:hover {
-          background: rgba(255, 255, 255, 0.25);
-        }
-      }
-    }
-
-    .preview-content {
-      padding: 16px;
-      margin: 0;
-      background: rgba(0, 0, 0, 0.2);
-      font-size: 12px;
-      line-height: 1.6;
-      max-height: 400px;
-      overflow-y: auto;
-      white-space: pre-wrap;
-      word-wrap: break-word;
-      color: rgba(255, 255, 255, 0.9);
-    }
-  }
+  min-width: 0;
+}
+.card-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.card-header h2 {
+  margin: 0;
+  color: var(--studio-text, #f3f4f6);
+  font-size: 14px;
+  font-weight: 600;
+}
+.template-section :deep(.el-form-item) {
+  margin-bottom: 16px;
+}
+.template-section :deep(.el-form-item__label) {
+  color: var(--studio-muted, #a1a6b0);
+  font-size: 12px;
+  padding: 0 0 8px;
+  line-height: 1.5;
+}
+.template-section :deep(.el-form-item__content) {
+  gap: 8px;
+}
+.template-section :deep(.el-button + .el-button) {
+  margin-left: 0;
+}
+.template-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  justify-content: space-between;
+}
+.template-name {
+  font-size: 13px;
+}
+.template-desc {
+  font-size: 12px;
+  color: var(--studio-muted, #a1a6b0);
+}
+.form-tip {
+  width: 100%;
+  color: var(--studio-muted, #a1a6b0);
+  font-size: 12px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.preview-box {
+  overflow: hidden;
+  border: 1px solid var(--studio-border, #30343b);
+  border-radius: 8px;
+  background: var(--studio-bg, #111214);
+}
+.preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--studio-border, #30343b);
+}
+.preview-header :deep(.el-text) {
+  font-size: 11px;
+}
+.preview-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.copy-btn {
+  background: none;
+  border: 0;
+  padding: 4px;
+  color: var(--studio-accent, #a8c7fa);
+  font-size: 12px;
+  cursor: pointer;
+}
+.copy-btn:focus-visible {
+  outline: 2px solid var(--studio-accent, #a8c7fa);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+.preview-content {
+  padding: 12px;
+  margin: 0;
+  max-height: 340px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--studio-muted, #a1a6b0);
+  font-size: 12px;
+  line-height: 1.7;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 </style>

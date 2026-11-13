@@ -17,7 +17,7 @@ export function createUploadFileLifecycleService({
   return {
     async prepareFiles(
       newFiles,
-      { uploadMode, target, validateFile, generateId, compressionThreshold = 20 * 1024 * 1024 }
+      { target, validateFile, generateId, compressionThreshold = 20 * 1024 * 1024 }
     ) {
       const validFiles = []
 
@@ -47,15 +47,10 @@ export function createUploadFileLifecycleService({
           }
         }
 
-        let fileHash = null
-        let cachedAiMetadata = null
-
-        if (uploadMode === 'ai') {
-          fileHash = await hashComputer(processedFile)
-          cachedAiMetadata = sessionCache.getCachedAiMetadata(fileHash)
-          if (cachedAiMetadata?.error) {
-            cachedAiMetadata = null
-          }
+        const fileHash = await hashComputer(processedFile)
+        let cachedAiMetadata = sessionCache.getCachedAiMetadata(fileHash) || null
+        if (cachedAiMetadata?.error) {
+          cachedAiMetadata = null
         }
 
         validFiles.push({
@@ -70,10 +65,10 @@ export function createUploadFileLifecycleService({
           status: 'pending',
           progress: 0,
           error: null,
-          targetPath: target.l1 ? buildTargetPath(target.series, target.l1, target.l2) : '',
+          targetPath: '',
           targetSeries: target.series,
-          targetL1: target.l1,
-          targetL2: target.l2,
+          targetL1: '',
+          targetL2: '',
           aiMetadata: cachedAiMetadata,
           aiTaskId: null,
           aiTaskStatus: cachedAiMetadata ? 'completed' : null,
@@ -149,20 +144,18 @@ export function createUploadFileLifecycleService({
       return pendingFiles.length
     },
 
-    async analyzeFiles(uploadFiles, { series, provider, modelKey }) {
+    async analyzeFiles(uploadFiles, { series }) {
       const taskStore = useAiTasksStore()
       await taskStore.initialize()
 
-      const queue = uploadFiles.filter(file => !file.aiMetadata)
+      const queue = uploadFiles.filter(file => !file.aiMetadata || file.aiMetadata.error)
       for (const uploadFile of queue) {
         let task = taskStore.getTaskByFileId(uploadFile.id)
         if (!task) {
           task = await taskStore.createTask({
             fileId: uploadFile.id,
             file: uploadFile.file,
-            series,
-            provider,
-            modelKey
+            series
           })
         }
 

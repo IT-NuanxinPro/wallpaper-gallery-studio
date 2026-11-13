@@ -1,131 +1,105 @@
 <template>
-  <!-- 全局加载状态 -->
-  <div v-if="pageLoading" class="ai-assistant-loading">
-    <div class="loading-spinner">
-      <div class="spinner"></div>
-      <p class="loading-text">加载中...</p>
-    </div>
+  <div v-if="pageLoading" class="ai-assistant-loading" role="status" aria-live="polite">
+    <div class="spinner"></div>
+    <p>正在加载 AI 配置</p>
   </div>
 
-  <div v-else ref="panelRef" class="ai-assistant-panel">
-    <!-- 三栏布局 -->
-    <div class="panel-content">
-      <!-- 左栏：配置区（可滚动） -->
-      <div class="left-column">
-        <el-card class="config-card compact" shadow="hover">
-          <template #header>
-            <div class="card-header">
-              <span class="header-icon">🎯</span>
-              <span class="header-title">AI 模型</span>
-            </div>
-          </template>
-          <div class="shared-ai-config">
-            <strong>GPT-6.1 Sol</strong>
-            <el-tag :type="credentialsStore.hasCredentials ? 'success' : 'warning'" size="small">
-              {{ credentialsStore.hasCredentials ? '当前标签页已配置' : '未配置 API Key' }}
-            </el-tag>
-            <p>与图片上传、视频分析共用当前标签页的 API 配置。</p>
-            <router-link to="/settings#ai-config">
-              {{ credentialsStore.hasCredentials ? '管理 AI 配置' : '去设置 API Key' }}
-            </router-link>
-          </div>
-        </el-card>
-
-        <!-- 主分类选择 -->
-        <el-card class="config-card compact" shadow="hover">
-          <template #header>
-            <div class="card-header">
-              <span class="header-icon">📂</span>
-              <span class="header-title">壁纸类型</span>
-            </div>
-          </template>
-          <el-radio-group v-model="primaryCategory" size="default" class="category-group">
-            <el-radio-button value="desktop">🖥️ Desktop</el-radio-button>
-            <el-radio-button value="mobile">📱 Mobile</el-radio-button>
-            <el-radio-button value="avatar">👤 Avatar</el-radio-button>
-          </el-radio-group>
-        </el-card>
-
-        <!-- 提示词模板选择 -->
-        <div class="config-section">
-          <PromptTemplateSelector
-            v-model="aiStore.promptTemplate"
-            :custom-prompt="customPrompt"
-            :primary-category="primaryCategory"
-            :provider="aiStore.currentProvider"
-            @update:custom-prompt="val => (customPrompt = val)"
-          />
-        </div>
+  <div v-else class="ai-assistant-panel">
+    <header class="workspace-heading">
+      <div>
+        <h1>AI 工坊</h1>
+        <p>分析图片，生成分类、标题与关键词。</p>
       </div>
+      <div class="shared-ai-config">
+        <strong>GPT-6.1 Sol</strong>
+        <span :class="{ 'config-missing': !credentialsStore.hasCredentials }">
+          {{ credentialsStore.hasCredentials ? '当前标签页已配置' : '未配置 API Key' }}
+        </span>
+        <router-link to="/settings#ai-config">
+          {{ credentialsStore.hasCredentials ? '管理 AI 配置' : '去设置 API Key' }}
+        </router-link>
+      </div>
+    </header>
 
-      <!-- 中栏：上传区 -->
-      <div class="middle-column">
-        <el-card class="upload-card" shadow="hover">
-          <template #header>
-            <div class="card-header">
-              <span class="header-icon">2️⃣</span>
-              <span class="header-title">上传图片</span>
+    <div class="panel-content" data-scroll-region>
+      <aside class="left-column" data-scroll-region aria-label="分析配置">
+        <section class="config-section">
+          <h2>壁纸类型</h2>
+          <el-radio-group
+            v-model="primaryCategory"
+            size="default"
+            class="category-group"
+            aria-label="壁纸类型"
+          >
+            <el-radio-button value="desktop">电脑</el-radio-button>
+            <el-radio-button value="mobile">手机</el-radio-button>
+            <el-radio-button value="avatar">头像</el-radio-button>
+          </el-radio-group>
+        </section>
+        <PromptTemplateSelector
+          v-model="aiStore.promptTemplate"
+          :custom-prompt="customPrompt"
+          :primary-category="primaryCategory"
+          :provider="aiStore.currentProvider"
+          @update:custom-prompt="val => (customPrompt = val)"
+        />
+        <p class="shared-config-note">与图片上传、视频分析共用当前标签页的 API 配置。</p>
+      </aside>
+
+      <section class="middle-column" data-scroll-region aria-labelledby="ai-upload-title">
+        <div class="section-heading">
+          <h2 id="ai-upload-title">待分析图片</h2>
+          <span>{{ fileList.length }} 张</span>
+        </div>
+        <el-upload
+          :file-list="fileList"
+          drag
+          multiple
+          :auto-upload="false"
+          accept="image/*"
+          :on-change="handleFileChange"
+          :on-remove="handleFileRemove"
+          class="upload-area"
+          :disabled="aiStore.analyzing"
+          @click.capture="handleFileIntent"
+          @keydown.capture="handleFileKeydown"
+          @drop.capture="handleFileIntent"
+        >
+          <el-icon class="upload-icon"><UploadFilled /></el-icon>
+          <div class="upload-text">拖拽图片到这里</div>
+          <div class="upload-choice">或点击选择文件</div>
+          <template #tip>
+            <div class="upload-tip">
+              JPG、PNG、WEBP · 支持批量上传<br />图片将自动压缩至 5MB 以下
             </div>
           </template>
-
-          <el-alert title="💡 图片要求" type="info" :closable="false" class="upload-alert">
-            <div class="alert-content">
-              • JPG、PNG、WEBP<br />
-              • &lt; 5MB（自动压缩）<br />
-              • 支持批量上传
-            </div>
-          </el-alert>
-
-          <el-upload
-            :file-list="fileList"
-            drag
-            multiple
-            :auto-upload="false"
-            accept="image/*"
-            :on-change="handleFileChange"
-            :on-remove="handleFileRemove"
-            class="upload-area"
-          >
-            <el-icon class="upload-icon"><UploadFilled /></el-icon>
-            <div class="upload-text">拖拽或点击选择</div>
-            <template #tip>
-              <div class="upload-tip">已选 {{ fileList.length }} 张</div>
-            </template>
-          </el-upload>
-
+        </el-upload>
+        <el-collapse-transition>
           <div v-if="fileList.length > 0" class="action-buttons">
             <el-button
               type="primary"
-              size="large"
               :loading="aiStore.analyzing"
-              :disabled="!credentialsStore.hasCredentials"
+              :disabled="aiStore.analyzing"
               class="analyze-btn"
               @click="handleAnalyze"
             >
-              {{ aiStore.analyzing ? '分析中...' : `🚀 开始 (${fileList.length})` }}
+              {{ aiStore.analyzing ? '分析中...' : `分析 ${fileList.length} 张图片` }}
             </el-button>
-            <el-button
-              size="large"
-              :disabled="aiStore.analyzing"
-              class="clear-btn"
-              @click="handleClear"
+            <el-button :disabled="aiStore.analyzing" class="clear-btn" @click="handleClear"
+              >清空</el-button
             >
-              清空
-            </el-button>
           </div>
-
-          <!-- 分析进度 -->
-          <div v-if="aiStore.analyzing" class="progress-section">
+        </el-collapse-transition>
+        <el-collapse-transition>
+          <div v-if="aiStore.analyzing" class="progress-section" aria-live="polite">
             <el-progress
-              type="circle"
               :percentage="progress"
-              :width="100"
               :status="progress === 100 ? 'success' : undefined"
             />
-            <p class="progress-text">AI 分析中</p>
+            <p>正在分析 {{ currentIndex || 1 }} / {{ totalCount }} 张图片</p>
           </div>
-
-          <!-- 错误提示 -->
+        </el-collapse-transition>
+        <Transition name="studio-feedback">
           <el-alert
             v-if="aiStore.error"
             type="error"
@@ -134,50 +108,58 @@
             show-icon
             class="error-alert"
           />
-        </el-card>
-      </div>
+        </Transition>
+      </section>
 
-      <!-- 右栏：结果展示区 -->
-      <div class="right-column">
-        <div v-if="aiStore.hasResults" class="results-container">
-          <div class="results-header">
-            <span class="header-title">✨ 分析结果 ({{ aiStore.results.length }})</span>
-            <el-button size="small" @click="aiStore.clearResults"> 清空 </el-button>
-          </div>
-
-          <div class="results-list">
-            <ResultCard v-for="result in aiStore.results" :key="result.id" :result="result" />
-          </div>
+      <section class="right-column" aria-labelledby="ai-results-title">
+        <div class="section-heading results-header">
+          <h2 id="ai-results-title">
+            分析结果 <span v-if="aiStore.hasResults">{{ aiStore.results.length }}</span>
+          </h2>
+          <el-button v-if="aiStore.hasResults" size="small" text @click="aiStore.clearResults"
+            >清空结果</el-button
+          >
         </div>
-
-        <!-- 空状态 -->
-        <el-empty v-else description="暂无分析结果" :image-size="120" class="empty-state">
-          <template #image>
-            <div class="empty-icon">🎨</div>
-          </template>
-        </el-empty>
-      </div>
+        <div class="results-body">
+          <Transition name="studio-panel">
+            <TransitionGroup
+              v-if="aiStore.hasResults"
+              key="results"
+              name="studio-list"
+              tag="div"
+              class="results-list"
+              data-scroll-region
+            >
+              <ResultCard v-for="result in aiStore.results" :key="result.id" :result="result" />
+            </TransitionGroup>
+            <div v-else key="empty" class="empty-state">
+              <el-icon><Picture /></el-icon>
+              <h3>分析结果会显示在这里</h3>
+              <p>添加图片并开始分析，即可查看推荐分类和描述。</p>
+            </div>
+          </Transition>
+        </div>
+      </section>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, nextTick, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted } from 'vue'
 import { ElMessage, ElNotification } from 'element-plus'
-import { UploadFilled } from '@element-plus/icons-vue'
-import { gsap } from 'gsap'
+import { UploadFilled, Picture } from '@element-plus/icons-vue'
 import { useAIStore } from '@/stores/ai'
 import { useCredentialsStore } from '@/stores/credentials'
+import { useAiConfigurationGuard } from '@/composables/useAiConfigurationGuard'
 import { detectImageTypeFromFile } from '@/utils/image-detector'
 import PromptTemplateSelector from '@/components/ai/PromptTemplateSelector.vue'
 import ResultCard from '@/components/ai/ResultCard.vue'
 
+const { requireAiConfiguration } = useAiConfigurationGuard()
 const aiStore = useAIStore()
 const credentialsStore = useCredentialsStore()
 
-// State
-const panelRef = ref(null)
-const pageLoading = ref(true) // 页面加载状态
+const pageLoading = ref(true)
 const primaryCategory = ref('desktop')
 const customPrompt = ref('')
 const fileList = ref([])
@@ -185,32 +167,39 @@ const progress = ref(0)
 const currentIndex = ref(0)
 const totalCount = ref(0)
 
-// 保存动画 timeline 引用，用于清理
-let entranceTimeline = null
+function handleFileIntent(event) {
+  if (event.target?.closest?.('.el-upload-list')) return
+  if (aiStore.analyzing || !requireAiConfiguration()) {
+    event.preventDefault()
+    event.stopImmediatePropagation()
+  }
+}
+
+function handleFileKeydown(event) {
+  if (event.key === 'Enter' || event.key === ' ') handleFileIntent(event)
+}
 
 async function handleFileChange(file, files) {
+  if (aiStore.analyzing || !requireAiConfiguration()) return
   fileList.value = files
 
-  // 自动检测第一张图片的类型
   if (files.length > 0 && file.raw) {
     try {
       const detection = await detectImageTypeFromFile(file.raw)
 
-      // 如果检测置信度较高，自动切换类型
       if (detection.confidence >= 0.8 && detection.type !== primaryCategory.value) {
         const oldType = primaryCategory.value
         primaryCategory.value = detection.type
 
         ElNotification({
-          title: '🔍 自动检测壁纸类型',
+          title: '自动检测壁纸类型',
           message: `检测到 ${detection.resolution} (${detection.aspectRatio})\n已自动切换：${oldType} → ${detection.type}`,
           type: 'success',
           duration: 4000
         })
       } else if (detection.confidence < 0.8) {
-        // 置信度较低，提示用户确认
         ElNotification({
-          title: '⚠️ 请确认壁纸类型',
+          title: '请确认壁纸类型',
           message: `${detection.reason}\n当前选择：${primaryCategory.value}\n如不正确请手动调整`,
           type: 'warning',
           duration: 5000
@@ -231,13 +220,9 @@ function handleClear() {
 }
 
 async function handleAnalyze() {
+  if (aiStore.analyzing || !requireAiConfiguration()) return
   if (fileList.value.length === 0) {
     ElMessage.warning('请先选择图片')
-    return
-  }
-
-  if (!credentialsStore.hasCredentials) {
-    ElMessage.warning('请先配置 API 凭证')
     return
   }
 
@@ -292,530 +277,342 @@ async function handleAnalyze() {
 
 onMounted(async () => {
   pageLoading.value = true
-
   try {
-    // 1. 加载凭证
     await credentialsStore.loadCredentials()
   } catch (err) {
     ElMessage.error(err.message || '加载 AI 配置失败')
   } finally {
-    // 3. 隐藏 loading
     pageLoading.value = false
-  }
-
-  // 4. 等待 DOM 更新后播放动画
-  await nextTick()
-
-  // 5. 播放入场动画
-  entranceTimeline = gsap.timeline({ defaults: { ease: 'power3.out' } })
-
-  const columns = panelRef.value?.querySelectorAll('.panel-content > *')
-  if (columns?.length >= 3) {
-    // 左栏：从左边滑入
-    entranceTimeline.fromTo(
-      columns[0],
-      { opacity: 0, x: -50, scale: 0.96 },
-      {
-        opacity: 1,
-        x: 0,
-        scale: 1,
-        duration: 0.8,
-        ease: 'back.out(1.1)',
-        clearProps: 'transform' // 只清除 transform，保留 opacity
-      }
-    )
-
-    // 中栏：从底部向上
-    entranceTimeline.fromTo(
-      columns[1],
-      { opacity: 0, y: 50, scale: 0.96 },
-      {
-        opacity: 1,
-        y: 0,
-        scale: 1,
-        duration: 0.8,
-        ease: 'back.out(1.1)',
-        clearProps: 'transform' // 只清除 transform，保留 opacity
-      },
-      '-=0.6' // 与左栏重叠
-    )
-
-    // 右栏：从右边滑入
-    entranceTimeline.fromTo(
-      columns[2],
-      { opacity: 0, x: 50, scale: 0.96 },
-      {
-        opacity: 1,
-        x: 0,
-        scale: 1,
-        duration: 0.8,
-        ease: 'back.out(1.1)',
-        clearProps: 'transform' // 只清除 transform，保留 opacity
-      },
-      '-=0.6' // 与中栏重叠
-    )
-  }
-})
-
-onUnmounted(() => {
-  // 清理入场动画 timeline，防止内存泄漏
-  if (entranceTimeline) {
-    entranceTimeline.kill()
-    entranceTimeline = null
   }
 })
 </script>
 
 <style lang="scss" scoped>
 .ai-assistant-loading {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
   display: flex;
+  flex: 1;
+  min-height: 240px;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-  z-index: 9999;
-}
-
-.loading-spinner {
-  display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 24px;
+  gap: 16px;
+  color: var(--studio-muted, #a1a6b0);
+  font-size: 14px;
 }
-
 .spinner {
-  width: 60px;
-  height: 60px;
-  border: 4px solid rgba(102, 126, 234, 0.2);
-  border-top-color: #667eea;
+  width: 28px;
+  height: 28px;
+  border: 2px solid var(--studio-border, #30343b);
+  border-top-color: var(--studio-accent, #a8c7fa);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
-
 @keyframes spin {
   to {
     transform: rotate(360deg);
   }
 }
-
-.loading-text {
-  font-size: 20px;
-  color: #ffffff;
-  font-weight: 500;
+.ai-assistant-panel {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+  padding: 0;
+  gap: 24px;
+  color: var(--studio-text, #f3f4f6);
+}
+.workspace-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+h1,
+h2,
+h3,
+p {
   margin: 0;
 }
-
-.ai-assistant-panel {
-  height: 100%;
-  padding: 24px;
-  display: flex;
-  flex-direction: column;
+.workspace-heading h1 {
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
 }
-
+.workspace-heading p {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--studio-muted, #a1a6b0);
+}
+.shared-ai-config {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding-top: 6px;
+  font-size: 12px;
+}
+.shared-ai-config strong {
+  font-size: 13px;
+  font-weight: 500;
+}
+.shared-ai-config span {
+  color: var(--studio-muted, #a1a6b0);
+}
+.shared-ai-config .config-missing {
+  color: var(--el-color-warning, #e6a23c);
+}
+.shared-ai-config a {
+  color: var(--studio-accent, #a8c7fa);
+  text-decoration: none;
+}
+.shared-ai-config a:hover {
+  text-decoration: underline;
+}
 .panel-content {
+  overflow: hidden;
   display: grid;
-  grid-template-columns: 1fr 2fr 2fr;
-  gap: 20px;
+  grid-template-columns: minmax(220px, 0.85fr) minmax(250px, 1fr) minmax(300px, 1.35fr);
+  gap: 24px;
   flex: 1;
   min-height: 0;
-
-  // 初始状态：所有列隐藏，等待动画
-  > * {
-    opacity: 0;
-  }
 }
-
-// 左栏：配置区（独立滚动）
+.left-column,
+.middle-column,
+.right-column {
+  min-width: 0;
+  min-height: 0;
+}
 .left-column {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 24px;
   overflow-y: auto;
-  overflow-x: hidden;
-  padding-right: 8px;
-  min-height: 0;
-
-  // 自定义滚动条
-  &::-webkit-scrollbar {
-    width: 6px;
-  }
-
-  &::-webkit-scrollbar-track {
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 3px;
-  }
-
-  &::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.3);
-    border-radius: 3px;
-
-    &:hover {
-      background: rgba(255, 255, 255, 0.4);
-    }
-  }
+  overscroll-behavior: contain;
+  padding-right: 20px;
+  border-right: 1px solid var(--studio-border, #30343b);
+  scrollbar-width: thin;
 }
-
-.config-section {
-  margin-bottom: 0;
-  flex-shrink: 0;
-}
-
-.config-card {
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(10px);
-  border: none;
-  border-radius: 12px;
-  flex-shrink: 0;
-
-  :deep(.el-card__header) {
-    padding: 16px 20px;
-    border-bottom: 1px solid rgba(0, 0, 0, 0.06);
-  }
-
-  :deep(.el-card__body) {
-    padding: 20px;
-  }
-
-  // 紧凑样式
-  &.compact {
-    :deep(.el-card__header) {
-      padding: 10px 16px;
-    }
-
-    :deep(.el-card__body) {
-      padding: 12px 16px;
-    }
-  }
-}
-
-.card-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+.config-section h2,
+.section-heading h2 {
   font-size: 14px;
   font-weight: 600;
-
-  .header-icon {
-    font-size: 16px;
-  }
-
-  .header-title {
-    flex: 1;
-    color: #fff;
-  }
 }
-
+.config-section h2 {
+  margin-bottom: 12px;
+}
 .category-group {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
   width: 100%;
-
-  :deep(.el-radio-button) {
-    width: 100%;
-    margin: 0;
-
-    .el-radio-button__inner {
-      width: 100%;
-      border-radius: 8px;
-      border: 1px solid #dcdfe6;
-      padding: 8px 12px;
-      font-size: 13px;
-      transition: all 0.3s;
-      white-space: normal;
-      word-break: break-word;
-      height: auto;
-      line-height: 1.5;
-
-      &:hover {
-        border-color: #667eea;
-        background: rgba(102, 126, 234, 0.05);
-      }
-    }
-
-    &.is-active .el-radio-button__inner {
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      border-color: #667eea;
-      color: white;
-    }
-  }
 }
-
-.shared-ai-config {
-  display: flex;
-  align-items: flex-start;
-  flex-direction: column;
-  gap: 10px;
-
-  strong {
-    font-size: 16px;
-  }
-  p {
-    margin: 0;
-    font-size: 13px;
-    line-height: 1.6;
-  }
-  a {
-    color: #409eff;
-    font-size: 13px;
-  }
+.category-group :deep(.el-radio-button) {
+  flex: 1;
 }
-
-// 中栏：上传区
+.category-group :deep(.el-radio-button__inner) {
+  width: 100%;
+  padding: 9px 8px;
+}
+.shared-config-note {
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--studio-muted, #a1a6b0);
+}
 .middle-column {
+  overscroll-behavior: contain;
   display: flex;
   flex-direction: column;
-  min-height: 0;
+  gap: 18px;
+  overflow-y: auto;
 }
-
-// 右栏：结果展示区（可滚动）
+.section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 32px;
+}
+.section-heading span {
+  color: var(--studio-muted, #a1a6b0);
+  font-size: 12px;
+  margin-left: 6px;
+  font-weight: 400;
+}
+.upload-area :deep(.el-upload) {
+  width: 100%;
+}
+.upload-area :deep(.el-upload-dragger) {
+  padding: 38px 16px;
+  background: var(--studio-surface, #191b1e);
+  border: 1px dashed var(--studio-border, #30343b);
+  border-radius: 16px;
+  transition:
+    border-color 0.18s,
+    background-color 0.18s;
+}
+.upload-area :deep(.el-upload-dragger:hover),
+.upload-area :deep(.el-upload-dragger.is-dragover) {
+  border-color: var(--studio-accent, #a8c7fa);
+  background: var(--studio-raised, #22252a);
+}
+.upload-icon {
+  font-size: 32px;
+  color: var(--studio-muted, #a1a6b0);
+  margin-bottom: 16px;
+}
+.upload-text {
+  font-size: 14px;
+  font-weight: 500;
+}
+.upload-choice {
+  margin-top: 8px;
+  color: var(--studio-accent, #a8c7fa);
+  font-size: 13px;
+}
+.upload-tip {
+  color: var(--studio-muted, #a1a6b0);
+  font-size: 12px;
+  line-height: 1.7;
+  margin-top: 12px;
+}
+.action-buttons {
+  display: flex;
+  gap: 8px;
+}
+.action-buttons .el-button + .el-button {
+  margin-left: 0;
+}
+.analyze-btn {
+  flex: 1;
+}
+.progress-section p {
+  margin-top: 8px;
+  color: var(--studio-muted, #a1a6b0);
+  font-size: 12px;
+}
 .right-column {
   display: flex;
   flex-direction: column;
-  min-height: 0;
+  background: var(--studio-surface, #191b1e);
+  border: 1px solid var(--studio-border, #30343b);
+  border-radius: 16px;
+  overflow: hidden;
 }
-
-.results-container {
-  display: flex;
-  flex-direction: column;
-  background: rgba(255, 255, 255, 0.06);
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 12px;
-  flex: 1;
-  min-height: 0;
-}
-
 .results-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 16px 20px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   flex-shrink: 0;
-
-  .header-title {
-    font-size: 16px;
-    font-weight: 600;
-    color: #ffffff;
-  }
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--studio-border, #30343b);
 }
-
-.results-list {
-  padding: 16px;
+.results-body {
   display: flex;
-  flex-direction: column;
-  gap: 16px;
-  overflow-y: auto;
-  overflow-x: hidden;
+  position: relative;
   flex: 1;
   min-height: 0;
-
-  &::-webkit-scrollbar {
-    width: 6px;
-  }
-  &::-webkit-scrollbar-track {
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 3px;
-  }
-  &::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.3);
-    border-radius: 3px;
-
-    &:hover {
-      background: rgba(255, 255, 255, 0.4);
-    }
-  }
+  overflow: hidden;
 }
-
-.upload-card {
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(10px);
-  border: none;
-  border-radius: 12px;
-  height: 100%;
-
-  :deep(.el-card__header) {
-    padding: 16px 20px;
-    border-bottom: 1px solid rgba(0, 0, 0, 0.06);
-  }
-
-  :deep(.el-card__body) {
-    padding: 16px;
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-  }
+.results-body > .studio-panel-leave-active {
+  position: absolute;
+  inset: 0;
 }
-
-.upload-alert {
-  border-radius: 8px;
-
-  .alert-content {
-    font-size: 13px;
-    line-height: 1.6;
-  }
+.results-list > :deep(.result-card) {
+  flex-shrink: 0;
 }
-
-.upload-area {
-  :deep(.el-upload-dragger) {
-    border-radius: 12px;
-    border: 2px dashed #d9d9d9;
-    background: rgba(102, 126, 234, 0.02);
-    transition: all 0.3s;
-    padding: 30px 16px;
-
-    &:hover {
-      border-color: #667eea;
-      background: rgba(102, 126, 234, 0.05);
-    }
-  }
-}
-
-.upload-icon {
-  font-size: 60px;
-  color: #667eea;
-  margin-bottom: 12px;
-}
-
-.upload-text {
-  font-size: 15px;
-  color: #606266;
-  margin-bottom: 6px;
-}
-
-.upload-tip {
-  font-size: 13px;
-  color: #909399;
-  margin-top: 8px;
-}
-
-.action-buttons {
-  display: flex;
-  flex-direction: row;
-  gap: 12px;
-  padding: 16px;
-  background: rgba(102, 126, 234, 0.05);
-  border-radius: 12px;
-
-  .analyze-btn {
-    flex: 1;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    border: none;
-    font-weight: 600;
-    font-size: 15px;
-    padding: 12px 20px;
-    height: auto;
-
-    &:hover {
-      opacity: 0.9;
-      transform: translateY(-1px);
-      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
-    }
-  }
-
-  .clear-btn {
-    flex-shrink: 0;
-    padding: 12px 24px;
-    height: auto;
-  }
-}
-
-.progress-section {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 20px 16px;
-  background: rgba(102, 126, 234, 0.05);
-  border-radius: 12px;
-
-  .progress-text {
-    margin-top: 16px;
-    font-size: 16px;
-    font-weight: 500;
-    color: #fff;
-  }
-}
-
-.results-card {
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(10px);
-  border: none;
-  border-radius: 12px;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-
-  :deep(.el-card__header) {
-    padding: 16px 20px;
-    border-bottom: 1px solid rgba(0, 0, 0, 0.06);
-  }
-
-  :deep(.el-card__body) {
-    padding: 20px;
-    flex: 1;
-    overflow-y: auto;
-  }
-}
-
-.results-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-
-  .header-title {
-    font-size: 18px;
-    font-weight: 600;
-    color: #fff;
-  }
-}
-
 .results-list {
+  position: relative;
+  flex: 1;
   display: flex;
   flex-direction: column;
   gap: 16px;
+  padding: 16px;
+  overflow-y: auto;
+  min-height: 0;
 }
-
 .empty-state {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 32px 24px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  background: rgba(255, 255, 255, 0.1) !important;
-  backdrop-filter: blur(10px);
-  border-radius: 12px;
-  padding: 60px 20px;
-  height: 100%;
-
-  .empty-icon {
-    font-size: 80px;
-    margin-bottom: 20px;
-  }
-
-  :deep(.el-empty__description p) {
-    color: rgba(255, 255, 255, 0.7);
-  }
+  text-align: center;
 }
-
-.error-alert {
-  border-radius: 12px;
+.empty-state .el-icon {
+  font-size: 34px;
+  color: var(--studio-muted, #a1a6b0);
+  margin-bottom: 18px;
 }
-
-// 响应式设计
-@media (max-width: 1199px) {
+.empty-state h3 {
+  font-size: 14px;
+  font-weight: 500;
+}
+.empty-state p {
+  max-width: 260px;
+  margin-top: 10px;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--studio-muted, #a1a6b0);
+}
+@media (max-width: 1180px) {
   .panel-content {
-    grid-template-columns: 1fr 1fr 1fr;
+    grid-template-columns: minmax(200px, 0.8fr) minmax(240px, 1fr);
+  }
+  .right-column {
+    grid-column: 1 / -1;
+    min-height: 300px;
+  }
+  .panel-content {
+    overflow-y: auto;
+    overflow-x: hidden;
+    align-content: start;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+  }
+  .left-column,
+  .middle-column,
+  .results-list {
+    overflow: visible;
+  }
+  .results-body {
+    overflow: visible;
+  }
+  .right-column {
+    overflow: hidden;
+  }
+  .empty-state {
+    min-height: 240px;
   }
 }
-
-@media (max-width: 900px) {
+@media (max-width: 700px) {
+  .ai-assistant-panel {
+    padding: 0;
+    gap: 20px;
+  }
   .panel-content {
     grid-template-columns: 1fr;
-    gap: 16px;
+    gap: 20px;
+  }
+  .left-column {
+    border-right: 0;
+    border-bottom: 1px solid var(--studio-border, #30343b);
+    padding: 0 0 20px;
+  }
+  .right-column {
+    grid-column: auto;
+  }
+  .workspace-heading {
+    gap: 12px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation-duration: 2s;
+  }
+  .upload-area :deep(.el-upload-dragger) {
+    transition: none;
   }
 }
 </style>

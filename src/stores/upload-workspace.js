@@ -3,7 +3,6 @@ import { ref, computed } from 'vue'
 import { AI_MODEL_KEY } from '@/services/ai/model'
 
 export const useUploadWorkspaceStore = defineStore('upload-workspace', () => {
-  const uploadMode = ref('ai')
   const selectedModelKey = ref(AI_MODEL_KEY)
   const series = ref('desktop')
   const categoryL1 = ref('')
@@ -28,18 +27,11 @@ export const useUploadWorkspaceStore = defineStore('upload-workspace', () => {
     series.value = newSeries
   }
 
-  function setUploadMode(mode) {
-    if (mode === 'ai' || mode === 'manual') {
-      uploadMode.value = mode
-    }
-  }
-
   function setAiModel() {
     selectedModelKey.value = AI_MODEL_KEY
   }
 
   return {
-    uploadMode,
     selectedModelKey,
     series,
     categoryL1,
@@ -47,7 +39,6 @@ export const useUploadWorkspaceStore = defineStore('upload-workspace', () => {
     targetPath,
     setTarget,
     setSeries,
-    setUploadMode,
     setAiModel
   }
 })

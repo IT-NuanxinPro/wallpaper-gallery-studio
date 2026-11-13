@@ -4,28 +4,40 @@
       <div class="video-workspace__heading">
         <div>
           <h1>视频工作台</h1>
-          <p>上传视频、选择云端封面、审核并批量发布。</p>
+          <p>整理视频，选择封面，准备发布。</p>
         </div>
-        <el-button :disabled="!configured" :loading="loading" @click="refresh">刷新任务</el-button>
+        <el-button
+          class="video-workspace__refresh"
+          circle
+          :icon="Refresh"
+          :disabled="!configured"
+          :loading="loading"
+          aria-label="刷新任务"
+          title="刷新任务"
+          @click="refresh"
+        />
       </div>
 
-      <GlassCard v-if="!configured" :hoverable="false" class="video-workspace__unconfigured">
+      <section v-if="!configured" class="video-workspace__unconfigured">
         <el-icon :size="40"><VideoCamera /></el-icon>
         <h2>视频服务尚未配置</h2>
         <p>部署工作台时设置 VITE_VIDEO_API_URL，即可启用视频上传、处理和发布。</p>
         <router-link to="/upload">返回图片上传</router-link>
-      </GlassCard>
+      </section>
 
       <template v-else>
-        <el-alert
-          v-if="authStore.permissionChecked && !canWrite"
-          title="当前账号没有写入权限，可查看任务和审核结果。"
-          type="warning"
-          :closable="false"
-        />
-        <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon />
+        <Transition name="studio-feedback"
+          ><el-alert
+            v-if="authStore.permissionChecked && !canWrite"
+            title="当前账号没有写入权限，可查看任务和审核结果。"
+            type="warning"
+            :closable="false"
+        /></Transition>
+        <Transition name="studio-feedback"
+          ><el-alert v-if="error" :title="error" type="error" :closable="false" show-icon
+        /></Transition>
 
-        <GlassCard :hoverable="false" padding="20px" class="video-workspace__upload">
+        <section class="video-workspace__upload" aria-label="添加视频">
           <div
             class="video-workspace__dropzone"
             :class="{ 'is-dragging': dragging }"
@@ -33,13 +45,15 @@
             @dragleave.prevent="dragging = false"
             @drop.prevent="handleDrop"
           >
-            <el-icon :size="28"><UploadFilled /></el-icon>
+            <span class="video-workspace__upload-icon"
+              ><el-icon :size="25"><Upload /></el-icon
+            ></span>
             <div>
-              <strong>选择或拖入源视频</strong>
-              <p>单文件 ≤ 250 MB · 同时上传 2 个视频 · 最多并行 3 个分块</p>
+              <strong>添加源视频</strong>
+              <p>拖入文件或点击添加 · MP4、MOV、WebM 等 · 单文件 ≤ 250 MB</p>
             </div>
-            <el-button type="primary" :disabled="!canWrite" @click="fileInput?.click()"
-              >选择视频</el-button
+            <el-button type="primary" :disabled="!canWrite" @click="chooseFiles"
+              >添加视频</el-button
             >
             <input
               ref="fileInput"
@@ -58,237 +72,236 @@
             />
           </div>
           <p class="video-workspace__hint">
-            上传中可暂停；刷新后重选原视频，核对文件内容后继续。视频文件仅保留在当前页面内存中。
+            上传可暂停并继续。云端任务会自动保存，离开后仍可回来审核。
           </p>
-          <div v-if="transfers.length" class="video-workspace__transfers" aria-live="polite">
-            <div v-for="transfer in transfers" :key="transfer.id" class="video-workspace__transfer">
-              <div class="video-workspace__transfer-title">
-                <strong>{{ transfer.filename }}</strong>
-                <span>{{ transferLabels[transfer.stage] || transfer.stage }}</span>
+          <el-collapse-transition
+            ><TransitionGroup
+              v-if="transfers.length"
+              name="studio-list"
+              tag="div"
+              class="video-workspace__transfers"
+              data-scroll-region
+              aria-live="polite"
+            >
+              <div
+                v-for="transfer in transfers"
+                :key="transfer.id"
+                class="video-workspace__transfer"
+              >
+                <div class="video-workspace__transfer-title">
+                  <strong>{{ transfer.filename }}</strong>
+                  <span>{{ transferLabels[transfer.stage] || transfer.stage }}</span>
+                  <el-button
+                    v-if="isTransferring(transfer)"
+                    size="small"
+                    @click="pauseTransfer(transfer.id)"
+                    >暂停</el-button
+                  >
+                </div>
+                <el-progress
+                  :percentage="transfer.percent"
+                  :status="
+                    transfer.stage === 'error'
+                      ? 'exception'
+                      : transfer.stage === 'done'
+                        ? 'success'
+                        : undefined
+                  "
+                  :stroke-width="5"
+                />
+                <Transition name="studio-feedback"
+                  ><p
+                    v-if="transfer.error && transfer.stage === 'error'"
+                    class="video-workspace__transfer-error"
+                  >
+                    {{ transfer.error }}
+                  </p></Transition
+                >
                 <el-button
-                  v-if="isTransferring(transfer)"
-                  size="small"
-                  @click="pauseTransfer(transfer.id)"
-                  >暂停</el-button
+                  v-if="
+                    ['paused', 'error'].includes(transfer.stage) &&
+                    uploadManager.canRetry(transfer.id)
+                  "
+                  link
+                  @click="retryTransfer(transfer.id)"
+                  >继续上传</el-button
+                >
+                <el-button
+                  v-if="transfer.jobId && ['paused', 'error'].includes(transfer.stage)"
+                  link
+                  type="primary"
+                  :disabled="!canWrite"
+                  @click="chooseResume(transfer.jobId)"
+                  >重选源视频继续</el-button
                 >
               </div>
-              <el-progress
-                :percentage="transfer.percent"
-                :status="
-                  transfer.stage === 'error'
-                    ? 'exception'
-                    : transfer.stage === 'done'
-                      ? 'success'
-                      : undefined
-                "
-                :stroke-width="5"
-              />
-              <p v-if="transfer.error" class="video-workspace__transfer-error">
-                {{ transfer.error }}
-              </p>
-              <el-button
-                v-if="transfer.jobId && ['paused', 'error'].includes(transfer.stage)"
-                link
-                type="primary"
-                :disabled="!canWrite"
-                @click="chooseResume(transfer.jobId)"
-                >重选源视频继续</el-button
-              >
-            </div>
-          </div>
-        </GlassCard>
+            </TransitionGroup></el-collapse-transition
+          >
+        </section>
+
+        <el-segmented
+          v-if="compactLayout"
+          v-model="mobilePane"
+          class="video-workspace__mobile-navigation"
+          :options="[
+            { label: '视频队列', value: 'queue' },
+            { label: '内容审阅', value: 'review' }
+          ]"
+          aria-label="视频工作区视图"
+        />
 
         <div class="video-workspace__content">
-          <div class="video-workspace__queue">
-            <GlassCard :hoverable="false" padding="20px" class="video-workspace__jobs">
-              <div class="video-workspace__section-heading">
-                <h2>
-                  云端任务 <span>{{ jobs.length }}</span>
-                </h2>
-                <span class="video-workspace__hint">每 5 秒刷新</span>
-              </div>
-              <div class="video-workspace__tools">
-                <select v-model="statusFilter" aria-label="按任务状态筛选">
-                  <option value="all">全部状态</option>
-                  <option value="review">待分析 / 审核</option>
-                  <option value="uploading">待上传</option>
-                  <option value="processing">排队 / 处理中</option>
-                  <option value="published">已发布</option>
-                  <option value="failed">失败 / 过期</option>
-                </select>
-                <el-button
-                  size="small"
-                  :disabled="!canWrite || !publishableJobs.length"
-                  @click="toggleAll"
-                  >{{ allSelected ? '取消全选' : '选择待发布' }}</el-button
+          <Transition name="studio-panel"
+            ><div v-show="!compactLayout || mobilePane === 'queue'" class="video-workspace__queue">
+              <VideoJobQueue
+                v-model:tab="queueTab"
+                v-model:selected-ids="selectedIds"
+                :jobs="jobs"
+                :selected-job-id="selectedJobId"
+                :can-write="canWrite"
+                :busy="reviewBusy"
+                :publishing="publishing"
+                :loading="loading"
+                :active-job-ids="activeJobIds"
+                :retrying-ids="retryingIds"
+                @select="selectJob"
+                @publish="publishSelected"
+                @resume="chooseResume"
+                @retry="retryJob"
+              />
+              <Transition name="studio-feedback"
+                ><section
+                  v-if="activePublications.length || Object.keys(missingPublicationErrors).length"
+                  class="video-workspace__publications"
+                  data-scroll-region
+                  aria-label="发布进度"
                 >
-              </div>
-              <div class="video-workspace__bulk">
-                <span>已选 {{ selectedIds.length }} / 30 个</span>
-                <el-button
-                  type="primary"
-                  size="small"
-                  :disabled="!canWrite || !selectedIds.length || publishing"
-                  :loading="publishing"
-                  @click="publishSelected"
-                  >批量发布</el-button
-                >
-              </div>
-              <div v-if="!filteredJobs.length" class="video-workspace__empty">
-                {{
-                  loading
-                    ? '正在加载云端任务…'
-                    : jobs.length
-                      ? '当前筛选下没有任务。'
-                      : '还没有视频任务，选择源视频开始。'
-                }}
-              </div>
-              <ul v-else class="video-workspace__job-list">
-                <li
-                  v-for="job in filteredJobs"
-                  :key="job.id"
-                  class="video-workspace__job"
-                  :class="{ 'is-active': selectedJobId === job.id }"
-                >
-                  <div class="video-workspace__job-row">
-                    <input
-                      v-model="selectedIds"
-                      type="checkbox"
-                      :value="job.id"
-                      :disabled="!canWrite || !canPublish(job)"
-                      :aria-label="`选择发布 ${job.filename}`"
-                    />
-                    <button
-                      type="button"
-                      class="video-workspace__job-select"
-                      :aria-current="selectedJobId === job.id ? 'true' : undefined"
-                      :disabled="reviewBusy"
-                      @click="selectJob(job.id)"
-                    >
-                      <strong>{{ job.review?.displayTitle || job.filename }}</strong>
-                      <span>{{ job.filename }} · {{ formatBytes(job.size) }}</span>
-                    </button>
-                    <el-tag :type="statusType(job.status)" size="small">{{
-                      JOB_STATUS[job.status] || job.status
-                    }}</el-tag>
+                  <div class="video-workspace__section-heading">
+                    <h2>发布进度</h2>
+                    <span>自动更新</span>
                   </div>
-                  <p v-if="job.error" class="video-workspace__transfer-error">
-                    {{ errorMessage(job.error) }}
-                  </p>
-                  <div class="video-workspace__job-actions">
-                    <el-button
-                      v-if="job.status === 'uploading'"
-                      link
-                      type="primary"
-                      :disabled="!canWrite || hasActiveTransfer(job.id)"
-                      @click="chooseResume(job.id)"
-                      >{{ hasActiveTransfer(job.id) ? '本页上传中' : '重选源视频继续' }}</el-button
-                    >
-                    <el-button
-                      v-if="job.status === 'failed'"
-                      link
-                      type="warning"
-                      :disabled="!canWrite || retryingIds.includes(job.id)"
-                      :loading="retryingIds.includes(job.id)"
-                      @click="retryJob(job)"
-                      >{{ job.publicationId ? '重试发布批次' : '重试云端处理' }}</el-button
-                    >
-                    <span v-if="job.status === 'expired'" class="video-workspace__hint"
-                      >重新选择视频可创建新任务</span
-                    >
-                    <span v-if="job.createdAt" class="video-workspace__date">{{
-                      formatDate(job.createdAt)
-                    }}</span>
-                  </div>
-                </li>
-              </ul>
-            </GlassCard>
-
-            <GlassCard :hoverable="false" padding="20px" class="video-workspace__publications">
-              <div class="video-workspace__section-heading"><h2>发布批次</h2></div>
-              <p v-if="!publications.length" class="video-workspace__hint">
-                提交批量发布后，在这里跟踪数据写入与站点部署。
-              </p>
-              <article
-                v-for="publication in publications"
-                :key="publication.id"
-                class="video-workspace__publication"
-              >
-                <div class="video-workspace__section-heading">
-                  <strong>{{ publication.jobs?.length || 0 }} 个视频</strong>
-                  <el-tag :type="statusType(publication.status)" size="small">{{
-                    PUBLICATION_STATUS[publication.status] || publication.status
-                  }}</el-tag>
-                </div>
-                <p class="video-workspace__hint">
-                  批次 {{ publication.id.slice(0, 12) }} · {{ formatDate(publication.createdAt) }}
-                </p>
-                <ol class="video-workspace__stages" aria-label="发布阶段">
-                  <li
-                    v-for="(label, index) in publicationStages"
-                    :key="label"
-                    :class="{ 'is-complete': publicationStage(publication) >= index }"
+                  <article
+                    v-for="publication in activePublications"
+                    :key="publication.id"
+                    class="video-workspace__publication"
                   >
-                    {{ label }}
-                  </li>
-                </ol>
-                <p v-if="publication.metadataCommitSha" class="video-workspace__hint">
-                  数据提交 {{ publication.metadataCommitSha.slice(0, 10) }}
-                </p>
-                <p v-if="publication.deploymentId" class="video-workspace__hint">
-                  部署 {{ publication.deploymentId }}
-                </p>
-                <p v-if="publication.error" class="video-workspace__transfer-error">
-                  {{ errorMessage(publication.error) }}
-                </p>
-                <el-button
-                  v-if="publication.status === 'failed'"
-                  size="small"
-                  type="warning"
-                  :disabled="!canWrite || retryingIds.includes(publication.id)"
-                  :loading="retryingIds.includes(publication.id)"
-                  @click="retryPublication(publication.id)"
-                  >继续发布</el-button
-                >
-                <p v-if="publicationErrors[publication.id]" class="video-workspace__transfer-error">
-                  进度刷新失败：{{ publicationErrors[publication.id] }}
-                </p>
-              </article>
-              <p
-                v-for="(message, id) in missingPublicationErrors"
-                :key="id"
-                class="video-workspace__transfer-error"
+                    <div class="video-workspace__section-heading">
+                      <strong>{{ publication.jobs?.length || 0 }} 个视频</strong>
+                      <el-tag :type="statusType(publication.status)" size="small">{{
+                        PUBLICATION_STATUS[publication.status] || publication.status
+                      }}</el-tag>
+                    </div>
+                    <ol class="video-workspace__stages" aria-label="发布阶段">
+                      <li
+                        v-for="(label, index) in publicationStages"
+                        :key="label"
+                        :class="{ 'is-complete': publicationStage(publication) >= index }"
+                      >
+                        {{ label }}
+                      </li>
+                    </ol>
+                    <p v-if="publication.error" class="video-workspace__transfer-error">
+                      {{ errorMessage(publication.error) }}
+                    </p>
+                    <el-button
+                      v-if="publication.status === 'failed'"
+                      size="small"
+                      :disabled="!canWrite || retryingIds.includes(publication.id)"
+                      :loading="retryingIds.includes(publication.id)"
+                      @click="retryPublication(publication.id)"
+                      >继续发布</el-button
+                    >
+                    <p
+                      v-if="publicationErrors[publication.id]"
+                      class="video-workspace__transfer-error"
+                    >
+                      进度刷新失败：{{ publicationErrors[publication.id] }}
+                    </p>
+                  </article>
+                  <p
+                    v-for="(message, id) in missingPublicationErrors"
+                    :key="id"
+                    class="video-workspace__transfer-error"
+                  >
+                    批次加载失败：{{ message }}
+                  </p>
+                </section></Transition
               >
-                批次 {{ id.slice(0, 12) }} 加载失败：{{ message }}
-              </p>
-            </GlassCard>
-          </div>
+              <Transition name="studio-feedback"
+                ><div
+                  v-if="completedPublication && queueTab === 'pending'"
+                  class="video-workspace__published-notice"
+                  role="status"
+                >
+                  <el-icon><CircleCheck /></el-icon>
+                  <div>
+                    <strong>{{ completedPublication.jobs?.length || 0 }} 个视频已发布</strong
+                    ><span>已移入发布历史，待办已更新。</span>
+                  </div>
+                  <el-button link @click="showPublishedHistory">查看历史</el-button>
+                  <el-button
+                    circle
+                    text
+                    :icon="Close"
+                    aria-label="关闭发布完成提示"
+                    @click="completedPublication = null"
+                  /></div
+              ></Transition></div
+          ></Transition>
 
-          <GlassCard :hoverable="false" padding="24px" class="video-workspace__review">
-            <VideoReviewPanel
-              v-if="selectedJob && reviewDraft"
-              v-model:draft="reviewDraft"
-              :job="selectedJob"
-              :revision="draftRevision"
-              :dirty="isDirty"
-              :editable="canWrite && canReview(selectedJob)"
-              :busy="reviewBusy"
-              :conflict="conflict"
-              :has-credentials="credentialsStore.hasCredentials"
-              :topic-suggestions="topics"
-              :topics-error="topicsError"
-              @save="saveReview()"
-              @analyze="analyzeReview"
-              @accept-remote="workspace.acceptRemoteReview()"
-              @reapply="saveReview(true)"
-              @refresh="refresh"
-            />
-            <div v-else class="video-workspace__review-empty">
-              <el-icon :size="44"><VideoCamera /></el-icon>
-              <h2>选择一个任务查看详情</h2>
-              <p>云端处理完成后，即可预览视频和审核候选封面。</p>
-            </div>
-          </GlassCard>
+          <Transition name="studio-panel"
+            ><section
+              v-show="!compactLayout || mobilePane === 'review'"
+              ref="reviewScroller"
+              class="video-workspace__review"
+              data-scroll-region
+              aria-label="视频审阅详情，可独立滚动"
+              tabindex="0"
+            >
+              <el-button
+                v-if="compactLayout"
+                class="video-workspace__back"
+                text
+                :icon="ArrowLeft"
+                aria-label="返回视频队列"
+                @click="mobilePane = 'queue'"
+                >返回队列</el-button
+              >
+              <Transition name="studio-panel" mode="out-in">
+                <VideoReviewPanel
+                  v-if="selectedJob && reviewDraft"
+                  :key="selectedJob.id"
+                  v-model:draft="reviewDraft"
+                  :job="selectedJob"
+                  :revision="draftRevision"
+                  :dirty="isDirty"
+                  :editable="canWrite && canReview(selectedJob)"
+                  :busy="reviewBusy"
+                  :conflict="conflict"
+                  :has-credentials="credentialsStore.hasCredentials"
+                  :topic-suggestions="topics"
+                  :topics-error="topicsError"
+                  @save="saveReview()"
+                  @analyze="analyzeReview"
+                  @accept-remote="workspace.acceptRemoteReview()"
+                  @reapply="saveReview(true)"
+                  @refresh="refresh"
+                  @back-to-pending="backToPending"
+                />
+                <div v-else key="empty" class="video-workspace__review-empty">
+                  <el-icon :size="44"><VideoCamera /></el-icon>
+                  <h2>{{ queueTab === 'published' ? '发布记录' : '开始审阅' }}</h2>
+                  <p>
+                    {{
+                      queueTab === 'published'
+                        ? '选择左侧视频查看已发布的内容。'
+                        : '选择左侧素材，确认封面并完善发布信息。'
+                    }}
+                  </p>
+                </div>
+              </Transition>
+            </section></Transition
+          >
         </div>
       </template>
     </div>
@@ -296,33 +309,35 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { onBeforeRouteLeave } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { UploadFilled, VideoCamera } from '@element-plus/icons-vue'
+import {
+  Upload,
+  VideoCamera,
+  CircleCheck,
+  Refresh,
+  Close,
+  ArrowLeft
+} from '@element-plus/icons-vue'
 import MainLayout from '@/components/MainLayout.vue'
-import GlassCard from '@/components/GlassCard.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useConfigStore } from '@/stores/config'
 import { useCredentialsStore } from '@/stores/credentials'
+import { useAiConfigurationGuard } from '@/composables/useAiConfigurationGuard'
 import { analyzeImage, CLASSIFIER_CONFIG } from '@/services/ai/classifier'
 import VideoReviewPanel from '@/features/video-ingest/VideoReviewPanel.vue'
+import VideoJobQueue from '@/features/video-ingest/VideoJobQueue.vue'
+import { createVideoUploadManager } from '@/features/video-ingest/upload-manager'
 import { createVideoApi } from '@/features/video-ingest/api'
 import { createVideoUploader } from '@/features/video-ingest/uploader'
 import { createVideoWorkspace } from '@/features/video-ingest/workspace'
-import {
-  canPublish,
-  canReview,
-  errorMessage,
-  formatBytes,
-  JOB_STATUS,
-  PUBLICATION_STATUS,
-  validateVideoFile
-} from '@/features/video-ingest/domain'
+import { canReview, errorMessage, PUBLICATION_STATUS } from '@/features/video-ingest/domain'
 
 const authStore = useAuthStore()
 const configStore = useConfigStore()
 const credentialsStore = useCredentialsStore()
+const { requireAiConfiguration } = useAiConfigurationGuard()
 const api = createVideoApi({
   baseUrl: import.meta.env.VITE_VIDEO_API_URL,
   getToken: () => authStore.token
@@ -346,7 +361,6 @@ const {
   conflict,
   isDirty,
   hasUnsavedDrafts,
-  publishableJobs,
   reviewBusy,
   publishing
 } = workspace
@@ -354,30 +368,62 @@ const fileInput = ref(null)
 const resumeInput = ref(null)
 const resumeJobId = ref('')
 const dragging = ref(false)
-const statusFilter = ref('all')
-const transfers = ref([])
+const queueTab = ref('pending')
+const compactLayout = ref(window.innerWidth <= 980)
+const mobilePane = ref('queue')
+const reviewScroller = ref(null)
+function syncCompactLayout() {
+  compactLayout.value = window.innerWidth <= 980
+}
+function backToPending() {
+  queueTab.value = 'pending'
+  mobilePane.value = 'queue'
+}
 const retryingIds = ref([])
-const controllers = new Map()
 const canWrite = computed(() => authStore.canUpload)
+const uploadManager = createVideoUploadManager({
+  uploader,
+  onJob: job => workspace.upsertJob(job),
+  onSettled: () => refresh()
+})
+const { transfers, hasActiveTransfers } = uploadManager
+const activeJobIds = computed(() =>
+  transfers.value.filter(isTransferring).map(transfer => transfer.jobId)
+)
+const activePublications = computed(() =>
+  publications.value.filter(publication => publication.status !== 'published')
+)
+const completedPublication = ref(null)
+const observedPublicationStates = new Map()
 
-const filteredJobs = computed(() =>
-  jobs.value.filter(
-    job =>
-      ({
-        all: true,
-        review: canReview(job),
-        uploading: job.status === 'uploading',
-        processing: ['queued', 'processing', 'publishing'].includes(job.status),
-        published: job.status === 'published',
-        failed: ['failed', 'expired'].includes(job.status)
-      })[statusFilter.value]
+watch(
+  () => publications.value.map(publication => [publication.id, publication.status]),
+  states => {
+    for (const [id, status] of states) {
+      const previousStatus = observedPublicationStates.get(id)
+      if (previousStatus && previousStatus !== 'published' && status === 'published') {
+        completedPublication.value = publications.value.find(publication => publication.id === id)
+      }
+      observedPublicationStates.set(id, status)
+    }
+  },
+  { immediate: true }
+)
+
+function showPublishedHistory() {
+  queueTab.value = 'published'
+  mobilePane.value = 'queue'
+  completedPublication.value = null
+}
+
+watch([queueTab, () => selectedJob.value?.status], () => {
+  const candidates = jobs.value.filter(job =>
+    queueTab.value === 'published' ? job.status === 'published' : job.status !== 'published'
   )
-)
-const allSelected = computed(
-  () =>
-    publishableJobs.value.length > 0 &&
-    publishableJobs.value.every(job => selectedIds.value.includes(job.id))
-)
+  if (!candidates.some(job => job.id === selectedJobId.value))
+    workspace.selectJob(candidates[0]?.id || '')
+})
+
 const missingPublicationErrors = computed(() =>
   Object.fromEntries(
     Object.entries(publicationErrors.value).filter(
@@ -400,7 +446,7 @@ function isTransferring(transfer) {
   return ['waiting', 'hashing', 'uploading', 'completing'].includes(transfer.stage)
 }
 function hasActiveTransfer(jobId) {
-  return transfers.value.some(transfer => transfer.jobId === jobId && isTransferring(transfer))
+  return uploadManager.hasActive(jobId)
 }
 function statusType(status) {
   return status === 'published'
@@ -410,16 +456,6 @@ function statusType(status) {
       : ['awaiting_ai', 'awaiting_review'].includes(status)
         ? 'warning'
         : 'info'
-}
-function formatDate(value) {
-  return value
-    ? new Date(value).toLocaleString('zh-CN', {
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit'
-      })
-    : ''
 }
 function publicationStage(publication) {
   if (publication.status === 'published') return 3
@@ -431,65 +467,42 @@ function publicationStage(publication) {
 async function refresh() {
   await Promise.allSettled([workspace.refresh(), workspace.loadTopics()])
 }
-function toggleAll() {
-  selectedIds.value = allSelected.value ? [] : publishableJobs.value.slice(0, 30).map(job => job.id)
-}
 async function selectJob(id) {
   workspace.selectJob(id)
-  if (window.innerWidth < 780) {
-    await nextTick()
-    document
-      .querySelector('.video-workspace__review')
-      ?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+  if (compactLayout.value) mobilePane.value = 'review'
+  await nextTick()
+  if (reviewScroller.value) {
+    reviewScroller.value.scrollTop = 0
+    reviewScroller.value.focus({ preventScroll: true })
   }
 }
 function pauseTransfer(id) {
-  controllers.get(id)?.abort()
+  uploadManager.pause(id)
 }
 
-async function addFiles(files, resumeJob = null) {
-  if (!canWrite.value) return
-  await Promise.allSettled(
-    Array.from(files).map(async file => {
-      try {
-        validateVideoFile(file)
-      } catch (failure) {
-        ElMessage.error(`${file.name}：${errorMessage(failure)}`)
-        return
+async function retryTransfer(id) {
+  if (!canWrite.value || !requireAiConfiguration()) return
+  try {
+    await uploadManager.retry(id)
+  } catch (failure) {
+    if (failure.name !== 'AbortError') ElMessage.error(errorMessage(failure))
+  }
+}
+
+function addFiles(files, resumeJob = null) {
+  if (!canWrite.value || !requireAiConfiguration()) return Promise.resolve()
+  queueTab.value = 'pending'
+  return uploadManager.addFiles(files, { resumeJob }).then(results => {
+    for (const result of results) {
+      if (result.status === 'rejected' && result.reason?.name !== 'AbortError') {
+        ElMessage.error(errorMessage(result.reason))
       }
-      const id = globalThis.crypto.randomUUID()
-      const transfer = reactive({
-        id,
-        filename: file.name,
-        jobId: resumeJob?.id || '',
-        stage: 'waiting',
-        percent: 0,
-        error: ''
-      })
-      transfers.value.push(transfer)
-      const controller = new globalThis.AbortController()
-      controllers.set(id, controller)
-      try {
-        await uploader.upload(file, {
-          job: resumeJob,
-          signal: controller.signal,
-          onProgress: progress => Object.assign(transfer, progress),
-          onJob: job => {
-            transfer.jobId = job.id
-            workspace.upsertJob(job)
-          }
-        })
-        transfer.stage = 'done'
-        transfer.percent = 100
-      } catch (failure) {
-        transfer.stage = failure.name === 'AbortError' ? 'paused' : 'error'
-        transfer.error = errorMessage(failure)
-      } finally {
-        controllers.delete(id)
-      }
-    })
-  )
-  await refresh()
+    }
+  })
+}
+
+function chooseFiles() {
+  if (requireAiConfiguration()) fileInput.value?.click()
 }
 
 function handleFiles(event) {
@@ -502,7 +515,7 @@ function handleDrop(event) {
   addFiles(event.dataTransfer.files)
 }
 function chooseResume(id) {
-  if (hasActiveTransfer(id)) return
+  if (hasActiveTransfer(id) || !requireAiConfiguration()) return
   resumeJobId.value = id
   resumeInput.value?.click()
 }
@@ -522,10 +535,7 @@ async function saveReview(useLatest = false) {
   }
 }
 async function analyzeReview() {
-  if (!credentialsStore.hasCredentials) {
-    ElMessage.warning('请在设置中填写当前标签页的 API Key')
-    return
-  }
+  if (!requireAiConfiguration()) return
   try {
     await workspace.analyzeReview({
       analyzeImage,
@@ -573,13 +583,13 @@ async function retryPublication(id) {
 }
 
 function beforeUnload(event) {
-  if (controllers.size || hasUnsavedDrafts.value) {
+  if (hasActiveTransfers.value || hasUnsavedDrafts.value) {
     event.preventDefault()
     event.returnValue = ''
   }
 }
 onBeforeRouteLeave(async () => {
-  if (!controllers.size && !hasUnsavedDrafts.value) return true
+  if (!hasActiveTransfers.value && !hasUnsavedDrafts.value) return true
   try {
     await ElMessageBox.confirm(
       '离开后本页上传会暂停，未保存的审核草稿会丢失。云端任务将继续，可重选源视频恢复上传。',
@@ -593,6 +603,7 @@ onBeforeRouteLeave(async () => {
 })
 onMounted(async () => {
   window.addEventListener('beforeunload', beforeUnload)
+  window.addEventListener('resize', syncCompactLayout)
   if (!configured) return
   await Promise.allSettled([
     credentialsStore.loadCredentials(),
@@ -606,129 +617,199 @@ onMounted(async () => {
 })
 onBeforeUnmount(() => {
   workspace.dispose()
-  controllers.forEach(controller => controller.abort())
+  uploadManager.dispose()
   window.removeEventListener('beforeunload', beforeUnload)
+  window.removeEventListener('resize', syncCompactLayout)
 })
 </script>
 
 <style scoped lang="scss">
-@use '@/styles/variables' as *;
 .video-workspace {
+  display: flex;
+  flex-direction: column;
   flex: 1;
   min-height: 0;
-  overflow: auto;
-  padding: 8px 4px 24px;
-  color: $gray-100;
-  scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
+  overflow: hidden;
+  padding: 4px 4px 0;
+  color: var(--studio-text, #f4f6fb);
+  scrollbar-width: thin;
   &__heading {
+    flex: none;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 16px;
-    margin: 4px 0 24px;
+    gap: 20px;
+    margin: 0 0 16px;
+    padding: 0 4px;
   }
   h1 {
-    font-size: 26px;
-    margin: 0 0 8px;
+    margin: 0 0 6px;
+    font-size: 28px;
+    font-weight: 650;
+    letter-spacing: -0.035em;
+    line-height: 1.2;
   }
   &__heading p {
-    font-size: 14px;
-    color: $gray-300;
     margin: 0;
+    color: var(--studio-muted, #b1b9c9);
+    font-size: 13px;
+  }
+  &__refresh {
+    width: 40px;
+    height: 40px;
+    flex: none;
+    border: 1px solid rgba(255, 255, 255, 0.17);
+    background: rgba(120, 137, 166, 0.15);
+    box-shadow:
+      inset 0 1px rgba(255, 255, 255, 0.14),
+      0 2px 5px rgba(0, 0, 0, 0.14);
+    backdrop-filter: blur(18px) saturate(1.4);
   }
   &__unconfigured {
-    padding: 64px 24px !important;
+    padding: 72px 24px;
     text-align: center;
+    background: var(--studio-surface, rgba(28, 33, 44, 0.86));
+    border-radius: 22px;
   }
   &__unconfigured h2 {
-    margin: 20px 0 12px;
-    font-size: 21px;
+    font-size: 20px;
+    margin: 18px 0 10px;
   }
   &__unconfigured p {
-    color: $gray-300;
+    color: var(--studio-muted, #b1b9c9);
+    font-size: 13px;
   }
   &__unconfigured a {
+    color: var(--studio-accent, #7db7ff);
     display: inline-block;
-    margin-top: 16px;
-    color: #c4b5fd;
+    margin-top: 12px;
   }
   :deep(.el-alert) {
     margin-bottom: 16px;
   }
   &__upload {
-    margin-bottom: 24px;
+    flex: none;
+    margin-bottom: 16px;
   }
   &__dropzone {
     display: flex;
     align-items: center;
     gap: 16px;
-    padding: 20px;
-    border: 1px dashed rgba(255, 255, 255, 0.3);
-    border-radius: 12px;
-    background: rgba(255, 255, 255, 0.03);
+    padding: 13px 18px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 22px;
+    background: rgba(97, 115, 144, 0.09);
+    box-shadow: inset 0 1px rgba(255, 255, 255, 0.045);
+    transition:
+      background 180ms,
+      border-color 180ms;
   }
   &__dropzone.is-dragging {
-    border-color: $primary-start;
-    background: rgba($primary-start, 0.12);
+    background: rgba(83, 144, 230, 0.18);
+    border-color: var(--studio-accent, #7db7ff);
+  }
+  &__upload-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 50px;
+    height: 50px;
+    flex: none;
+    border-radius: 16px;
+    color: #a7cfff;
+    background: rgba(125, 183, 255, 0.12);
+    box-shadow: inset 0 1px rgba(207, 230, 255, 0.12);
   }
   &__dropzone > div {
     flex: 1;
   }
   &__dropzone strong {
-    font-size: 15px;
+    font-weight: 600;
+    font-size: 14px;
   }
   &__dropzone p {
     margin: 6px 0 0;
-    color: $gray-300;
+    color: var(--studio-muted, #b1b9c9);
     font-size: 12px;
+    line-height: 1.5;
+  }
+  &__dropzone > .el-button {
+    border-radius: 999px;
+    padding-inline: 22px;
+    min-height: 36px;
   }
   &__hint {
-    color: $gray-300;
-    font-size: 12px;
-    line-height: 1.65;
+    font-size: 11px;
+    line-height: 1.6;
+    color: var(--studio-muted, #b1b9c9);
     margin: 10px 0 0;
+    padding-left: 4px;
   }
   &__transfers {
+    position: relative;
+    max-height: min(150px, 20vh);
+    overflow: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 16px 24px;
-    margin-top: 20px;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 18px;
+    margin-top: 10px;
+    padding: 12px 16px;
+    background: var(--studio-surface, rgba(28, 33, 44, 0.86));
+    border-radius: 18px;
   }
   &__transfer-title {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 10px;
     font-size: 12px;
     margin-bottom: 8px;
   }
   &__transfer-title strong {
     flex: 1;
+    min-width: 0;
     overflow: hidden;
-    white-space: nowrap;
     text-overflow: ellipsis;
+    white-space: nowrap;
     font-weight: 500;
   }
   &__transfer-title > span {
-    color: $gray-300;
+    color: var(--studio-muted, #b1b9c9);
   }
   &__transfer-error {
-    color: #fca5a5;
+    color: #ffb3b3;
     font-size: 12px;
+    line-height: 1.5;
     margin: 8px 0;
-    line-height: 1.6;
     overflow-wrap: anywhere;
   }
   &__content {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
     display: grid;
-    grid-template-columns: minmax(340px, 0.9fr) minmax(440px, 1.2fr);
-    align-items: start;
-    gap: 24px;
+    grid-template-columns: minmax(300px, 0.72fr) minmax(450px, 1.28fr);
+    align-items: stretch;
+    grid-template-rows: minmax(0, 1fr);
+    gap: 26px;
   }
   &__queue {
     min-width: 0;
+    min-height: 0;
+    overflow: hidden;
     display: flex;
     flex-direction: column;
-    gap: 24px;
+    gap: 18px;
+  }
+  &__publications {
+    flex: 0 1 auto;
+    max-height: 28%;
+    overflow: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    padding: 18px 12px;
+    border-top: 1px solid var(--studio-border, rgba(255, 255, 255, 0.13));
   }
   &__section-heading {
     display: flex;
@@ -737,207 +818,222 @@ onBeforeUnmount(() => {
     gap: 12px;
   }
   &__section-heading h2 {
-    font-size: 17px;
     margin: 0;
-  }
-  &__section-heading h2 span {
-    margin-left: 6px;
-    color: $gray-300;
     font-size: 13px;
-    font-weight: 400;
-    font-variant-numeric: tabular-nums;
+    font-weight: 600;
   }
-  &__section-heading > .video-workspace__hint {
-    margin: 0;
+  &__section-heading > span {
+    color: var(--studio-muted, #b1b9c9);
+    font-size: 11px;
   }
-  &__tools {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    margin: 20px 0 16px;
-  }
-  &__tools select {
-    flex: 1;
-    min-width: 0;
-    color-scheme: dark;
-    padding: 8px 10px;
-    color: $white;
-    font-size: 13px;
-    background: rgba(0, 0, 0, 0.18);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    border-radius: 8px;
-  }
-  &__bulk {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding-bottom: 16px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.12);
-    font-size: 13px;
-    color: $gray-300;
-  }
-  &__job-list {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-    max-height: 560px;
-    overflow-y: auto;
-    scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
-  }
-  &__job {
-    padding: 16px 8px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 8px;
-  }
-  &__job.is-active {
-    background: rgba($primary-start, 0.12);
-  }
-  &__job-row {
-    display: flex;
-    gap: 10px;
-    align-items: center;
-  }
-  &__job-row input {
-    accent-color: $primary-start;
-    width: 16px;
-    height: 16px;
-    flex-shrink: 0;
-  }
-  &__job-select {
-    display: flex;
-    flex: 1;
-    min-width: 0;
-    flex-direction: column;
-    gap: 6px;
-    border: 0;
-    background: none;
-    color: $gray-100;
-    text-align: left;
-    cursor: pointer;
-    padding: 4px 0;
-  }
-  &__job-select strong,
-  &__job-select span {
-    overflow: hidden;
-    white-space: nowrap;
-    text-overflow: ellipsis;
-    max-width: 100%;
-  }
-  &__job-select strong {
+  &__section-heading strong {
     font-size: 13px;
     font-weight: 500;
-  }
-  &__job-select span {
-    font-size: 11px;
-    color: $gray-300;
-  }
-  &__job-actions {
-    margin-left: 26px;
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: space-between;
-    align-items: center;
-    gap: 8px;
-    min-height: 22px;
-    margin-top: 6px;
-  }
-  &__date {
-    font-size: 11px;
-    color: $gray-300;
-    font-variant-numeric: tabular-nums;
-    margin-left: auto;
-  }
-  &__empty {
-    color: $gray-300;
-    font-size: 13px;
-    text-align: center;
-    padding: 40px 12px;
   }
   &__publication {
-    padding: 20px 0;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  }
-  &__publication:last-child {
-    border-bottom: 0;
-    padding-bottom: 0;
-  }
-  &__publication strong {
-    font-size: 13px;
-    font-weight: 500;
+    margin-top: 18px;
   }
   &__stages {
     display: flex;
-    list-style: none;
     gap: 8px;
+    list-style: none;
     padding: 0;
-    margin: 16px 0;
+    margin: 14px 0 0;
   }
   &__stages li {
     flex: 1;
+    color: #929caf;
+    border-top: 3px solid rgba(255, 255, 255, 0.11);
     padding-top: 8px;
     font-size: 11px;
-    color: $gray-400;
-    border-top: 2px solid rgba(255, 255, 255, 0.16);
   }
   &__stages li.is-complete {
-    color: #c4b5fd;
-    border-color: $primary-start;
+    color: #c6defd;
+    border-color: #7db7ff;
+  }
+  &__published-notice {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 16px;
+    background: rgba(70, 113, 92, 0.17);
+    border-radius: 18px;
+  }
+  &__published-notice > .el-icon {
+    color: #a1dfbc;
+    font-size: 22px;
+  }
+  &__published-notice > div {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 4px;
+  }
+  &__published-notice strong {
+    font-size: 13px;
+    font-weight: 500;
+  }
+  &__published-notice span {
+    font-size: 11px;
+    color: #b8cfc1;
+  }
+  &__published-notice :deep(.el-button + .el-button) {
+    margin-left: 0;
   }
   &__review {
     min-width: 0;
+    min-height: 0;
+    overflow: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-gutter: stable;
+    padding: 22px;
+    background: var(--studio-surface, rgba(28, 33, 44, 0.86));
+    border-radius: 22px;
+    box-shadow:
+      inset 0 1px rgba(255, 255, 255, 0.055),
+      0 7px 22px rgba(0, 0, 0, 0.09);
+    scroll-margin-top: 16px;
   }
   &__review-empty {
     text-align: center;
-    color: $gray-300;
-    padding: 100px 16px;
+    padding: 110px 16px;
+    color: var(--studio-muted, #b1b9c9);
+  }
+  &__review-empty > .el-icon {
+    color: #8d9aad;
   }
   &__review-empty h2 {
-    font-size: 18px;
-    margin: 20px 0 12px;
+    font-size: 17px;
+    font-weight: 500;
+    color: var(--studio-text, #f4f6fb);
+    margin: 20px 0 10px;
   }
   &__review-empty p {
+    margin: 0;
     font-size: 13px;
+    line-height: 1.6;
   }
   button:focus-visible,
-  select:focus-visible,
   input:focus-visible {
-    outline: 2px solid $primary-start;
+    outline: 2px solid var(--studio-accent, #7db7ff);
     outline-offset: 3px;
   }
-  @media (max-width: 1000px) {
+  @media (max-width: 1100px) {
     &__content {
-      grid-template-columns: minmax(280px, 0.8fr) minmax(360px, 1fr);
-      gap: 16px;
+      grid-template-columns: minmax(280px, 0.78fr) minmax(360px, 1.22fr);
+      gap: 18px;
+    }
+    &__review {
+      padding: 18px;
     }
   }
-  @media (max-width: 780px) {
-    &__job-list {
-      max-height: 360px;
-    }
+  @media (max-width: 980px) {
     &__content {
-      grid-template-columns: 1fr;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 0;
+    }
+    &__queue,
+    &__review {
+      grid-area: 1 / 1;
+    }
+    &__review-empty {
+      padding: 60px 16px;
     }
     &__transfers {
       grid-template-columns: 1fr;
     }
-    &__dropzone {
-      flex-wrap: wrap;
-      padding: 16px;
+  }
+  @media (max-width: 520px) {
+    padding: 0;
+    h1 {
+      font-size: 25px;
     }
-    &__dropzone > .el-icon {
-      display: none;
+    &__heading {
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    &__heading p {
+      font-size: 12px;
+    }
+    &__dropzone {
+      flex-wrap: nowrap;
+      padding: 12px;
+      gap: 10px;
+      border-radius: 20px;
+    }
+    &__upload-icon {
+      width: 42px;
+      height: 42px;
+      border-radius: 13px;
     }
     &__dropzone > div {
-      flex-basis: 100%;
+      min-width: 0;
     }
     &__dropzone > .el-button {
-      width: 100%;
+      width: auto;
+      margin-left: 0;
+      padding-inline: 14px;
+    }
+    &__dropzone p {
+      display: none;
+    }
+    &__hint {
+      display: none;
     }
     &__review {
-      padding: 18px !important;
+      padding: 16px;
+      border-radius: 20px;
     }
-    h1 {
-      font-size: 22px;
+    &__published-notice {
+      flex-wrap: wrap;
+    }
+  }
+  &__mobile-navigation {
+    flex: none;
+    margin-bottom: 12px;
+    border-radius: 999px;
+  }
+  &__mobile-navigation :deep(.el-segmented__group) {
+    display: flex;
+    width: 100%;
+  }
+  &__mobile-navigation :deep(.el-segmented__item) {
+    flex: 1;
+  }
+  &__back {
+    margin: -4px 0 12px;
+  }
+  &__review:focus-visible {
+    outline: 2px solid var(--studio-accent, #7db7ff);
+    outline-offset: -2px;
+  }
+  @media (max-height: 650px) {
+    &__heading p,
+    &__upload > .video-workspace__hint {
+      display: none;
+    }
+    &__heading {
+      margin-bottom: 10px;
+    }
+    &__upload {
+      margin-bottom: 10px;
+    }
+    &__dropzone {
+      padding-block: 9px;
+    }
+    &__transfers {
+      max-height: 90px;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      transition: none !important;
+      animation: none !important;
+      scroll-behavior: auto !important;
     }
   }
 }

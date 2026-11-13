@@ -1,6 +1,5 @@
 <template>
   <MainLayout>
-    <!-- 全局加载状态（仅在必要时显示） -->
     <div v-if="pageLoading" class="upload-view__loading">
       <div class="loading-spinner">
         <div class="spinner"></div>
@@ -9,7 +8,6 @@
     </div>
 
     <div v-else ref="viewRef" class="upload-view">
-      <!-- 只读提示 -->
       <el-alert
         v-if="authStore.permissionChecked && !authStore.canUpload"
         type="warning"
@@ -17,21 +15,20 @@
         class="upload-view__readonly-alert"
       >
         <template #title>
-          <span>🔒 只读模式 - 当前账号没有上传权限，仅可浏览分类</span>
+          <span>只读模式 · 当前账号没有上传权限，仅可浏览分类</span>
         </template>
       </el-alert>
 
       <div class="upload-view__header">
         <div class="upload-view__title-area">
           <div class="upload-view__title-main">
-            <div class="upload-view__title-badge">🎨 Upload Workspace</div>
-            <h1 class="upload-view__title">上传中心</h1>
+            <h1 class="upload-view__title">图片上传</h1>
           </div>
-          <!-- <p class="upload-view__subtitle">让上传列表成为主角，预览与工作流作为辅助区常驻右侧。</p> -->
+          <p class="upload-view__subtitle">选择图片，整理分类并提交发布。</p>
         </div>
 
         <div class="upload-view__meta">
-          <span class="upload-view__meta-chip">{{ currentModeLabel }}</span>
+          <span class="upload-view__meta-chip">AI 智能分类</span>
           <span class="upload-view__meta-chip">{{ currentSeriesLabel }}</span>
           <span
             class="upload-view__meta-chip upload-view__meta-chip--highlight"
@@ -42,8 +39,7 @@
         </div>
       </div>
 
-      <!-- 工作区布局 -->
-      <div class="upload-view__content">
+      <div class="upload-view__content" data-scroll-region>
         <CategorySidebar
           :key="treeKey"
           :series="series"
@@ -62,30 +58,24 @@
 
         <div class="upload-view__center">
           <UploadPanel
-            :target-path="uploadStore.targetPath"
             :files="uploadStore.files"
             :selected-id="previewFile?.id"
             :uploading="uploading"
             :progress="uploadStore.totalProgress"
-            :pending-count="uploadStore.pendingFiles.length"
             :error-count="uploadStore.errorFiles.length"
-            :upload-mode="uploadStore.uploadMode"
             :current-series="series"
-            :ai-config="aiConfig"
             :ai-analyzing="uploadStore.aiAnalyzing"
             :ai-analyzing-count="uploadStore.aiAnalyzingCount"
             :metadata-status="uploadStore.metadataStatus"
-            :metadata-error="uploadStore.metadataError"
             :can-upload="authStore.canUpload"
             @add-files="addFiles"
             @remove="uploadStore.removeFile"
             @remove-batch="uploadStore.removeFiles"
             @clear="uploadStore.clearFiles"
-            @retry="uploadStore.retryFailed"
+            @retry="handleRetry"
             @upload="handleUpload"
             @select="selectPreview"
             @change-target="handleChangeTarget"
-            @mode-change="handleModeChange"
             @series-change="handleSeriesChange"
             @retry-metadata="handleRetryMetadata"
             @apply-all-ai="handleApplyAllAi"
@@ -93,12 +83,11 @@
           />
         </div>
 
-        <aside ref="sidebarRef" class="upload-view__sidebar">
+        <aside ref="sidebarRef" class="upload-view__sidebar" data-scroll-region>
           <section ref="overviewRef" class="upload-view__overview">
             <div class="upload-view__overview-header">
               <div>
-                <p class="upload-view__overview-label">概览</p>
-                <h2 class="upload-view__overview-title">统计与配额</h2>
+                <h2 class="upload-view__overview-title">分类与配额</h2>
               </div>
               <div class="upload-view__overview-actions">
                 <button class="upload-view__overview-btn" @click="refreshStats">刷新</button>
@@ -110,28 +99,24 @@
 
             <div class="upload-view__overview-grid">
               <div class="upload-view__overview-item">
-                <span class="upload-view__overview-item-icon">🖥️</span>
                 <div>
                   <span class="upload-view__overview-item-label">电脑</span>
                   <strong class="upload-view__overview-item-value">{{ stats.desktop }}</strong>
                 </div>
               </div>
               <div class="upload-view__overview-item">
-                <span class="upload-view__overview-item-icon">📱</span>
                 <div>
                   <span class="upload-view__overview-item-label">手机</span>
                   <strong class="upload-view__overview-item-value">{{ stats.mobile }}</strong>
                 </div>
               </div>
               <div class="upload-view__overview-item">
-                <span class="upload-view__overview-item-icon">👤</span>
                 <div>
                   <span class="upload-view__overview-item-label">头像</span>
                   <strong class="upload-view__overview-item-value">{{ stats.avatar }}</strong>
                 </div>
               </div>
               <div class="upload-view__overview-item upload-view__overview-item--api">
-                <span class="upload-view__overview-item-icon">⚡</span>
                 <div>
                   <span class="upload-view__overview-item-label">API 剩余</span>
                   <strong class="upload-view__overview-item-value">
@@ -193,14 +178,12 @@
         @close="showProgressModal = false"
       />
 
-      <!-- 发布历史弹窗 -->
       <ReleaseHistoryModal
         :visible="showHistoryModal"
         :stats-data="workflowStore.statsData"
         @close="showHistoryModal = false"
       />
 
-      <!-- 目录选择弹窗 -->
       <TargetSelectModal
         :visible="showTargetModal"
         :file="targetEditFile"
@@ -209,7 +192,6 @@
         @confirm="handleTargetConfirm"
       />
 
-      <!-- 删除分类确认弹窗 -->
       <DeleteCategoryModal
         :visible="showDeleteModal"
         :category-name="deleteTarget.data?.name || ''"
@@ -220,7 +202,6 @@
         @confirm="confirmDeleteCategory"
       />
 
-      <!-- 编辑 AI 分析结果弹窗 -->
       <EditAIResultModal
         :visible="showEditAIModal"
         :file="editAIFile"
@@ -258,8 +239,10 @@ import { useUploadStore } from '@/stores/upload'
 import { useAuthStore } from '@/stores/auth'
 import { useWorkflowStore } from '@/stores/workflow'
 import { debounce } from '@/utils/debounce'
+import { useAiConfigurationGuard } from '@/composables/useAiConfigurationGuard'
 import { detectBatchImageTypes, getDetectionStats } from '@/utils/image-detector'
 
+const { requireAiConfiguration } = useAiConfigurationGuard()
 const configStore = useConfigStore()
 const uploadStore = useUploadStore()
 const authStore = useAuthStore()
@@ -271,10 +254,10 @@ const overviewRef = ref(null)
 const previewPanelRef = ref(null)
 const workflowPanelRef = ref(null)
 const forceCategoryFetch = ref(false)
-const pageLoading = ref(false) // 页面加载状态，默认不显示 loading
+const pageLoading = ref(false)
 const series = ref('desktop')
 const treeData = ref([])
-const treeKey = ref(0) // 用于强制刷新树组件
+const treeKey = ref(0)
 const loading = ref(false)
 const syncingCategories = ref(false)
 const loadingStats = ref(false)
@@ -302,11 +285,7 @@ const quotaPercent = computed(() =>
   Math.round((rateLimit.value.remaining / rateLimit.value.limit) * 100)
 )
 
-// AI 配置
 const aiConfig = computed(() => uploadStore.getCurrentAiConfig())
-const currentModeLabel = computed(() =>
-  uploadStore.uploadMode === 'ai' ? 'AI 智能分类' : '手动上传'
-)
 const currentSeriesLabel = computed(() => {
   const labels = {
     desktop: '电脑壁纸',
@@ -316,13 +295,7 @@ const currentSeriesLabel = computed(() => {
 
   return labels[series.value] || '未选择'
 })
-const currentContextLabel = computed(() => {
-  if (uploadStore.uploadMode === 'manual') {
-    return uploadStore.targetPath ? `目录 · ${uploadStore.targetPath}` : '目录 · 待选择'
-  }
-
-  return `模型 · ${aiConfig.value?.modelName || 'AI 自动分类'}`
-})
+const currentContextLabel = computed(() => `模型 · ${aiConfig.value?.modelName || 'GPT-6.1 Sol'}`)
 
 const SIDEBAR_COLLAPSED_HEIGHT = 52
 
@@ -354,7 +327,8 @@ async function syncSidebarAccordion(animated = true) {
   if (!previewEl || !workflowEl) return
 
   const expandedHeight = getExpandedSidebarHeight()
-  const duration = animated ? 0.68 : 0
+  const duration =
+    animated && !window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 0.24 : 0
   const ease = 'expo.inOut'
 
   gsap.killTweensOf([previewEl, workflowEl])
@@ -465,19 +439,18 @@ function handleCategorySelect({ data, node }) {
 }
 
 async function addFiles(files) {
-  // 权限检查
   if (!authStore.canUpload) {
     ElMessage.error('🔒 您没有上传权限，无法添加文件')
     return
   }
 
+  if (!requireAiConfiguration()) return
   const imgs = files.filter(f => f.type.startsWith('image/'))
   if (!imgs.length) {
     ElMessage.warning('请选择图片文件')
     return
   }
 
-  // 大批量上传警告
   if (uploadStore.shouldWarnBatchUpload(imgs.length)) {
     const estimatedTime = uploadStore.estimateUploadTime(imgs.length)
     const minutes = Math.floor(estimatedTime / 60)
@@ -492,13 +465,11 @@ async function addFiles(files) {
     })
   }
 
-  // 自动检测图片类型
-  if (uploadStore.uploadMode === 'ai' && imgs.length > 0) {
+  if (imgs.length > 0) {
     try {
       const detectionResults = await detectBatchImageTypes(imgs)
       const stats = getDetectionStats(detectionResults)
 
-      // 如果大部分图片是同一类型，自动切换
       const dominantType = ['desktop', 'mobile', 'avatar'].reduce((a, b) =>
         stats[a] > stats[b] ? a : b
       )
@@ -513,7 +484,6 @@ async function addFiles(files) {
           duration: 4000
         })
       } else if (stats.desktop + stats.mobile + stats.avatar < imgs.length) {
-        // 有检测失败的
         ElMessage({
           message: `⚠️ 部分图片类型检测失败，请确认当前选择的类型（${series.value}）是否正确`,
           type: 'warning',
@@ -530,18 +500,15 @@ async function addFiles(files) {
     ElMessage.warning(`${imgs.length - added.length} 个文件不符合要求`)
 }
 
-// 处理上传结果（handleUpload 和 handleRetry 公共逻辑）
 function handleUploadResults(results, messagePrefix = '上传') {
   const ok = results.results.filter(r => r.success).length
   const fail = results.results.length - ok
   const reused = results.results.filter(r => r.reusedExisting).length
 
-  // 更新会话上传计数
   if (ok > 0) {
     workflowStore.addSessionUpload(ok)
   }
 
-  // 保存上传记录到本地存储
   if (ok > 0 && localStorageService.isInitialized()) {
     const successFiles = results.results
       .filter(r => r.success)
@@ -557,7 +524,6 @@ function handleUploadResults(results, messagePrefix = '上传') {
     localStorageService.addUploadRecords(successFiles)
   }
 
-  // 显示消息
   if (messagePrefix === '上传') {
     ElMessage[fail ? 'warning' : 'success'](
       fail
@@ -567,7 +533,7 @@ function handleUploadResults(results, messagePrefix = '上传') {
     if (results.metadataResult?.success === false) {
       ElMessage.warning(`图片已上传，但元数据生成失败：${results.metadataResult.error}`)
     }
-    // 清理成功上传的文件（释放内存）
+
     if (ok > 0 && results.metadataResult?.success !== false) {
       uploadStore.clearSuccessFiles()
     }
@@ -575,7 +541,7 @@ function handleUploadResults(results, messagePrefix = '上传') {
     ElMessage[fail ? 'warning' : 'success'](
       fail ? `重试完成：${ok} 成功，${fail} 失败` : `重试成功，${ok} 个文件已上传`
     )
-    // 清理成功上传的文件
+
     if (ok > 0) {
       uploadStore.clearSuccessFiles()
     }
@@ -583,7 +549,6 @@ function handleUploadResults(results, messagePrefix = '上传') {
 
   refreshStats()
 
-  // 刷新工作流状态（延迟 2 秒等待 GitHub API 同步）
   if (ok > 0) {
     setTimeout(async () => {
       const { owner, repo, branch } = configStore.config
@@ -598,14 +563,22 @@ function handleUploadResults(results, messagePrefix = '上传') {
 }
 
 async function handleUpload() {
-  // 检查是否有文件没有目标路径
+  if (uploading.value || !authStore.canUpload || !requireAiConfiguration()) return
+  if (!uploadStore.pendingFiles.length) {
+    ElMessage.info('请先添加图片')
+    return
+  }
+  if (uploadStore.pendingFiles.some(file => !file.aiMetadata || file.aiMetadata.error)) {
+    ElMessage.warning('请先完成图片 AI 分析')
+    return
+  }
+
   const filesWithoutTarget = uploadStore.pendingFiles.filter(f => !f.targetPath)
   if (filesWithoutTarget.length > 0) {
     ElMessage.warning(`有 ${filesWithoutTarget.length} 个文件未设置上传目录`)
     return
   }
 
-  // 打开进度弹框
   showProgressModal.value = true
 
   try {
@@ -617,6 +590,7 @@ async function handleUpload() {
 }
 
 async function handleRetryMetadata() {
+  if (uploading.value || !authStore.canUpload || !requireAiConfiguration()) return
   try {
     const result = await uploadStore.retryPendingMetadata()
     if (!result) return
@@ -661,27 +635,10 @@ function handleTargetConfirm({ series: newSeries, l1, l2 }) {
   targetEditFile.value = null
 }
 
-// 上传模式切换
-function handleModeChange(mode) {
-  uploadStore.setUploadMode(mode)
-  // 切换到手动模式时，如果没有选择目录，清空新添加的文件的目标路径
-  if (mode === 'manual' && !uploadStore.targetPath) {
-    ElMessage.info('请在左侧选择上传目录')
-  }
-}
-
-// 系列切换（AI 模式下）
 function handleSeriesChange(newSeries) {
-  series.value = newSeries
-  uploadStore.setTarget(newSeries, '', '')
-  selectedL1.value = ''
-
-  if (uploadStore.uploadMode === 'manual') {
-    loadRootCategories()
-  }
+  selectSeries(newSeries)
 }
 
-// 应用所有 AI 推荐
 function handleApplyAllAi() {
   const count = uploadStore.applyAllAiRecommendations()
   if (count > 0) {
@@ -691,7 +648,6 @@ function handleApplyAllAi() {
   }
 }
 
-// 编辑 AI 分析结果
 function handleEditAI(file) {
   editAIFile.value = file
   showEditAIModal.value = true
@@ -702,11 +658,9 @@ function closeEditAIModal() {
   editAIFile.value = null
 }
 
-// 保存 AI 分析结果修改
 async function handleSaveAIResult({ fileId, aiMetadata }) {
   savingAI.value = true
   try {
-    // 更新文件的 AI 元数据
     uploadStore.setFileAiMetadata(fileId, aiMetadata, true)
 
     ElMessage.success('AI 分析结果已更新')
@@ -719,6 +673,7 @@ async function handleSaveAIResult({ fileId, aiMetadata }) {
 }
 
 async function handleRetry() {
+  if (uploading.value || !authStore.canUpload || !requireAiConfiguration()) return
   try {
     const results = await uploadStore.retryFailed()
     if (!results) return
@@ -743,7 +698,6 @@ async function createCategory(form) {
     const { owner, repo, branch } = configStore.config
     let categoryPath = `wallpaper/${series.value}`
 
-    // 根据是否有父分类决定创建一级还是二级
     if (form.level === 'l2' && selectedL1.value) {
       categoryPath += `/${selectedL1.value}`
     }
@@ -783,7 +737,6 @@ async function handleDeleteCategory({ data }) {
   const { owner, repo, branch } = configStore.config
 
   try {
-    // 先检查目录内容
     let contents = []
     let hasImages = false
     let hasSubDirs = false
@@ -805,7 +758,6 @@ async function handleDeleteCategory({ data }) {
       }
     }
 
-    // 设置删除目标并打开弹窗
     deleteTarget.data = data
     deleteTarget.hasSubDirs = hasSubDirs
     deleteTarget.hasImages = hasImages
@@ -824,10 +776,8 @@ async function confirmDeleteCategory() {
 
   deleting.value = true
   try {
-    // 递归删除目录下所有文件
     await deleteDirectoryRecursive(owner, repo, data.path, branch)
 
-    // 关闭弹窗
     showDeleteModal.value = false
 
     clearCategoryCaches()
@@ -840,7 +790,6 @@ async function confirmDeleteCategory() {
     await loadRootCategories(true)
     treeKey.value++
 
-    // 如果删除的是当前选中的分类，清空选择
     if (uploadStore.targetPath.includes(data.path)) {
       uploadStore.setTarget(series.value, '', '')
       selectedL1.value = ''
@@ -861,12 +810,11 @@ async function deleteDirectoryRecursive(owner, repo, path, branch) {
 
   try {
     contents = await githubService.getContents(owner, repo, path, branch)
-    // 确保 contents 是数组
+
     if (!Array.isArray(contents)) {
       contents = [contents]
     }
   } catch (err) {
-    // 目录为空或不存在，无需删除
     if (err.status === 404 || err.type === 'NOT_FOUND') {
       return
     }
@@ -875,10 +823,8 @@ async function deleteDirectoryRecursive(owner, repo, path, branch) {
 
   for (const item of contents) {
     if (item.type === 'dir') {
-      // 递归删除子目录
       await deleteDirectoryRecursive(owner, repo, item.path, branch)
     } else {
-      // 删除文件（包括 .gitkeep）
       await githubService.deleteFile(
         owner,
         repo,
@@ -891,7 +837,6 @@ async function deleteDirectoryRecursive(owner, repo, path, branch) {
   }
 }
 
-// 原始刷新统计函数
 async function _refreshStats() {
   loadingStats.value = true
   try {
@@ -906,27 +851,23 @@ async function _refreshStats() {
     }
     stats.total = stats.desktop + stats.mobile + stats.avatar
   } catch {
-    // 忽略统计加载错误
+    return
   } finally {
     loadingStats.value = false
   }
 }
 
-// 防抖版本的刷新统计函数（2秒防抖）
 const refreshStats = debounce(_refreshStats, 2000)
 
 onMounted(async () => {
   try {
-    // 1. 检查权限（如果需要的话）
     if (authStore.isAuthenticated && !authStore.permissionChecked) {
       const { owner, repo } = configStore.config
       const cacheKey = `permission_${owner}_${repo}`
 
-      // 清除旧缓存
       sessionStorage.removeItem(cacheKey)
       console.log('[UploadView] 清除权限缓存，重新检查')
 
-      // 重新检查权限
       authStore.permissionChecked = false
       await authStore.checkPermission(owner, repo)
 
@@ -937,7 +878,6 @@ onMounted(async () => {
       })
     }
 
-    // 2. 加载数据（并行执行）
     await Promise.all([loadRootCategories(), refreshStats()])
 
     await syncSidebarAccordion(false)
@@ -949,17 +889,13 @@ onMounted(async () => {
   }
 })
 
-// 组件卸载时清理资源
 onUnmounted(() => {
   console.log('[UploadView] 组件卸载，清理资源')
 
-  // 清理工作流轮询和定时器
   workflowStore.cleanup()
 
-  // 清理上传store中的预览URL和Worker
   uploadStore.cleanup()
 
-  // 清理分类缓存
   clearCategoryCaches()
 
   window.removeEventListener('resize', handleSidebarResize)
@@ -980,439 +916,336 @@ watch(
 </script>
 
 <style scoped lang="scss">
-@use '@/styles/variables' as *;
-
 .upload-view__loading {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
   display: flex;
+  flex: 1;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-  z-index: 9999;
+  min-height: 240px;
+  background: var(--studio-bg, #111214);
 }
-
 .loading-spinner {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: $spacing-6;
+  gap: 16px;
 }
-
 .spinner {
-  width: 60px;
-  height: 60px;
-  border: 4px solid rgba(102, 126, 234, 0.2);
-  border-top-color: $primary-start;
+  width: 28px;
+  height: 28px;
+  border: 2px solid var(--studio-border, #30343b);
+  border-top-color: var(--studio-accent, #a8c7fa);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
-
 @keyframes spin {
   to {
     transform: rotate(360deg);
   }
 }
-
 .loading-text {
-  font-size: $font-size-xl;
-  color: $white;
-  font-weight: 500;
   margin: 0;
+  color: var(--studio-muted, #a1a6b0);
+  font-size: 14px;
 }
-
 .upload-view {
   display: flex;
   flex-direction: column;
+  flex: 1;
   height: 100%;
-  padding: $spacing-6;
-  gap: $spacing-5;
+  min-height: 0;
+  padding: 0;
+  gap: 24px;
   overflow: hidden;
-
-  &__readonly-alert {
-    flex-shrink: 0;
-    border-radius: $radius-lg;
-    background: rgba(230, 162, 60, 0.1);
-    border: 1px solid rgba(230, 162, 60, 0.3);
-
-    :deep(.el-alert__content) {
-      color: #e6a23c;
-    }
-  }
-
-  &__header {
-    display: flex;
-    align-items: flex-end;
-    justify-content: space-between;
-    gap: $spacing-4;
-    flex-shrink: 0;
-  }
-
-  &__title-area {
-    display: flex;
-    flex-direction: column;
-    gap: $spacing-2;
-    min-width: 0;
-  }
-
-  &__title-main {
-    display: flex;
-    align-items: center;
-    gap: $spacing-3;
-    flex-wrap: wrap;
-  }
-
-  &__title-badge {
-    display: inline-flex;
-    align-items: center;
-    width: fit-content;
-    padding: $spacing-1 $spacing-3;
-    background: rgba($primary-start, 0.12);
-    border: 1px solid rgba($primary-start, 0.22);
-    border-radius: $radius-full;
-    font-size: $font-size-xs;
-    color: $white;
-  }
-
-  &__title {
-    margin: 0;
-    font-size: 30px;
-    font-weight: 700;
-    background: $primary-gradient;
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-  }
-
-  &__subtitle {
-    margin: 0;
-    color: $gray-400;
-    font-size: $font-size-sm;
-    line-height: 1.5;
-  }
-
-  &__meta {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: flex-end;
-    gap: $spacing-2;
-    max-width: 520px;
-  }
-
-  &__meta-chip {
-    display: inline-flex;
-    align-items: center;
-    max-width: 100%;
-    padding: $spacing-2 $spacing-3;
-    background: rgba(255, 255, 255, 0.06);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: $radius-full;
-    color: $gray-300;
-    font-size: $font-size-sm;
-    line-height: 1.4;
-
-    &--highlight {
-      color: $white;
-      background: rgba($primary-start, 0.18);
-      border-color: rgba($primary-start, 0.3);
-    }
-  }
-
-  &__categories {
-    min-width: 0;
-  }
-
-  &__content {
-    flex: 1;
-    display: grid;
-    grid-template-columns: minmax(248px, 286px) minmax(0, 1.68fr) minmax(320px, 380px);
-    gap: $spacing-5;
-    min-height: 0;
-    overflow: hidden;
-
-    > * {
-      min-height: 0;
-      height: 100%;
-      overflow: hidden;
-    }
-  }
-
-  &__center,
-  &__preview,
-  &__workflow,
-  &__sidebar {
-    min-height: 0;
-    overflow: hidden;
-  }
-
-  &__sidebar {
-    display: flex;
-    flex-direction: column;
-    gap: $spacing-4;
-  }
-
-  &__accordion-panel {
-    overflow: hidden;
-    min-height: 0;
-  }
-
-  &__overview {
-    padding: $spacing-4;
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.045));
-    backdrop-filter: blur($glass-blur);
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: $radius-xl;
-    box-shadow: 0 14px 30px rgba(0, 0, 0, 0.14);
-    flex-shrink: 0;
-  }
-
-  &__overview-header {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: $spacing-3;
-    margin-bottom: $spacing-3;
-  }
-
-  &__overview-label {
-    margin: 0 0 $spacing-1;
-    font-size: 11px;
-    color: $gray-500;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-  }
-
-  &__overview-title {
-    margin: 0;
-    font-size: $font-size-base;
-    color: $white;
-  }
-
-  &__overview-actions {
-    display: flex;
-    gap: $spacing-2;
-  }
-
-  &__overview-btn {
-    min-height: 32px;
-    padding: 0 $spacing-3;
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.05));
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: $radius-full;
-    color: $gray-300;
-    font-size: $font-size-xs;
-    cursor: pointer;
-    transition: all $duration-normal;
-
-    &:hover {
-      background: linear-gradient(180deg, rgba(255, 255, 255, 0.11), rgba(255, 255, 255, 0.07));
-      border-color: rgba($primary-start, 0.3);
-      color: $white;
-      box-shadow: 0 10px 22px rgba(0, 0, 0, 0.12);
-    }
-  }
-
-  &__overview-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: $spacing-3;
-  }
-
-  &__overview-item {
-    display: flex;
-    align-items: center;
-    gap: $spacing-3;
-    padding: $spacing-3;
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.045));
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: $radius-lg;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
-
-    &-icon {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      width: 36px;
-      height: 36px;
-      background: rgba($primary-start, 0.12);
-      border: 1px solid rgba($primary-start, 0.16);
-      border-radius: 12px;
-      font-size: 16px;
-      flex-shrink: 0;
-    }
-
-    &-label {
-      display: block;
-      margin-bottom: 2px;
-      font-size: $font-size-xs;
-      color: $gray-500;
-    }
-
-    &-value {
-      display: block;
-      color: $white;
-      font-size: $font-size-base;
-      font-weight: 700;
-    }
-
-    &--api {
-      background: linear-gradient(180deg, rgba($primary-start, 0.12), rgba($primary-start, 0.06));
-      border-color: rgba($primary-start, 0.22);
-    }
-  }
-
-  &__quota {
-    margin-top: $spacing-3;
-    display: flex;
-    flex-direction: column;
-    gap: $spacing-2;
-  }
-
-  &__quota-bar {
-    height: 8px;
-    background: rgba(255, 255, 255, 0.07);
-    border-radius: $radius-full;
-    overflow: hidden;
-    border: 1px solid rgba(255, 255, 255, 0.06);
-  }
-
-  &__quota-fill {
-    height: 100%;
-    border-radius: inherit;
-    background: linear-gradient(90deg, #34d399 0%, $primary-start 100%);
-  }
-
-  &__quota-text {
-    font-size: $font-size-xs;
-    color: $gray-400;
-  }
-
-  &__preview {
-    min-height: 0;
-    height: 100%;
-  }
-
-  &__workflow {
-    min-height: 0;
-    height: 100%;
-  }
+  min-width: 0;
 }
-
-// 响应式
-@media (max-width: 1500px) {
+.upload-view__readonly-alert {
+  flex-shrink: 0;
+}
+.upload-view__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  flex-shrink: 0;
+}
+.upload-view__title-area {
+  min-width: 0;
+}
+.upload-view__title {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--studio-text, #f3f4f6);
+}
+.upload-view__subtitle {
+  margin: 8px 0 0;
+  color: var(--studio-muted, #a1a6b0);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.upload-view__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px 14px;
+  max-width: 560px;
+}
+.upload-view__meta-chip {
+  display: inline-flex;
+  max-width: 100%;
+  color: var(--studio-muted, #a1a6b0);
+  font-size: 12px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.upload-view__meta-chip + .upload-view__meta-chip {
+  padding-left: 14px;
+  border-left: 1px solid var(--studio-border, #30343b);
+}
+.upload-view__meta-chip--highlight {
+  color: var(--studio-text, #f3f4f6);
+}
+.upload-view__content {
+  display: grid;
+  grid-template-columns: minmax(210px, 240px) minmax(0, 1fr) minmax(260px, 310px);
+  gap: 18px;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+.upload-view__content > * {
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+.upload-view__center,
+.upload-view__preview,
+.upload-view__workflow,
+.upload-view__sidebar {
+  min-height: 0;
+  overflow: hidden;
+}
+.upload-view__center {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.upload-view__sidebar {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.upload-view__accordion-panel {
+  flex-shrink: 0;
+  overflow: hidden;
+  min-height: 0;
+}
+.upload-view__overview {
+  padding: 18px;
+  background: var(--studio-surface, #191b1e);
+  border: 1px solid var(--studio-border, #30343b);
+  border-radius: 16px;
+  flex-shrink: 0;
+}
+.upload-view__overview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.upload-view__overview-title {
+  margin: 0;
+  color: var(--studio-text, #f3f4f6);
+  font-size: 13px;
+  font-weight: 600;
+}
+.upload-view__overview-actions {
+  display: flex;
+  gap: 8px;
+}
+.upload-view__overview-btn {
+  padding: 4px 0 4px 8px;
+  border: 0;
+  background: transparent;
+  color: var(--studio-muted, #a1a6b0);
+  font-size: 11px;
+  cursor: pointer;
+}
+.upload-view__overview-btn:hover {
+  color: var(--studio-text, #f3f4f6);
+}
+.upload-view__overview-btn:focus-visible {
+  outline: 2px solid var(--studio-accent, #a8c7fa);
+  outline-offset: 3px;
+  border-radius: 3px;
+}
+.upload-view__overview-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px 10px;
+}
+.upload-view__overview-item-label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--studio-muted, #a1a6b0);
+  font-size: 11px;
+}
+.upload-view__overview-item-value {
+  display: block;
+  color: var(--studio-text, #f3f4f6);
+  font-size: 18px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.upload-view__overview-item--api {
+  grid-column: 1 / -1;
+  padding-top: 14px;
+  border-top: 1px solid var(--studio-border, #30343b);
+}
+.upload-view__overview-item--api > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.upload-view__overview-item--api .upload-view__overview-item-label {
+  margin-bottom: 0;
+}
+.upload-view__overview-item--api .upload-view__overview-item-value {
+  font-size: 12px;
+}
+.upload-view__quota {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+.upload-view__quota-bar {
+  height: 4px;
+  background: var(--studio-raised, #22252a);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.upload-view__quota-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--studio-accent, #a8c7fa);
+}
+.upload-view__quota-text {
+  color: var(--studio-muted, #a1a6b0);
+  font-size: 11px;
+}
+.upload-view__preview,
+.upload-view__workflow {
+  height: 100%;
+}
+@media (max-width: 1280px) {
   .upload-view__content {
-    grid-template-columns: minmax(236px, 272px) minmax(0, 1.62fr) minmax(300px, 350px);
+    grid-template-columns: minmax(200px, 220px) minmax(0, 1fr) minmax(240px, 270px);
+  }
+  .upload-view__header {
+    align-items: flex-start;
+  }
+  .upload-view__meta {
+    max-width: 420px;
   }
 }
-
-@media (max-width: 1400px) {
-  .upload-view {
-    padding: $spacing-5;
-
-    &__header {
-      align-items: flex-start;
-      flex-direction: column;
-    }
-
-    &__meta {
-      justify-content: flex-start;
-      max-width: none;
-    }
-
-    &__content {
-      grid-template-columns: minmax(232px, 264px) minmax(0, 1fr) minmax(300px, 340px);
-    }
+@media (max-width: 1100px) {
+  .upload-view__content {
+    grid-template-columns: minmax(200px, 240px) minmax(0, 1fr);
+    grid-template-rows: minmax(560px, 1fr) auto;
+    overflow-y: auto;
+    overflow-x: hidden;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+    align-content: start;
+  }
+  .upload-view__sidebar {
+    grid-column: 1 / -1;
+    overflow: visible;
+    height: auto;
+  }
+  .upload-view__overview-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+  .upload-view__overview-item--api {
+    grid-column: auto;
+    border: 0;
+    padding: 0;
+  }
+  .upload-view__overview-item--api > div {
+    display: block;
+  }
+  .upload-view__overview-item--api .upload-view__overview-item-label {
+    margin-bottom: 6px;
+  }
+  .upload-view__overview-item--api .upload-view__overview-item-value {
+    font-size: 18px;
   }
 }
-
-@media (max-width: 1180px) {
+@media (max-width: 760px) {
   .upload-view {
-    overflow: auto;
+    padding: 0;
+    gap: 20px;
+  }
+  .upload-view__header {
+    flex-direction: column;
+    gap: 14px;
+  }
+  .upload-view__meta {
+    justify-content: flex-start;
+  }
+  .upload-view__content {
+    grid-template-columns: 1fr;
+    grid-template-rows: 260px auto auto;
+  }
+  .upload-view__center {
+    height: auto;
+    overflow: visible;
+  }
+  .upload-view__center :deep(.upload-panel),
+  .upload-view__center :deep(.upload-panel__main),
+  .upload-view__center :deep(.upload-panel__files),
+  .upload-view__center :deep(.upload-file-grid) {
+    height: auto;
+    overflow: visible;
+  }
+  .upload-view__center :deep(.upload-panel__main) {
+    min-height: 360px;
+  }
+  .upload-view__center :deep(.upload-file-grid__grid) {
+    overflow: visible;
+    flex: none;
+  }
+  .upload-view__center :deep(.upload-file-grid__empty) {
+    min-height: 180px;
+  }
+  .upload-view__center :deep(.upload-panel__main) {
+    flex: none;
+  }
 
-    &__content {
-      grid-template-columns: minmax(228px, 264px) minmax(0, 1fr);
-      grid-template-rows: minmax(0, 1fr) auto;
-      overflow: visible;
-    }
-
-    &__sidebar {
-      grid-column: 1 / -1;
-      display: flex;
-      flex-direction: column;
-      overflow: visible;
-    }
-
-    &__overview,
-    &__preview,
-    &__workflow {
-      min-height: 0;
-    }
+  .upload-view__overview-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .upload-view__overview-item--api {
+    grid-column: 1 / -1;
+  }
+  .upload-view__overview-item--api > div {
+    display: flex;
+  }
+  .upload-view__overview-item--api .upload-view__overview-item-value {
+    font-size: 12px;
   }
 }
-
-@media (max-width: 900px) {
-  .upload-view {
-    padding: $spacing-4;
-    gap: $spacing-4;
-
-    &__content {
-      grid-template-columns: 1fr;
-      grid-template-rows: 260px minmax(520px, 1fr) auto;
-    }
-
-    &__title {
-      font-size: 28px;
-    }
-
-    &__sidebar {
-      display: flex;
-      flex-direction: column;
-    }
-
-    &__overview-grid {
-      grid-template-columns: 1fr 1fr;
-    }
-  }
-}
-
-@media (max-width: 640px) {
-  .upload-view {
-    &__title {
-      font-size: $font-size-2xl;
-    }
-
-    &__subtitle {
-      font-size: $font-size-xs;
-    }
-
-    &__meta {
-      gap: $spacing-2;
-    }
-
-    &__meta-chip {
-      width: 100%;
-      border-radius: $radius-lg;
-    }
-
-    &__overview-header {
-      flex-direction: column;
-      align-items: stretch;
-    }
-
-    &__overview-actions {
-      width: 100%;
-    }
-
-    &__overview-btn {
-      flex: 1;
-    }
-
-    &__overview-grid {
-      grid-template-columns: 1fr;
-    }
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation-duration: 2s;
   }
 }
 </style>

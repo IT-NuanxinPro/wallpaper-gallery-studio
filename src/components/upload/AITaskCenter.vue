@@ -54,7 +54,7 @@
         <button
           v-if="task.status === 'failed'"
           class="ai-task-center__retry"
-          :disabled="!credentialsStore.hasCredentials"
+          :disabled="retryingTaskIds.includes(task.id)"
           @click="handleRetry(task.id)"
         >
           重试
@@ -67,14 +67,15 @@
 </template>
 
 <script setup>
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useAiTasksStore } from '@/stores/ai-tasks'
-import { useCredentialsStore } from '@/stores/credentials'
+import { useAiConfigurationGuard } from '@/composables/useAiConfigurationGuard'
 import { resumeAiTaskQueue, retryAiTask } from '@/services/ai/task-runner'
 
 const taskStore = useAiTasksStore()
-const credentialsStore = useCredentialsStore()
+const { requireAiConfiguration } = useAiConfigurationGuard()
+const retryingTaskIds = ref([])
 
 const visibleTasks = computed(() =>
   [...taskStore.tasks]
@@ -107,11 +108,14 @@ function queuePosition(task) {
 }
 
 async function handleRetry(taskId) {
-  if (!credentialsStore.hasCredentials) return
+  if (retryingTaskIds.value.includes(taskId) || !requireAiConfiguration()) return
+  retryingTaskIds.value.push(taskId)
   try {
     await retryAiTask(taskId)
   } catch (error) {
     ElMessage.error(error.message || '任务重试失败')
+  } finally {
+    retryingTaskIds.value = retryingTaskIds.value.filter(id => id !== taskId)
   }
 }
 

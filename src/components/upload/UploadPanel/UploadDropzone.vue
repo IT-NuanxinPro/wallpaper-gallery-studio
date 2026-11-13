@@ -29,14 +29,28 @@
       @drop.prevent="handleDrop"
     >
       <div class="upload-dropzone__content">
-        <span class="upload-dropzone__icon">{{ icon }}</span>
+        <el-icon class="upload-dropzone__icon"
+          ><Lock v-if="!canUpload || disabled" /><Upload v-else
+        /></el-icon>
         <span class="upload-dropzone__text">{{ text }}</span>
-        <div v-if="canAddFiles && !uploading && canUpload" class="upload-dropzone__btns">
-          <button class="upload-dropzone__btn" @click="triggerInput">🖼️ 选择图片</button>
-          <button class="upload-dropzone__btn" @click="triggerFolderInput">📂 选择文件夹</button>
+        <div v-if="canUpload" class="upload-dropzone__btns">
+          <button
+            class="upload-dropzone__btn"
+            :disabled="uploading || disabled"
+            @click="triggerInput"
+          >
+            <el-icon><Picture /></el-icon>选择图片
+          </button>
+          <button
+            class="upload-dropzone__btn"
+            :disabled="uploading || disabled"
+            @click="triggerFolderInput"
+          >
+            <el-icon><FolderOpened /></el-icon>选择文件夹
+          </button>
         </div>
         <div v-else-if="!canUpload" class="upload-dropzone__no-permission">
-          🔒 需要协作者或管理员权限
+          需要协作者或管理员权限
         </div>
       </div>
     </div>
@@ -45,16 +59,16 @@
 
 <script setup>
 import { ref } from 'vue'
+import { Upload, Picture, FolderOpened, Lock } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
+import { useAiConfigurationGuard } from '@/composables/useAiConfigurationGuard'
+
+const { requireAiConfiguration } = useAiConfigurationGuard()
 
 const props = defineProps({
   disabled: { type: Boolean, default: false },
   compact: { type: Boolean, default: false },
   uploading: { type: Boolean, default: false },
-  canAddFiles: { type: Boolean, default: true },
-  uploadMode: { type: String, default: 'ai' },
-  aiConfig: { type: Object, default: null },
-  icon: { type: String, default: '📁' },
   text: { type: String, default: '拖拽图片或文件夹到此处' },
   canUpload: { type: Boolean, default: true }
 })
@@ -65,33 +79,17 @@ const fileInputRef = ref(null)
 const folderInputRef = ref(null)
 const isDragging = ref(false)
 
-function validateBatchLimit() {
-  // AI 模式现在使用持久化任务队列，允许一次选择多张图片。
-  return true
+function canSelectFiles() {
+  if (!props.canUpload || props.uploading || props.disabled) return false
+  return requireAiConfiguration()
 }
 
 function triggerInput() {
-  if (!props.canUpload) {
-    ElMessage.error('🔒 您没有上传权限')
-    return
-  }
-  if (!props.canAddFiles) {
-    ElMessage.warning('请先选择上传分类')
-    return
-  }
-  if (!props.uploading) fileInputRef.value?.click()
+  if (canSelectFiles()) fileInputRef.value?.click()
 }
 
 function triggerFolderInput() {
-  if (!props.canUpload) {
-    ElMessage.error('🔒 您没有上传权限')
-    return
-  }
-  if (!props.canAddFiles) {
-    ElMessage.warning('请先选择上传分类')
-    return
-  }
-  if (!props.uploading) folderInputRef.value?.click()
+  if (canSelectFiles()) folderInputRef.value?.click()
 }
 
 async function readEntriesRecursively(entry) {
@@ -114,7 +112,7 @@ async function readEntriesRecursively(entry) {
 
 function showSelectedMessage(count) {
   ElMessage({
-    message: `📂 已加入 ${count} 张图片，AI 将在任务中心逐张处理`,
+    message: `已加入 ${count} 张图片，AI 将在任务中心逐张处理`,
     type: 'success',
     duration: 3000
   })
@@ -123,15 +121,7 @@ function showSelectedMessage(count) {
 async function handleDrop(e) {
   isDragging.value = false
 
-  if (!props.canUpload) {
-    ElMessage.error('🔒 您没有上传权限')
-    return
-  }
-  if (!props.canAddFiles) {
-    ElMessage.warning('请先选择上传分类')
-    return
-  }
-  if (props.uploading) return
+  if (!canSelectFiles()) return
 
   const items = e.dataTransfer.items
   const allFiles = []
@@ -146,7 +136,7 @@ async function handleDrop(e) {
 
   if (entries.length > 0) {
     const loadingMsg = ElMessage({
-      message: '📂 正在读取文件夹...',
+      message: '正在读取文件夹...',
       type: 'info',
       duration: 0
     })
@@ -165,7 +155,6 @@ async function handleDrop(e) {
         return
       }
 
-      if (!validateBatchLimit(imageFiles)) return
       showSelectedMessage(imageFiles.length)
       emit('add-files', imageFiles)
     } catch (error) {
@@ -175,7 +164,7 @@ async function handleDrop(e) {
     }
   } else {
     const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'))
-    if (files.length > 0 && validateBatchLimit(files)) {
+    if (files.length > 0) {
       showSelectedMessage(files.length)
       emit('add-files', files)
     }
@@ -183,8 +172,12 @@ async function handleDrop(e) {
 }
 
 function handleFileSelect(e) {
+  if (!canSelectFiles()) {
+    e.target.value = ''
+    return
+  }
   const files = Array.from(e.target.files)
-  if (files.length > 0 && validateBatchLimit(files)) {
+  if (files.length > 0) {
     showSelectedMessage(files.length)
     emit('add-files', files)
   }
@@ -192,6 +185,10 @@ function handleFileSelect(e) {
 }
 
 function handleFolderSelect(e) {
+  if (!canSelectFiles()) {
+    e.target.value = ''
+    return
+  }
   const allFiles = Array.from(e.target.files)
   const files = allFiles.filter(f => f.type.startsWith('image/'))
 
@@ -201,7 +198,7 @@ function handleFolderSelect(e) {
     return
   }
 
-  if (validateBatchLimit(files)) {
+  if (files.length > 0) {
     showSelectedMessage(files.length)
     emit('add-files', files)
   }
@@ -210,88 +207,92 @@ function handleFolderSelect(e) {
 </script>
 
 <style scoped lang="scss">
-@use '@/styles/variables' as *;
-
-.upload-dropzone {
-  &__input {
-    display: none;
+.upload-dropzone__input {
+  display: none;
+}
+.upload-dropzone__area {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 160px;
+  padding: 24px 18px;
+  border: 1px dashed var(--studio-border);
+  border-radius: 14px;
+  background: transparent;
+  transition:
+    background-color 0.18s,
+    border-color 0.18s;
+}
+.upload-dropzone__area:hover:not(.upload-dropzone__area--disabled),
+.upload-dropzone__area--active {
+  border-color: var(--studio-accent);
+  background: var(--studio-raised);
+}
+.upload-dropzone__area--disabled {
+  opacity: 0.5;
+}
+.upload-dropzone__area--compact {
+  min-height: 86px;
+  padding: 14px;
+}
+.upload-dropzone__content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 14px;
+  width: 100%;
+}
+.upload-dropzone__icon {
+  font-size: 22px;
+  color: var(--studio-muted);
+  flex-shrink: 0;
+}
+.upload-dropzone__text {
+  color: var(--studio-muted);
+  font-size: 12px;
+  line-height: 1.7;
+  text-align: center;
+}
+.upload-dropzone__btns {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+.upload-dropzone__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 14px;
+  background: var(--studio-raised);
+  border: 1px solid var(--studio-border);
+  border-radius: 999px;
+  color: var(--studio-text);
+  font-size: 12px;
+  cursor: pointer;
+}
+.upload-dropzone__btn:hover {
+  border-color: var(--studio-accent);
+}
+.upload-dropzone__btn:focus-visible {
+  outline: 2px solid var(--studio-accent);
+  outline-offset: 3px;
+}
+.upload-dropzone__no-permission {
+  color: var(--studio-muted);
+  font-size: 12px;
+}
+@media (max-width: 640px) {
+  .upload-dropzone__content {
+    flex-direction: column;
   }
-
-  &__area {
-    padding: $spacing-6 $spacing-4;
-    border: 2px dashed rgba(255, 255, 255, 0.2);
-    border-radius: $radius-lg;
-    transition: all $duration-normal;
-    flex-shrink: 0;
-    min-height: 120px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-
-    &:hover:not(&--disabled) {
-      border-color: rgba($primary-start, 0.5);
-      background: rgba($primary-start, 0.05);
-    }
-
-    &--active {
-      border-color: $primary-start;
-      background: rgba($primary-start, 0.1);
-    }
-
-    &--disabled {
-      opacity: 0.5;
-    }
-
-    &--compact {
-      padding: $spacing-3 $spacing-4;
-      min-height: 80px;
-    }
-  }
-
-  &__content {
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    justify-content: center;
-    gap: $spacing-3;
-    flex-wrap: wrap;
-  }
-
-  &__icon {
-    font-size: 18px;
-  }
-
-  &__text {
-    color: $gray-300;
-    font-size: $font-size-sm;
-  }
-
-  &__btns {
-    display: flex;
-    gap: $spacing-2;
-  }
-
-  &__btn {
-    padding: $spacing-2 $spacing-4;
-    background: rgba(255, 255, 255, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    border-radius: $radius-md;
-    color: $gray-300;
-    font-size: $font-size-sm;
-    cursor: pointer;
-    transition: all $duration-normal;
-
-    &:hover {
-      background: rgba($primary-start, 0.15);
-      border-color: rgba($primary-start, 0.4);
-      color: $white;
-    }
-  }
-
-  &__no-permission {
-    color: rgba(255, 255, 255, 0.5);
-    font-size: $font-size-sm;
-    padding: $spacing-2 $spacing-4;
+}
+@media (prefers-reduced-motion: reduce) {
+  .upload-dropzone__area {
+    transition: none;
   }
 }
 </style>

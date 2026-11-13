@@ -34,7 +34,6 @@
       ]"
       @click="$emit('select', file)"
     >
-      <!-- 复选框 -->
       <el-checkbox
         v-if="showCheckbox"
         :model-value="isChecked"
@@ -43,10 +42,8 @@
         @update:model-value="$emit('toggle-check', file.id)"
       />
 
-      <!-- 图片预览 -->
       <img :src="file.preview" class="upload-file-item__img" draggable="false" />
 
-      <!-- AI 任务状态 -->
       <div
         v-if="aiTaskBadge"
         class="upload-file-item__ai-task"
@@ -57,12 +54,10 @@
         <span>{{ aiTaskBadge.text }}</span>
       </div>
 
-      <!-- 上传中遮罩 -->
       <div v-if="file.status === 'uploading'" class="upload-file-item__overlay">
         <el-progress type="circle" :percentage="file.progress" :width="36" :stroke-width="3" />
       </div>
 
-      <!-- 成功/失败徽章 -->
       <span
         v-else-if="file.status === 'success'"
         class="upload-file-item__badge upload-file-item__badge--success"
@@ -76,7 +71,6 @@
         !
       </span>
 
-      <!-- 删除按钮 -->
       <button
         v-if="file.status === 'pending' || file.status === 'error'"
         class="upload-file-item__remove"
@@ -85,9 +79,8 @@
         ×
       </button>
 
-      <!-- AI 编辑按钮 -->
       <button
-        v-if="file.status === 'pending' && file.aiMetadata && uploadMode === 'ai'"
+        v-if="file.status === 'pending' && file.aiMetadata"
         class="upload-file-item__edit-ai"
         title="编辑 AI 分析结果"
         @click.stop="$emit('edit-ai', file)"
@@ -95,27 +88,23 @@
         ✏️
       </button>
 
-      <!-- 目标路径标签 -->
       <div
         v-if="file.status === 'pending' && file.targetPath"
         class="upload-file-item__path"
         :class="[
           `upload-file-item__path--${file.targetSeries}`,
-          { 'upload-file-item__path--ai': file.aiMetadata && uploadMode === 'ai' }
+          { 'upload-file-item__path--ai': file.aiMetadata }
         ]"
         :title="file.targetPath"
         @click.stop="$emit('change-target', file)"
       >
         <span class="upload-file-item__path-icon">{{ seriesIcon }}</span>
         <span class="upload-file-item__path-text">{{ shortPath }}</span>
-        <span v-if="file.aiMetadata && uploadMode === 'ai'" class="upload-file-item__path-ai">
-          🤖
-        </span>
+        <span v-if="file.aiMetadata" class="upload-file-item__path-ai"> 🤖 </span>
       </div>
 
-      <!-- AI 模式下：等待分类的文件 -->
       <div
-        v-else-if="file.status === 'pending' && uploadMode === 'ai' && !file.targetPath"
+        v-else-if="file.status === 'pending' && !file.targetPath"
         class="upload-file-item__path upload-file-item__path--waiting"
         :title="file.aiMetadata ? 'AI 分析完成，点击确认分类' : '等待 AI 分析'"
         @click.stop="$emit('change-target', file)"
@@ -140,15 +129,13 @@ const props = defineProps({
   file: { type: Object, required: true },
   isSelected: { type: Boolean, default: false },
   isChecked: { type: Boolean, default: false },
-  uploading: { type: Boolean, default: false },
-  uploadMode: { type: String, default: 'ai' }
+  uploading: { type: Boolean, default: false }
 })
 
 defineEmits(['select', 'remove', 'change-target', 'toggle-check', 'edit-ai'])
 
 const aiTasksStore = useAiTasksStore()
 
-// 是否显示复选框
 const showCheckbox = computed(
   () => (props.file.status === 'pending' || props.file.status === 'error') && !props.uploading
 )
@@ -168,8 +155,6 @@ const queuePosition = computed(() => {
 })
 
 const aiTaskBadge = computed(() => {
-  if (props.uploadMode !== 'ai') return null
-
   const task = aiTask.value
   if (!task) return null
 
@@ -212,7 +197,6 @@ const aiTaskBadge = computed(() => {
   return null
 })
 
-// 获取系列图标
 const seriesIcon = computed(() => {
   const icons = {
     desktop: '🖥️',
@@ -222,14 +206,12 @@ const seriesIcon = computed(() => {
   return icons[props.file.targetSeries] || '📁'
 })
 
-// 获取简短路径
 const shortPath = computed(() => {
   if (!props.file.targetPath) return ''
   const parts = props.file.targetPath.split('/')
   return parts[parts.length - 1] || parts[parts.length - 2] || props.file.targetPath
 })
 
-// 获取 AI 推荐的文件名
 const aiFilename = computed(() => {
   if (!props.file.aiMetadata) return ''
 
@@ -251,7 +233,6 @@ const aiFilename = computed(() => {
   return ''
 })
 
-// 获取 AI 推荐的完整分类路径
 const aiCategory = computed(() => {
   if (!props.file.aiMetadata) return ''
 
@@ -268,7 +249,6 @@ const aiCategory = computed(() => {
   return parts.join('/') || '未分类'
 })
 
-// 获取 AI 提取的关键词
 const aiKeywords = computed(() => {
   if (!props.file.aiMetadata) return []
   const keywords = props.file.aiMetadata.keywords || props.file.aiMetadata.tags || []

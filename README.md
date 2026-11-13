@@ -41,7 +41,7 @@
 - **拖拽上传** - 支持拖拽文件和文件夹
 - **批量上传** - 支持多文件同时上传，超 50 张显示预计时间
 - **多目录上传** - 单次上传支持不同文件指定不同目标目录
-- **AI 模式 / 手动模式** - 可切换 AI 自动分类或手动选择分类
+- **统一 AI 流程** - 自动分析分类，审核结果和目录可在上传前校正
 - **重复检测** - 基于内容 Hash 检测重复上传（30 天 / 最多 500 条）
 - **大图压缩** - 超过 20MB 自动压缩，支持 8K 分辨率
 - **实时预览** - 上传前图片预览和信息展示
@@ -133,7 +133,6 @@ wallpaper-gallery-studio/
 │   ├── components/
 │   │   ├── ai/              # AI 相关组件
 │   │   │   ├── AIAssistantPanel.vue      # AI 工坊主面板
-│   │   │   ├── AIProviderSelector.vue    # 共用配置兼容入口
 │   │   │   ├── CredentialsConfig.vue     # 凭证配置
 │   │   │   ├── PromptTemplateSelector.vue
 │   │   │   └── ResultCard.vue            # 分析结果卡片
@@ -173,17 +172,15 @@ wallpaper-gallery-studio/
 │   │   │   │   │   └── index.js                # Provider 工厂
 │   │   │   │   ├── image-processor.js          # 图片压缩处理
 │   │   │   │   └── index.js
-│   │   │   ├── classifier/  # 分类服务（上传页面使用）
+│   │   │   ├── classifier/  # 分类服务与提示词（上传、视频和工坊共用）
 │   │   │   │   ├── service.js   # analyzeImage / analyzeBatch
 │   │   │   │   ├── prompts.js   # 分类决策树提示词（desktop/mobile/avatar）
-│   │   │   │   ├── config.js    # 模型列表 + CLASSIFIER_CONFIG + ASSISTANT_CONFIG
+│   │   │   │   ├── config.js    # 固定 GPT-6.1 Sol 配置
 │   │   │   │   └── index.js
-│   │   │   ├── assistant/   # AI 助手服务（AI 工坊页面使用）
-│   │   │   │   ├── service.js   # sendMessage / analyzeImage
-│   │   │   │   ├── prompts.js   # 对话式系统提示词
-│   │   │   │   ├── config.js    # 从 classifier/config 重新导出
-│   │   │   │   └── index.js
-│   │   │   └── index.js     # 统一导出
+│   │   │   ├── model.js          # 固定模型标识
+│   │   │   ├── session-credentials.js # 当前标签页凭据缓存
+│   │   │   ├── task-runner.js    # 图片分析队列与恢复
+│   │   │   └── task-storage.js   # AI 任务持久化
 │   │   ├── github.js        # GitHub API 封装
 │   │   └── localStorage.js  # 本地存储服务
 │   ├── stores/
@@ -204,8 +201,7 @@ wallpaper-gallery-studio/
 │   │   ├── hashWorker.js    # Web Worker 封装（文件 Hash）
 │   │   ├── image-detector.js # 图片类型自动检测
 │   │   ├── imageCompressor.js
-│   │   ├── previewManager.js # 预览 URL 生命周期管理
-│   │   └── rateLimiter.js   # API 速率限制器
+│   │   └── previewManager.js # 预览 URL 生命周期管理
 │   ├── views/
 │   │   ├── LoginView.vue
 │   │   ├── CallbackView.vue
@@ -238,7 +234,7 @@ VITE_VIDEO_API_URL=https://your-video-worker.workers.dev
 
 本地开发可将公开地址设置为 `/sub2api/v1`，通过 `SUB2API_PROXY_TARGET` 指定网关。Key仍在设置页输入。上线后执行 `pnpm check:client-secrets` 检查构建产物不包含已配置的旧AI密钥。
 
-模型配置统一在 `src/services/ai/model.js`；classifier与assistant只暴露GPT-6.1 Sol。旧GLM、Groq、Cloudflare AI、Grok入口已下架。
+模型标识统一在 `src/services/ai/model.js`。图片上传、视频分析和 AI 工坊共用 GPT-6.1 Sol；图片在完成分析后可修改分类与元数据，再确认上传。无 Key 时图片保留在分析队列中，填写当前标签页配置后继续。
 
 ### 分类决策树
 

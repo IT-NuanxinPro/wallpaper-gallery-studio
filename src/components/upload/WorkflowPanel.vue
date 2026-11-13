@@ -701,7 +701,7 @@ onUnmounted(() => {
     padding: $spacing-3;
     background: rgba($primary-start, 0.08);
     border: 1px solid rgba($primary-start, 0.2);
-    border-radius: $radius-lg;
+    border-radius: 12px;
 
     &-header {
       display: flex;
@@ -918,9 +918,10 @@ onUnmounted(() => {
     justify-content: center;
     gap: $spacing-2;
     padding: $spacing-3;
-    background: $primary-gradient;
+    background: var(--studio-accent);
+    color: #11151d;
     border: none;
-    border-radius: $radius-lg;
+    border-radius: 12px;
     color: $white;
     font-size: $font-size-sm;
     font-weight: 600;
@@ -929,7 +930,7 @@ onUnmounted(() => {
 
     &:hover:not(:disabled) {
       transform: translateY(-1px);
-      box-shadow: 0 4px 12px rgba($primary-start, 0.3);
+      box-shadow: none;
     }
 
     &--disabled,
@@ -940,7 +941,7 @@ onUnmounted(() => {
     }
 
     &--running {
-      background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+      background: var(--el-color-warning);
       cursor: not-allowed;
 
       &:hover {

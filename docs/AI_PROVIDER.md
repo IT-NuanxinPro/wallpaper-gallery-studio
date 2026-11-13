@@ -1,206 +1,43 @@
-# AI Provider 架构文档
+# AI 服务架构
 
-## 概述
+图片上传、视频分析和 AI 工坊统一使用 GPT-6.1 Sol。模型标识由 `src/services/ai/model.js` 定义：provider 为 `sub2api`，modelKey 为 `sub2api-gpt-6.1-sol`，请求 model 为 `gpt-6.1-sol`。Provider 工厂只开放这一项。
 
-AI 服务层采用 Provider 模式，支持多个 AI 服务商的统一接入。所有 Provider 实现相同的接口，上层业务代码无需关心具体使用哪个服务商。
+## 目录与职责
 
-## 目录结构
-
-```
+```text
 src/services/ai/
-├── core/                        # 核心层（共享）
-│   ├── providers/
-│   │   ├── base-provider.js     # Provider 基类，定义统一接口
-│   │   ├── zhipu-provider.js     # 智谱 GLM
-│   │   ├── groq-provider.js
-│   │   ├── cloudflare-provider.js
-│   │   └── index.js             # AIProviderFactory + AI_PROVIDERS + PROVIDER_DISPLAY
-│   ├── image-processor.js       # 图片压缩（compressImage）
+├── model.js                     # 固定模型标识
+├── session-credentials.js       # 当前标签页凭据缓存与地址校验
+├── task-runner.js               # 图片任务执行、重试和等待配置
+├── task-storage.js              # IndexedDB 任务记录，不保存凭据
+├── classifier/
+│   ├── service.js               # 图片分析与批量分析
+│   ├── prompts.js               # desktop/mobile/avatar 分类提示词
+│   ├── config.js                # 模型参数、默认提示词和图片参数
 │   └── index.js
-├── classifier/                  # 分类服务（上传页面）
-│   ├── service.js               # analyzeImage / analyzeBatch
-│   ├── prompts.js               # 分类决策树提示词
-│   ├── config.js                # 模型列表 + CLASSIFIER_CONFIG + ASSISTANT_CONFIG
-│   └── index.js
-├── assistant/                   # AI 助手服务（AI 工坊页面）
-│   ├── service.js               # sendMessage / analyzeImage
-│   ├── prompts.js               # 对话式系统提示词
-│   ├── config.js                # 从 classifier/config 重新导出（共享模型列表）
-│   └── index.js
-└── index.js                     # 统一导出
+└── core/
+    ├── image-processor.js       # 图片压缩
+    ├── providers/
+    │   ├── base-provider.js
+    │   ├── openai-compatible-provider.js
+    │   └── index.js             # 固定 Provider 工厂
+    └── index.js
 ```
 
-## 架构图
+## 调用路径
 
-```
-┌─────────────────────────────────────────────────┐
-│                   UI Layer                       │
-│   UploadPanel / AIAssistantPanel                 │
-└─────────────────────────────────────────────────┘
-                      │
-                      ▼
-┌─────────────────────────────────────────────────┐
-│                 Store Layer                      │
-│   stores/ai.js  /  stores/upload.js             │
-└─────────────────────────────────────────────────┘
-                      │
-                      ▼
-┌─────────────────────────────────────────────────┐
-│               Service Layer                      │
-│   classifier/service.js  assistant/service.js   │
-└─────────────────────────────────────────────────┘
-                      │
-                      ▼
-┌─────────────────────────────────────────────────┐
-│              Provider Layer                      │
-│          AIProviderFactory.create()              │
-│                      │                           │
-│   ┌──────────┬───────┴──────┬──────────────┐    │
-│   │  Zhipu   │     Groq     │  Cloudflare  │    │
-│   │Provider  │   Provider   │   Provider   │    │
-│   └──────────┴──────────────┴──────────────┘    │
-└─────────────────────────────────────────────────┘
-                      │
-                      ▼
-┌─────────────────────────────────────────────────┐
-│               Config Layer                       │
-│         classifier/config.js                     │
-│   CLASSIFIER_MODELS / CLASSIFIER_CONFIG          │
-│   ASSISTANT_CONFIG（共享，从此处导出）            │
-└─────────────────────────────────────────────────┘
-```
+- 图片上传：`stores/upload.js` → 上传文件生命周期服务 → `stores/ai-tasks.js` → `task-runner.js` → `classifier/service.js` → Provider。
+- 视频分析：`features/video-ingest/review-service.js` → `classifier/service.js` → Provider。
+- AI 工坊：`stores/ai.js` 使用 classifier 的提示词和模型配置，直接调用同一 Provider。
 
-## 当前支持的 Provider
+## 图片队列与结果审核
 
-| Provider   | 常量                      | 特点                                | CORS             |
-| ---------- | ------------------------- | ----------------------------------- | ---------------- |
-| 智谱 GLM   | `AI_PROVIDERS.ZHIPU`      | 免费层无限流，国内稳定，OpenAI 兼容 | 支持直连（CORS） |
-| Groq       | `AI_PROVIDERS.GROQ`       | 速度极快，但免费层限额 8000 TPM     | 支持直连         |
-| Cloudflare | `AI_PROVIDERS.CLOUDFLARE` | 需要 Worker 代理                    | 需要 Worker      |
+添加图片后统一计算内容哈希并复用已有 AI 元数据；没有结果的图片进入持久分析队列。未配置 Key 时任务保持等待，填写配置后继续，刷新可恢复。旧模型的待处理任务迁移到当前模型，已完成结果保留。
 
-## 模型配置
+新图片必须完成 AI 分析并具备目标分类才能上传。分析后的描述、文件名和分类仍可人工修正，修正结果用于上传元数据及后续缓存。上传服务不再根据文件名生成未分析的替代元数据。
 
-所有模型统一在 `src/services/ai/classifier/config.js` 的 `CLASSIFIER_MODELS` 中维护，`assistant/config.js` 直接从这里重新导出，两个服务共享同一份模型列表。
+## 会话与安全边界
 
-```js
-export const CLASSIFIER_MODELS = {
-  'zhipu-glm-4v-flash': {
-    id: 'glm-4v-flash',
-    name: 'GLM-4V Flash (免费)',
-    provider: AI_PROVIDERS.ZHIPU,
-    speed: 'fast',
-    accuracy: 'high',
-    cost: 'low',
-    maxTokens: 1024,
-    temperature: 0.7,
-    recommended: true
-  }
-  // ...
-}
-```
+`stores/credentials.js` 统一提供当前标签页的 Key、API 地址和取消信号。Key 只存当前页面内存及当前标签页的 `sessionStorage`，不读取构建密钥，也不写入任务、GitHub 或长期缓存。
 
-## 添加新 Provider
-
-### 1. 创建 Provider 类
-
-```js
-// src/services/ai/core/providers/my-provider.js
-import { BaseAIProvider } from './base-provider'
-
-export class MyProvider extends BaseAIProvider {
-  constructor(config = {}) {
-    super(config)
-    this.baseUrl = 'https://api.example.com/v1'
-  }
-
-  validateCredentials(credentials) {
-    return !!credentials?.apiKey
-  }
-
-  async analyze({ imageBase64, prompt, credentials }) {
-    const { apiKey, model } = credentials
-    const response = await fetch(`${this.baseUrl}/chat/completions`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model,
-        messages: [{ role: 'user', content: [{ type: 'text', text: prompt }] }]
-      })
-    })
-    const data = await response.json()
-    return this.parseResponse(data)
-  }
-
-  parseResponse(data) {
-    const text = data.choices?.[0]?.message?.content || ''
-    const json = JSON.parse(text.match(/\{[\s\S]*\}/)?.[0] || '{}')
-    return {
-      secondary: json.secondary || '通用',
-      third: json.third || '通用',
-      keywords: json.keywords || [],
-      filenameSuggestions: json.filenames || [],
-      description: json.description || '',
-      confidence: 0.9,
-      displayTitle: json.displayTitle || null,
-      is_perfect_match: json.is_perfect_match ?? null,
-      new_category_proposal: json.new_category_proposal || null,
-      reasoning: json.reasoning || null,
-      raw: data
-    }
-  }
-}
-```
-
-### 2. 注册到工厂
-
-在 `src/services/ai/core/providers/index.js` 中：
-
-```js
-import { MyProvider } from './my-provider'
-
-export const AI_PROVIDERS = {
-  // ...existing...
-  MY_PROVIDER: 'myprovider'
-}
-
-export const PROVIDER_DISPLAY = {
-  // ...existing...
-  myprovider: { name: 'My Provider', icon: '🆕', disabled: false }
-}
-
-// 在 AIProviderFactory.create() switch 中添加：
-case AI_PROVIDERS.MY_PROVIDER:
-  return new MyProvider(config)
-```
-
-### 3. 添加模型配置
-
-在 `src/services/ai/classifier/config.js` 的 `CLASSIFIER_MODELS` 中添加：
-
-```js
-'myprovider-model-v1': {
-  id: 'model-v1',
-  name: 'My Model V1',
-  provider: AI_PROVIDERS.MY_PROVIDER,
-  description: '描述',
-  speed: 'fast',
-  accuracy: 'high',
-  cost: 'low',
-  maxTokens: 2048,
-  temperature: 0.2,
-  recommended: false
-}
-```
-
-### 4. 添加凭证支持
-
-在 `src/stores/credentials.js` 中参照 `groqApiKey` 的方式添加凭证字段、`hasXxxEnvCredentials` computed、`xxxCredentials` computed，并在 `getCredentialsByProvider` 中添加对应分支。
-
-## 提示词说明
-
-两个服务的提示词职责不同，不共享：
-
-| 文件                    | 用途                                                                         |
-| ----------------------- | ---------------------------------------------------------------------------- |
-| `classifier/prompts.js` | 分类决策树，针对 desktop/mobile/avatar 三个系列各有专用提示词，输出严格 JSON |
-| `assistant/prompts.js`  | 对话式系统提示词，支持 default/creative/technical 三种角色风格               |
+Provider 优先使用当前会话地址，默认地址来自公开配置。清除或修改凭据会中止旧请求；队列不会写入旧会话结果，后续请求读取新配置。HTTP 和网络异常仅返回本地安全提示，响应只提取业务字段，并屏蔽嵌套字段名和值中的 Key 回显。

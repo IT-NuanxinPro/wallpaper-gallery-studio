@@ -1,21 +1,15 @@
 <template>
   <div class="upload-panel">
     <UploadHeader
-      :upload-mode="uploadMode"
       :current-series="currentSeries"
-      :target-path="targetPath"
-      :ai-config="aiConfig"
       :ai-analyzing="aiAnalyzing"
       :ai-analyzing-count="aiAnalyzingCount"
       :files-count="files.length"
       :error-count="errorCount"
       :uploading="uploading"
       :progress="progress"
-      :can-upload="authStore.canUpload"
-      :can-start-upload="canStartUpload"
+      :can-upload="canUpload"
       :metadata-status="metadataStatus"
-      :metadata-error="metadataError"
-      @mode-change="handleModeChange"
       @series-change="$emit('series-change', $event)"
       @retry-metadata="$emit('retry-metadata')"
       @retry="$emit('retry')"
@@ -25,33 +19,30 @@
 
     <div class="upload-panel__main">
       <UploadDropzone
-        :disabled="dropzoneDisabled"
+        :disabled="uploading"
         :compact="files.length > 0"
         :uploading="uploading"
-        :can-add-files="canAddFiles"
         :can-upload="props.canUpload"
-        :upload-mode="uploadMode"
-        :ai-config="aiConfig"
-        :icon="dropzoneIcon"
         :text="dropzoneText"
         @add-files="handleAddFiles"
       />
 
-      <AITaskCenter v-if="uploadMode === 'ai' && files.length > 0" />
+      <AITaskCenter v-if="files.length > 0" />
 
-      <UploadFileGrid
-        ref="fileGridRef"
-        :files="files"
-        :selected-id="selectedId"
-        :uploading="uploading"
-        :upload-mode="uploadMode"
-        @select="$emit('select', $event)"
-        @remove="$emit('remove', $event)"
-        @change-target="$emit('change-target', $event)"
-        @batch-delete="handleBatchDelete"
-        @apply-all-ai="$emit('apply-all-ai')"
-        @edit-ai="$emit('edit-ai', $event)"
-      />
+      <div class="upload-panel__files">
+        <UploadFileGrid
+          ref="fileGridRef"
+          :files="files"
+          :selected-id="selectedId"
+          :uploading="uploading"
+          @select="$emit('select', $event)"
+          @remove="$emit('remove', $event)"
+          @change-target="$emit('change-target', $event)"
+          @batch-delete="handleBatchDelete"
+          @apply-all-ai="$emit('apply-all-ai')"
+          @edit-ai="$emit('edit-ai', $event)"
+        />
+      </div>
     </div>
   </div>
 </template>
@@ -59,31 +50,24 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { ElMessageBox } from 'element-plus'
-import { useAuthStore } from '@/stores/auth'
 import { useCredentialsStore } from '@/stores/credentials'
 import UploadHeader from './UploadPanel/UploadHeader.vue'
 import UploadDropzone from './UploadPanel/UploadDropzone.vue'
 import UploadFileGrid from './UploadPanel/UploadFileGrid.vue'
 import AITaskCenter from './AITaskCenter.vue'
 
-const authStore = useAuthStore()
 const credentialsStore = useCredentialsStore()
 
 const props = defineProps({
-  targetPath: { type: String, default: '' },
   files: { type: Array, default: () => [] },
   selectedId: { type: String, default: null },
   uploading: { type: Boolean, default: false },
   progress: { type: Number, default: 0 },
-  pendingCount: { type: Number, default: 0 },
   errorCount: { type: Number, default: 0 },
-  uploadMode: { type: String, default: 'ai' },
   currentSeries: { type: String, default: 'desktop' },
-  aiConfig: { type: Object, default: null },
   aiAnalyzing: { type: Boolean, default: false },
   aiAnalyzingCount: { type: Number, default: 0 },
   metadataStatus: { type: String, default: 'idle' },
-  metadataError: { type: String, default: '' },
   canUpload: { type: Boolean, default: true }
 })
 
@@ -96,7 +80,6 @@ const emit = defineEmits([
   'upload',
   'select',
   'change-target',
-  'mode-change',
   'series-change',
   'retry-metadata',
   'apply-all-ai',
@@ -105,36 +88,11 @@ const emit = defineEmits([
 
 const fileGridRef = ref(null)
 
-const canAddFiles = computed(() => {
-  if (props.uploadMode === 'ai') return true
-  return !!props.targetPath
-})
-
-const dropzoneDisabled = computed(() => {
-  if (props.uploading) return true
-  if (props.uploadMode === 'ai') return false
-  return !props.targetPath
-})
-
-const dropzoneIcon = computed(() => {
-  if (props.uploadMode === 'ai') return '🤖'
-  return props.targetPath ? '📁' : '🔒'
-})
-
-const dropzoneText = computed(() => {
-  if (props.uploadMode === 'ai') {
-    return credentialsStore.hasCredentials
-      ? '拖拽多张图片到此处，AI 将进入任务队列逐张分析'
-      : '可先选择图片，填写 API Key 后开始分析；也可切换手动上传'
-  }
-  return props.targetPath ? '拖拽图片或文件夹到此处' : '请先选择分类'
-})
-
-const canStartUpload = computed(() => {
-  if (props.uploading) return false
-  if (props.pendingCount === 0) return false
-  return !props.files.some(f => f.status === 'pending' && !f.targetPath)
-})
+const dropzoneText = computed(() =>
+  credentialsStore.hasCredentials
+    ? '拖拽多张图片到此处，AI 将逐张分析并推荐分类'
+    : '先配置 API Key，再添加图片进行 AI 分析'
+)
 
 function preventDefaultDrag(e) {
   e.preventDefault()
@@ -155,10 +113,6 @@ function handleAddFiles(files) {
   emit('add-files', files)
 }
 
-function handleModeChange(mode) {
-  emit('mode-change', mode)
-}
-
 async function handleBatchDelete(ids) {
   try {
     await ElMessageBox.confirm(`确定要删除选中的 ${ids.length} 个文件吗？`, '确认删除', {
@@ -169,7 +123,7 @@ async function handleBatchDelete(ids) {
     emit('remove-batch', ids)
     fileGridRef.value?.clearSelection()
   } catch {
-    // 取消
+    return
   }
 }
 
@@ -183,7 +137,7 @@ async function handleClear() {
     emit('clear')
     fileGridRef.value?.clearSelection()
   } catch {
-    // 取消
+    return
   }
 }
 </script>
@@ -196,16 +150,27 @@ async function handleClear() {
   flex-direction: column;
   height: 100%;
   overflow: hidden;
-  min-height: 0;
+  min-height: 540px;
+
+  &__files {
+    display: flex;
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+  &__files > :deep(.studio-panel-leave-active) {
+    position: absolute;
+    inset: 0;
+  }
 
   &__main {
     flex: 1;
     display: flex;
     flex-direction: column;
-    background: $glass-bg;
-    backdrop-filter: blur($glass-blur);
-    border: 1px solid $glass-border;
-    border-radius: $radius-xl;
+    background: var(--studio-surface);
+    border: 1px solid var(--studio-border);
+    border-radius: 16px;
     padding: $spacing-4;
     overflow: hidden;
     min-height: 0;

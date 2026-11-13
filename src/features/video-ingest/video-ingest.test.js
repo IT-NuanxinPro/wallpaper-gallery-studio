@@ -72,12 +72,52 @@ describe('视频文件约束与流式散列', () => {
 })
 
 describe('可恢复视频上传', () => {
+  it('完成响应丢失后续传先读取远端，已排队任务按成功接管而不重传', async () => {
+    const file = sourceFile([1, 2, 3])
+    const sha256 = await hashVideoFile(file)
+    let remote = { id: 'lost-complete', size: file.size, sha256, status: 'uploading' }
+    const api = {
+      getJob: async () => remote,
+      createJob: async () => remote,
+      getUpload: async () => {
+        if (remote.status !== 'uploading') throw new Error('当前任务已不需要上传')
+        return { partSize: 4, parts: [] }
+      },
+      getPartUrls: async () => ({ parts: [{ partNumber: 1, url: 'part' }] }),
+      completeUpload: async () => {
+        remote = { ...remote, status: 'queued' }
+        throw new Error('完成响应丢失')
+      }
+    }
+    const uploader = createVideoUploader({ api, putPart: async () => 'etag' })
+    await expect(uploader.upload(file)).rejects.toThrow('完成响应丢失')
+    await expect(
+      uploader.upload(file, { job: { ...remote, status: 'uploading' } })
+    ).resolves.toMatchObject({ id: 'lost-complete', status: 'queued' })
+  })
+
+  it.each(['failed', 'expired'])('续传远端已为%s时不误报上传成功', async status => {
+    const file = sourceFile([1, 2, 3])
+    const sha256 = await hashVideoFile(file)
+    const uploader = createVideoUploader({
+      api: {
+        getJob: async () => ({ id: 'terminal', size: file.size, sha256, status })
+      }
+    })
+    await expect(
+      uploader.upload(file, {
+        job: { id: 'terminal', size: file.size, sha256, status: 'uploading' }
+      })
+    ).rejects.toThrow(status === 'expired' ? '过期' : '云端处理失败')
+  })
+
   it('复用服务端已完成分块，只上传缺失分块后按序完成', async () => {
     const file = sourceFile([1, 2, 3, 4, 5, 6, 7, 8, 9])
     const sha256 = await hashVideoFile(file)
     const uploaded = []
     let completed
     const api = {
+      getJob: async () => ({ id: 'resume', size: 9, sha256, status: 'uploading' }),
       getUpload: async () => ({ partSize: 4, parts: [{ partNumber: 1, etag: 'saved', size: 4 }] }),
       getPartUrls: async (_id, numbers) => ({
         parts: numbers.map(partNumber => ({ partNumber, url: `part/${partNumber}` }))

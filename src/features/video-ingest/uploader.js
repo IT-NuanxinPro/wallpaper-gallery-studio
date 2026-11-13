@@ -16,7 +16,6 @@ function createLimiter(limit) {
   }
 }
 
-// 签名对象请求不能携带 GitHub token；对象存储必须通过 CORS 暴露 ETag。
 export function putVideoPart(url, blob, { signal, onProgress } = {}) {
   return new Promise((resolve, reject) => {
     if (signal?.aborted) return reject(abortError())
@@ -70,6 +69,11 @@ export function createVideoUploader({ api, putPart = putVideoPart, hashFile = ha
         if (job && (job.size !== file.size || job.sha256 !== sha256)) {
           throw new Error('重选的文件内容与原任务不一致，请选择原始视频')
         }
+        if (job) {
+          job = await api.getJob(job.id)
+          if (job.size !== file.size || job.sha256 !== sha256)
+            throw new Error('远端任务的文件内容与源视频不一致，请刷新任务')
+        }
         if (!job) {
           job = await api.createJob(
             {
@@ -83,7 +87,20 @@ export function createVideoUploader({ api, putPart = putVideoPart, hashFile = ha
           )
         }
         onJob?.(job)
-        if (job.status !== 'uploading') return job
+        if (
+          [
+            'queued',
+            'processing',
+            'awaiting_ai',
+            'awaiting_review',
+            'publishing',
+            'published'
+          ].includes(job.status)
+        )
+          return job
+        if (job.status === 'expired') throw new Error('上传任务已过期，请重新添加源视频')
+        if (job.status === 'failed') throw new Error('云端处理失败，请从任务列表重试处理或发布')
+        if (job.status !== 'uploading') throw new Error('当前任务状态不支持续传，请刷新任务')
         const uploadState = await api.getUpload(job.id, signal)
         if (!Number.isInteger(uploadState.partSize) || uploadState.partSize <= 0)
           throw new Error('服务端返回了无效分块大小')
@@ -124,7 +141,7 @@ export function createVideoUploader({ api, putPart = putVideoPart, hashFile = ha
               for (let attempt = 0; attempt < 3; attempt++) {
                 try {
                   if (signal.aborted) throw abortError()
-                  // 每次重试重新领取短期 URL，避免重用过期签名。
+
                   const signed = await api.getPartUrls(job.id, [partNumber], signal)
                   const url = signed.parts?.find(part => part.partNumber === partNumber)?.url
                   if (!url) throw new Error('未取得分块上传地址')

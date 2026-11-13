@@ -27,6 +27,11 @@ export function createUploadSessionService({
 }) {
   return {
     async uploadFile(uploadFile, { targetPath, series, computeFileHash }) {
+      if (!uploadFile.aiMetadata || uploadFile.aiMetadata.error) {
+        uploadFile.error = '请先完成 AI 分析并确认分类'
+        return { success: false, errorType: 'AI_REQUIRED', error: uploadFile.error }
+      }
+
       if (!targetPath) {
         uploadFile.status = 'error'
         uploadFile.error = '未设置上传目录'
@@ -135,11 +140,11 @@ export function createUploadSessionService({
       return { results, uploadedFiles, permissionError }
     },
 
-    async generatePendingMetadata(
-      uploadedFiles,
-      { targetPath, series, getExtension, extractKeywordsFromFilename }
-    ) {
+    async generatePendingMetadata(uploadedFiles, { targetPath, series, getExtension }) {
       if (!uploadedFiles?.length) return null
+      if (uploadedFiles.some(file => !file.aiMetadata || file.aiMetadata.error)) {
+        return { success: false, error: '图片缺少 AI 分析结果，请完成分析后重试' }
+      }
 
       const {
         owner,
@@ -167,15 +172,7 @@ export function createUploadSessionService({
             createdAt: new Date(now()).toISOString(),
             size: file.size,
             format: getExtension(file.name),
-            ai: file.aiMetadata || {
-              keywords: extractKeywordsFromFilename(file.name),
-              description: '',
-              displayTitle: '',
-              filename: '',
-              confidence: 0,
-              model: 'none',
-              analyzedAt: null
-            }
+            ai: file.aiMetadata
           }
         })
       }

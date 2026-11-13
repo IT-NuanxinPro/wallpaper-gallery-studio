@@ -5,7 +5,10 @@ import ElementPlus from 'element-plus'
 import AIAssistantPanel from './AIAssistantPanel.vue'
 import UploadHeader from '../upload/UploadPanel/UploadHeader.vue'
 
-const state = vi.hoisted(() => ({ credentials: null, ai: null }))
+const state = vi.hoisted(() => ({ credentials: null, ai: null, requireAiConfiguration: vi.fn() }))
+vi.mock('@/composables/useAiConfigurationGuard', () => ({
+  useAiConfigurationGuard: () => ({ requireAiConfiguration: state.requireAiConfiguration })
+}))
 vi.mock('@/stores/credentials', () => ({ useCredentialsStore: () => state.credentials }))
 vi.mock('@/stores/ai', () => ({ useAIStore: () => state.ai }))
 vi.mock('./PromptTemplateSelector.vue', () => ({ default: { template: '<div />' } }))
@@ -20,6 +23,9 @@ vi.mock('gsap', () => ({
 
 beforeEach(() => {
   state.credentials = reactive({ hasCredentials: false, loadCredentials: vi.fn() })
+  state.requireAiConfiguration
+    .mockReset()
+    .mockImplementation(() => state.credentials.hasCredentials)
   state.ai = reactive({
     currentProvider: 'sub2api',
     currentModel: 'sub2api-gpt-6.1-sol',
@@ -39,37 +45,50 @@ const global = {
 }
 
 describe('三个入口共用单一模型配置', () => {
-  it('图片上传只显示固定模型，没有下拉；缺少 Key 时禁用 AI 入口，保留人工上传', async () => {
+  it('图片上传只有AI链路，缺少Key点击上传会提示而不发出上传事件', async () => {
     const panel = mount(UploadHeader, { global })
     expect(panel.text()).toContain('GPT-6.1 Sol')
-    expect(panel.find('.upload-header__ai-dropdown').exists()).toBe(false)
-    expect(panel.findComponent({ name: 'ElPopover' }).exists()).toBe(false)
+    expect(panel.text()).not.toContain('手动上传')
+    expect(panel.find('.upload-header__mode-switch').exists()).toBe(false)
     expect(panel.getComponent(RouterLinkStub).props('to')).toBe('/settings#ai-config')
-    const modeButtons = panel.findAll('.upload-header__mode-btn')
-    expect(modeButtons[0].attributes('disabled')).toBeDefined()
-    expect(modeButtons[1].attributes('disabled')).toBeUndefined()
+    expect(panel.get('.upload-header__btn-upload').attributes('disabled')).toBeUndefined()
+    await panel.get('.upload-header__btn-upload').trigger('click')
+    expect(state.requireAiConfiguration).toHaveBeenCalledOnce()
+    expect(panel.emitted('upload')).toBeUndefined()
     state.credentials.hasCredentials = true
-    await flushPromises()
-    expect(modeButtons[0].attributes('disabled')).toBeUndefined()
+    await panel.get('.upload-header__btn-upload').trigger('click')
+    expect(panel.emitted('upload')).toHaveLength(1)
     panel.unmount()
   })
 
-  it('AI 工坊只显示固定模型，配置保存与清除立即影响分析按钮', async () => {
+  it('空列表缺少Key也可点击上传获得配置提示，忙碌时仍不可重复触发', async () => {
+    const panel = mount(UploadHeader, { global })
+    await panel.get('.upload-header__btn-upload').trigger('click')
+    expect(state.requireAiConfiguration).toHaveBeenCalledOnce()
+    await panel.setProps({ uploading: true })
+    expect(panel.get('.upload-header__btn-upload').attributes('disabled')).toBeDefined()
+    panel.unmount()
+  })
+
+  it('工坊选图与分析即时检查Key，配置被清除后点击分析会提示且不会发请求', async () => {
     const panel = mount(AIAssistantPanel, { global })
     await flushPromises()
     expect(panel.text()).toContain('GPT-6.1 Sol')
-    expect(panel.find('.provider-group').exists()).toBe(false)
-    expect(panel.find('.model-group').exists()).toBe(false)
-    expect(panel.getComponent(RouterLinkStub).props('to')).toBe('/settings#ai-config')
+    await panel.get('.upload-area').trigger('click')
+    expect(state.requireAiConfiguration).toHaveBeenCalledOnce()
+    expect(panel.find('.analyze-btn').exists()).toBe(false)
+    state.credentials.hasCredentials = true
     panel.getComponent({ name: 'ElUpload' }).props('onChange')({}, [{ name: 'test.png' }])
     await flushPromises()
-    expect(panel.get('.analyze-btn').attributes('disabled')).toBeDefined()
-    state.credentials.hasCredentials = true
-    await flushPromises()
-    expect(panel.get('.analyze-btn').attributes('disabled')).toBeUndefined()
     state.credentials.hasCredentials = false
     await flushPromises()
-    expect(panel.get('.analyze-btn').attributes('disabled')).toBeDefined()
+    expect(panel.get('.analyze-btn').attributes('disabled')).toBeUndefined()
+    await panel.get('.analyze-btn').trigger('click')
+    expect(state.ai.analyzeImage).not.toHaveBeenCalled()
+    expect(state.requireAiConfiguration).toHaveBeenCalledTimes(3)
+    state.credentials.hasCredentials = true
+    await panel.get('.analyze-btn').trigger('click')
+    expect(state.ai.analyzeImage).toHaveBeenCalledOnce()
     panel.unmount()
   })
 })

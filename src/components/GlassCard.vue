@@ -29,48 +29,21 @@ const cardStyle = computed(() => ({
 </script>
 
 <style scoped lang="scss">
-@use '@/styles/variables' as *;
-
 .glass-card {
-  background: $glass-bg;
-  backdrop-filter: blur(var(--glass-blur, 20px));
-  -webkit-backdrop-filter: blur(var(--glass-blur, 20px));
-  border-radius: $radius-xl;
-  border: 1px solid $glass-border;
-  box-shadow: $glass-shadow;
-  transition:
-    transform $duration-normal $ease-out,
-    box-shadow $duration-normal $ease-out;
-
-  // 渐变边框效果
   position: relative;
-
-  &::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    border-radius: inherit;
-    padding: 1px;
-    background: linear-gradient(
-      135deg,
-      rgba(255, 255, 255, 0.3) 0%,
-      rgba(255, 255, 255, 0.1) 50%,
-      rgba(255, 255, 255, 0.05) 100%
-    );
-    -webkit-mask:
-      linear-gradient(#fff 0 0) content-box,
-      linear-gradient(#fff 0 0);
-    mask:
-      linear-gradient(#fff 0 0) content-box,
-      linear-gradient(#fff 0 0);
-    -webkit-mask-composite: xor;
-    mask-composite: exclude;
-    pointer-events: none;
-  }
-
+  background: var(--studio-surface, #191b1e);
+  border: 1px solid var(--studio-border-subtle, #282b30);
+  border-radius: 20px;
+  box-shadow: none;
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease;
   &--hoverable:hover {
-    transform: translateY(-4px) scale(1.01);
-    box-shadow: $shadow-xl, $shadow-glow;
+    border-color: var(--studio-border, #30343b);
+    background: var(--studio-raised, #22252a);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    transition: none;
   }
 }
 </style>

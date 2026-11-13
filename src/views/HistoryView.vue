@@ -25,56 +25,81 @@
           </el-button>
         </div>
 
-        <!-- 空状态 -->
-        <div v-if="historyStore.records.length === 0" class="history-view__empty">
-          <el-empty description="暂无上传记录" />
-        </div>
-
-        <!-- 历史列表 -->
-        <div v-else class="history-view__list">
-          <div v-for="(records, date) in groupedRecords" :key="date" class="history-view__group">
-            <div class="history-view__date-header" @click="toggleDate(date)">
-              <el-icon
-                class="history-view__date-arrow"
-                :class="{ 'is-expanded': expandedDates[date] }"
-              >
-                <ArrowRight />
-              </el-icon>
-              <span class="history-view__date">{{ date }}</span>
-              <span class="history-view__date-count">{{ records.length }} 条</span>
+        <div class="history-view__body">
+          <Transition name="studio-panel">
+            <div v-if="historyStore.records.length === 0" key="empty" class="history-view__empty">
+              <el-empty description="暂无上传记录" />
             </div>
-            <el-collapse-transition>
-              <div v-show="expandedDates[date]" class="history-view__items">
-                <div
-                  v-for="record in records"
-                  :key="record.id"
-                  class="history-view__item"
-                  :class="`history-view__item--${record.status}`"
-                  @click="showPreview(record)"
+
+            <TransitionGroup
+              v-else
+              key="records"
+              name="studio-list"
+              tag="div"
+              class="history-view__list"
+              data-scroll-region
+            >
+              <div
+                v-for="(records, date) in groupedRecords"
+                :key="date"
+                class="history-view__group"
+              >
+                <button
+                  type="button"
+                  class="history-view__date-header"
+                  :aria-expanded="!!expandedDates[date]"
+                  @click="toggleDate(date)"
                 >
-                  <div class="history-view__item-icon">
-                    <el-icon v-if="record.status === 'success'" class="history-view__icon--success">
-                      <CircleCheck />
-                    </el-icon>
-                    <el-icon v-else class="history-view__icon--error">
-                      <CircleClose />
-                    </el-icon>
-                  </div>
-                  <div class="history-view__item-info">
-                    <span class="history-view__item-name">{{ record.filename }}</span>
-                    <span class="history-view__item-category">{{ record.category }}</span>
-                  </div>
-                  <div class="history-view__item-time">
-                    {{ formatTime(record.timestamp) }}
-                  </div>
-                </div>
+                  <el-icon
+                    class="history-view__date-arrow"
+                    :class="{ 'is-expanded': expandedDates[date] }"
+                  >
+                    <ArrowRight />
+                  </el-icon>
+                  <span class="history-view__date">{{ date }}</span>
+                  <span class="history-view__date-count">{{ records.length }} 条</span>
+                </button>
+                <el-collapse-transition>
+                  <TransitionGroup
+                    v-show="expandedDates[date]"
+                    name="studio-list"
+                    tag="div"
+                    class="history-view__items"
+                  >
+                    <div
+                      v-for="record in records"
+                      :key="record.id"
+                      class="history-view__item"
+                      :class="`history-view__item--${record.status}`"
+                      @click="showPreview(record)"
+                    >
+                      <div class="history-view__item-icon">
+                        <el-icon
+                          v-if="record.status === 'success'"
+                          class="history-view__icon--success"
+                        >
+                          <CircleCheck />
+                        </el-icon>
+                        <el-icon v-else class="history-view__icon--error">
+                          <CircleClose />
+                        </el-icon>
+                      </div>
+                      <div class="history-view__item-info">
+                        <span class="history-view__item-name">{{ record.filename }}</span>
+                        <span class="history-view__item-category">{{ record.category }}</span>
+                      </div>
+                      <div class="history-view__item-time">
+                        {{ formatTime(record.timestamp) }}
+                      </div>
+                    </div>
+                  </TransitionGroup>
+                </el-collapse-transition>
               </div>
-            </el-collapse-transition>
-          </div>
+            </TransitionGroup>
+          </Transition>
         </div>
       </GlassCard>
 
-      <!-- 预览弹窗 -->
       <el-dialog
         v-model="previewVisible"
         :title="previewRecord?.filename"
@@ -95,29 +120,24 @@
 </template>
 
 <script setup>
-import { ref, computed, reactive, onMounted, watch } from 'vue'
+import { ref, computed, reactive, watch } from 'vue'
 import { CircleCheck, CircleClose, ArrowRight } from '@element-plus/icons-vue'
 import { ElMessageBox, ElMessage, ElCollapseTransition } from 'element-plus'
 import MainLayout from '@/components/MainLayout.vue'
 import GlassCard from '@/components/GlassCard.vue'
 import { useHistoryStore } from '@/stores/history'
-import { useAnimation } from '@/composables/useAnimation'
 
 const historyStore = useHistoryStore()
-const { fadeInUp } = useAnimation()
 
 const viewRef = ref(null)
 const previewVisible = ref(false)
 const previewRecord = ref(null)
 const initialized = ref(false)
 
-// 展开状态
 const expandedDates = reactive({})
 
-// 按日期分组
 const groupedRecords = computed(() => historyStore.getRecordsByDate())
 
-// 初始化展开状态（默认展开第一个日期）
 watch(
   groupedRecords,
   records => {
@@ -130,18 +150,15 @@ watch(
   { immediate: true }
 )
 
-// 切换日期展开/折叠
 function toggleDate(date) {
   expandedDates[date] = !expandedDates[date]
 }
 
-// 显示预览
 function showPreview(record) {
   previewRecord.value = record
   previewVisible.value = true
 }
 
-// 清空历史
 async function handleClearHistory() {
   try {
     await ElMessageBox.confirm('确定要清空所有上传历史吗？此操作不可恢复。', '清空确认', {
@@ -153,11 +170,10 @@ async function handleClearHistory() {
     historyStore.clearHistory()
     ElMessage.success('历史记录已清空')
   } catch {
-    // 取消
+    return
   }
 }
 
-// 格式化时间
 function formatTime(timestamp) {
   const date = new Date(timestamp)
   return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
@@ -166,23 +182,22 @@ function formatTime(timestamp) {
 function formatDateTime(timestamp) {
   return new Date(timestamp).toLocaleString('zh-CN')
 }
-
-onMounted(() => {
-  if (viewRef.value) {
-    fadeInUp(viewRef.value, { duration: 0.5 })
-  }
-})
 </script>
 
 <style scoped lang="scss">
 @use '@/styles/variables' as *;
 
 .history-view {
+  display: flex;
+  flex: 1;
+  min-height: 0;
   height: 100%;
-  padding: $spacing-6;
+  padding: 0;
   overflow: hidden;
 
   &__card {
+    flex: 1;
+    min-height: 0;
     height: 100%;
     display: flex;
     flex-direction: column;
@@ -190,6 +205,7 @@ onMounted(() => {
   }
 
   &__header {
+    flex-wrap: wrap;
     display: flex;
     align-items: center;
     gap: $spacing-4;
@@ -227,11 +243,27 @@ onMounted(() => {
     }
   }
 
+  &__body {
+    position: relative;
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+  &__body > .studio-panel-leave-active {
+    position: absolute;
+    inset: 0;
+  }
   &__empty {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
     padding: $spacing-8;
   }
 
   &__list {
+    position: relative;
+    min-height: 0;
     flex: 1;
     overflow-y: auto;
     padding-right: $spacing-2;
@@ -255,6 +287,9 @@ onMounted(() => {
   }
 
   &__date-header {
+    width: 100%;
+    border: 0;
+    text-align: left;
     display: flex;
     align-items: center;
     gap: $spacing-2;
@@ -293,6 +328,7 @@ onMounted(() => {
   }
 
   &__items {
+    position: relative;
     display: flex;
     flex-direction: column;
     gap: $spacing-2;
@@ -366,14 +402,48 @@ onMounted(() => {
   &__preview {
     p {
       margin-bottom: $spacing-2;
-      color: $gray-700;
+      color: var(--studio-muted);
     }
   }
 
-  // 预览弹窗响应式
   :deep(.history-view__preview-dialog) {
     width: 90%;
     max-width: 600px;
+  }
+}
+
+.history-view__items > .studio-list-enter-active,
+.history-view__items > .studio-list-leave-active,
+.history-view__items > .studio-list-move {
+  transition:
+    opacity 220ms var(--studio-ease-out),
+    transform 240ms var(--studio-ease-out),
+    background-color 140ms ease;
+}
+.history-view__date-header:focus-visible {
+  outline: 2px solid var(--studio-accent);
+  outline-offset: 2px;
+}
+@media (max-width: 600px) {
+  .history-view__header {
+    gap: 12px;
+  }
+  .history-view__title {
+    flex-basis: 100%;
+    font-size: 20px;
+  }
+  .history-view__stats {
+    flex: 1;
+    gap: 12px;
+  }
+  .history-view__stat {
+    font-size: 12px;
+  }
+  .history-view__items {
+    padding-left: 4px;
+  }
+  .history-view__empty {
+    padding: 16px;
   }
 }
 </style>

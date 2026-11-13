@@ -7,7 +7,7 @@
         :style="{ zIndex }"
         @click.self="handleCancel"
       >
-        <div ref="dialogRef" class="confirm-dialog">
+        <div class="confirm-dialog">
           <div class="confirm-dialog__header">
             <el-icon
               class="confirm-dialog__icon"
@@ -22,7 +22,6 @@
           <div class="confirm-dialog__content">
             <p>{{ message }}</p>
 
-            <!-- 危险操作需要输入确认 -->
             <div v-if="requireInput" class="confirm-dialog__input">
               <p class="confirm-dialog__input-hint">
                 请输入 <strong>{{ confirmText }}</strong> 以确认操作
@@ -51,7 +50,6 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
 import { Warning, CircleCheck, CircleClose, InfoFilled } from '@element-plus/icons-vue'
-import { gsap } from 'gsap'
 import { useModalZIndex } from '@/composables/useModalZIndex'
 
 const props = defineProps({
@@ -69,7 +67,7 @@ const props = defineProps({
   },
   type: {
     type: String,
-    default: 'warning', // warning | danger | success | info
+    default: 'warning',
     validator: v => ['warning', 'danger', 'success', 'info'].includes(v)
   },
   confirmButtonText: {
@@ -97,7 +95,6 @@ const props = defineProps({
 const emit = defineEmits(['confirm', 'cancel', 'update:visible'])
 const zIndex = useModalZIndex(() => props.visible)
 
-const dialogRef = ref(null)
 const inputValue = ref('')
 
 const iconComponent = computed(() => {
@@ -119,21 +116,11 @@ function handleCancel() {
   emit('update:visible', false)
 }
 
-// 入场动画
 watch(
   () => props.visible,
   val => {
     if (val) {
       inputValue.value = ''
-      setTimeout(() => {
-        if (dialogRef.value) {
-          gsap.fromTo(
-            dialogRef.value,
-            { opacity: 0, scale: 0.9, y: -20 },
-            { opacity: 1, scale: 1, y: 0, duration: 0.3, ease: 'power2.out' }
-          )
-        }
-      }, 0)
     }
   }
 )
@@ -160,6 +147,9 @@ watch(
   padding: $spacing-6;
   width: 100%;
   max-width: 400px;
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   box-shadow: $shadow-xl;
 
   &__header {
@@ -226,14 +216,22 @@ watch(
   }
 }
 
-// 过渡动画
 .dialog-enter-active,
 .dialog-leave-active {
-  transition: opacity 0.3s ease;
+  transition: opacity 180ms ease;
+  .confirm-dialog {
+    transition:
+      transform 240ms var(--studio-ease-out),
+      opacity 180ms ease;
+  }
 }
 
 .dialog-enter-from,
 .dialog-leave-to {
   opacity: 0;
+  .confirm-dialog {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.97);
+  }
 }
 </style>

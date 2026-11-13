@@ -35,6 +35,146 @@ function memoryStorage(initial = {}) {
 }
 
 describe('视频工作台恢复与审核', () => {
+  it('当前处理任务轮询进入待审核后立即建立可写审核会话，不要求再次点击任务', async () => {
+    let remote = { ...job, status: 'processing', revision: 1, result: undefined, review: undefined }
+    const state = createVideoWorkspace({
+      owner: 'owner',
+      storage: memoryStorage(),
+      api: {
+        listJobs: async () => ({ jobs: [remote] })
+      }
+    })
+    await state.refresh()
+    expect(state.selectedJobId.value).toBe('job-1')
+    remote = { ...job, status: 'awaiting_ai', revision: 2 }
+    await state.refresh()
+    expect(state.draftRevision.value).toBe(2)
+    state.reviewDraft.value = { ...state.reviewDraft.value, displayTitle: '直接编辑生成后的任务' }
+    expect(state.reviewDraft.value.displayTitle).toBe('直接编辑生成后的任务')
+    expect(state.isDirty.value).toBe(true)
+  })
+
+  it('发布成功清除选中任务的草稿冲突和批量选择，并转到下一待办但保留历史', async () => {
+    let remote = [{ ...job }, { ...job, id: 'job-2' }]
+    const state = createVideoWorkspace({
+      owner: 'owner',
+      storage: memoryStorage(),
+      api: {
+        listJobs: async () => ({ jobs: remote })
+      }
+    })
+    await state.refresh()
+    state.selectJob('job-1')
+    state.reviewDraft.value.displayTitle = '未保存草稿'
+    state.upsertJob({ ...job, revision: 2 })
+    expect(state.conflict.value).not.toBeNull()
+    state.selectedIds.value = ['job-1', 'job-2']
+    remote = [
+      { ...job, status: 'published', revision: 3 },
+      { ...job, id: 'job-2' }
+    ]
+    await state.refresh()
+    expect(state.selectedJobId.value).toBe('job-2')
+    expect(state.selectedIds.value).toEqual(['job-2'])
+    expect(state.hasUnsavedDrafts.value).toBe(false)
+    expect(state.conflict.value).toBeNull()
+    expect(state.publishedJobs.value.map(item => item.id)).toEqual(['job-1'])
+    expect(state.pendingJobs.value.map(item => item.id)).toEqual(['job-2'])
+    state.selectJob('job-1')
+    expect(state.reviewDraft.value.displayTitle).toBe('星空')
+    expect(state.isDirty.value).toBe(false)
+    await state.refresh()
+    expect(state.selectedJobId.value).toBe('job-1')
+    expect(state.conflict.value).toBeNull()
+  })
+
+  it('刷新后仅有已发布历史时不自动打开，手动打开历史不产生可写草稿', async () => {
+    const state = createVideoWorkspace({
+      owner: 'owner',
+      storage: memoryStorage(),
+      api: {
+        listJobs: async () => ({ jobs: [{ ...job, status: 'published' }] })
+      }
+    })
+    await state.refresh()
+    expect(state.selectedJobId.value).toBe('')
+    expect(state.reviewDraft.value).toBeNull()
+    state.selectJob('job-1')
+    state.reviewDraft.value = { ...state.reviewDraft.value, displayTitle: '不能写回历史' }
+    expect(state.reviewDraft.value.displayTitle).toBe('星空')
+    expect(state.hasUnsavedDrafts.value).toBe(false)
+    await state.refresh()
+    expect(state.selectedJobId.value).toBe('job-1')
+    expect(state.reviewDraft.value.displayTitle).toBe('星空')
+  })
+
+  it('publication先报告成功时清理本地待发状态，旧列表轮询不能恢复完成任务', async () => {
+    const state = createVideoWorkspace({
+      owner: 'owner',
+      storage: memoryStorage(),
+      api: {
+        listJobs: async () => ({
+          jobs: [{ ...job, status: 'publishing', publicationId: 'pub-1' }]
+        }),
+        getPublication: async () => ({ id: 'pub-1', status: 'published', jobs: [{ ...job }] })
+      }
+    })
+    await state.refresh()
+    expect(state.jobs.value[0].status).toBe('published')
+    expect(state.selectedJobId.value).toBe('')
+    expect(state.pendingJobs.value).toEqual([])
+    state.selectJob('job-1')
+    await state.refresh()
+    expect(state.jobs.value[0].status).toBe('published')
+    expect(state.selectedJobId.value).toBe('job-1')
+    expect(state.hasUnsavedDrafts.value).toBe(false)
+  })
+
+  it('publication进度读取失败不误判发布成功，保留审核草稿与错误供恢复', async () => {
+    const state = createVideoWorkspace({
+      owner: 'owner',
+      storage: memoryStorage(),
+      api: {
+        listJobs: async () => ({ jobs: [{ ...job, publicationId: 'pub-1' }] }),
+        getPublication: async () => {
+          throw new Error('发布进度暂不可用')
+        }
+      }
+    })
+    await state.refresh()
+    state.reviewDraft.value.displayTitle = '保留待办草稿'
+    await state.refresh()
+    expect(state.pendingJobs.value).toHaveLength(1)
+    expect(state.publishedJobs.value).toEqual([])
+    expect(state.reviewDraft.value.displayTitle).toBe('保留待办草稿')
+    expect(state.hasUnsavedDrafts.value).toBe(true)
+    expect(state.publicationErrors.value['pub-1']).toBe('发布进度暂不可用')
+  })
+
+  it('失败刷新不丢失待办草稿，服务端移除任务后清理孤立草稿', async () => {
+    let mode = 'success'
+    const state = createVideoWorkspace({
+      owner: 'owner',
+      storage: memoryStorage(),
+      api: {
+        listJobs: async () => {
+          if (mode === 'failed') throw new Error('网络中断')
+          return { jobs: mode === 'empty' ? [] : [job] }
+        }
+      }
+    })
+    await state.refresh()
+    state.reviewDraft.value.displayTitle = '待恢复草稿'
+    mode = 'failed'
+    await expect(state.refresh()).rejects.toThrow('网络中断')
+    expect(state.selectedJobId.value).toBe('job-1')
+    expect(state.reviewDraft.value.displayTitle).toBe('待恢复草稿')
+    mode = 'empty'
+    await state.refresh()
+    expect(state.selectedJobId.value).toBe('')
+    expect(state.hasUnsavedDrafts.value).toBe(false)
+  })
+
   it('加载已有视频分类；后续读取失败保留候选，并允许继续编辑审核', async () => {
     let failing = false
     const state = createVideoWorkspace({

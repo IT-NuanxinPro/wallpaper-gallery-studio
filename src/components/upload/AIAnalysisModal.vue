@@ -7,7 +7,7 @@
           {{ credentialsStore.hasCredentials ? '管理 AI 配置' : '去设置 API Key' }}
         </router-link>
       </p>
-      <!-- 分析进度 -->
+
       <div v-if="analyzing" class="analyzing">
         <el-progress type="circle" :percentage="progress" :width="120">
           <template #default="{ percentage }">
@@ -18,16 +18,12 @@
         <p class="analyzing-text">AI 正在分析图片内容...</p>
       </div>
 
-      <!-- 分析结果 -->
       <div v-else-if="analysisResult" class="analysis-result">
-        <!-- 图片预览 -->
         <div class="image-preview">
           <img :src="imagePreview" alt="预览" />
         </div>
 
-        <!-- 分析详情 -->
         <div class="analysis-details">
-          <!-- 文件名建议 -->
           <div class="section">
             <h3>📝 文件名建议</h3>
             <el-radio-group v-model="selectedFilename" class="filename-options">
@@ -49,7 +45,6 @@
             </el-input>
           </div>
 
-          <!-- 分类建议 -->
           <div class="section">
             <h3>📁 分类建议</h3>
             <div class="category-suggestion">
@@ -65,7 +60,6 @@
               </el-tag>
             </div>
 
-            <!-- 手动调整分类 -->
             <div class="manual-adjust">
               <el-select v-model="selectedPrimaryCategory" placeholder="主分类">
                 <el-option label="Desktop" value="desktop" />
@@ -83,13 +77,11 @@
             </div>
           </div>
 
-          <!-- 图片描述 -->
           <div class="section">
             <h3>🎨 图片描述</h3>
             <p class="description">{{ analysisResult.description }}</p>
           </div>
 
-          <!-- 标签 -->
           <div class="section">
             <h3>🏷️ 标签</h3>
             <div class="tags">
@@ -101,15 +93,10 @@
         </div>
       </div>
 
-      <!-- 错误提示 -->
       <div v-else-if="error" class="error-state">
         <el-result icon="error" title="分析失败" :sub-title="error">
           <template #extra>
-            <el-button
-              type="primary"
-              :disabled="!credentialsStore.hasCredentials"
-              @click="retryAnalysis"
-            >
+            <el-button type="primary" :disabled="analyzing" @click="retryAnalysis">
               重新分析
             </el-button>
           </template>
@@ -134,8 +121,10 @@ import { ArrowRight } from '@element-plus/icons-vue'
 import { analyzeImage } from '@/services/ai/classifier'
 import { AI_MODEL_KEY, AI_PROVIDER } from '@/services/ai/model'
 import { useCredentialsStore } from '@/stores/credentials'
+import { useAiConfigurationGuard } from '@/composables/useAiConfigurationGuard'
 
 const credentialsStore = useCredentialsStore()
+const { requireAiConfiguration } = useAiConfigurationGuard()
 
 const props = defineProps({
   modelValue: Boolean,
@@ -161,7 +150,6 @@ const customFilename = ref('')
 const selectedPrimaryCategory = ref('')
 const selectedSecondaryCategory = ref('')
 
-// 你的实际分类结构
 const CATEGORIES = {
   desktop: ['插画', '动漫', '风景', '萌宠', '人像', '影视', '游戏', '政治', 'IP形象'],
   mobile: ['插画', '创意', '动漫', '风景', '萌宠', '人像', '影视', 'IP形象'],
@@ -172,7 +160,6 @@ const secondaryCategories = computed(() => {
   return CATEGORIES[selectedPrimaryCategory.value] || []
 })
 
-// 置信度标签类型
 const confidenceType = computed(() => {
   const confidence = analysisResult.value?.categorySuggestion.confidence || 0
   if (confidence >= 0.8) return 'success'
@@ -193,7 +180,6 @@ function releasePreview() {
   imagePreview.value = ''
 }
 
-// 弹窗和文件共同决定本次分析，切换时不接收旧结果。
 watch(
   () => [props.file, props.modelValue],
   ([file, open]) => {
@@ -264,12 +250,11 @@ onBeforeUnmount(() => {
   releasePreview()
 })
 
-// 重新分析
 function retryAnalysis() {
+  if (analyzing.value || !requireAiConfiguration()) return
   startAnalysis()
 }
 
-// 确认分析结果
 function confirmAnalysis() {
   const finalFilename = customFilename.value || selectedFilename.value
 

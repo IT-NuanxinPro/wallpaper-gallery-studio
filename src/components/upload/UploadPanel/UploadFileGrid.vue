@@ -1,118 +1,143 @@
 <template>
-  <div v-if="files.length > 0" class="upload-file-grid">
-    <!-- 批量操作栏 -->
-    <div v-if="!uploading" class="upload-file-grid__batch">
-      <div class="upload-file-grid__batch-left">
-        <el-checkbox
-          :model-value="selectAll"
-          :indeterminate="isIndeterminate"
-          :disabled="pendingFiles.length === 0"
-          @update:model-value="handleSelectAll"
+  <Transition name="studio-panel">
+    <div v-if="files.length > 0" key="files" class="upload-file-grid">
+      <div v-if="!uploading" class="upload-file-grid__batch">
+        <div class="upload-file-grid__batch-left">
+          <el-checkbox
+            :model-value="selectAll"
+            :indeterminate="isIndeterminate"
+            :disabled="pendingFiles.length === 0"
+            @update:model-value="handleSelectAll"
+          >
+            全选（用于批量删除）
+          </el-checkbox>
+
+          <span class="upload-file-grid__count">
+            共 {{ files.length }} 个文件
+            <template v-if="pendingFiles.length !== files.length">
+              （{{ pendingFiles.length }} 待上传）
+            </template>
+          </span>
+        </div>
+
+        <div class="upload-file-grid__batch-right">
+          <Transition name="fade">
+            <button
+              v-if="selectedIds.length > 0"
+              class="upload-file-grid__batch-delete"
+              @click="$emit('batch-delete', selectedIds)"
+            >
+              <el-icon><Delete /></el-icon>
+              删除选中 ({{ selectedIds.length }})
+            </button>
+          </Transition>
+
+          <Transition name="fade">
+            <button
+              v-if="filesWithAiButNoTarget > 0"
+              class="upload-file-grid__batch-apply"
+              @click="$emit('apply-all-ai')"
+            >
+              <el-icon><Cpu /></el-icon>
+              应用全部 AI 推荐 ({{ filesWithAiButNoTarget }})
+            </button>
+          </Transition>
+        </div>
+      </div>
+
+      <div class="upload-file-grid__grid" data-scroll-region>
+        <TransitionGroup
+          name="studio-list"
+          @before-leave="lockLeavingItem"
+          @after-leave="releaseLeavingItem"
+          @leave-cancelled="releaseLeavingItem"
         >
-          全选（用于批量删除）
-        </el-checkbox>
-
-        <!-- 文件数量提示 -->
-        <span class="upload-file-grid__count">
-          共 {{ files.length }} 个文件
-          <template v-if="pendingFiles.length !== files.length">
-            （{{ pendingFiles.length }} 待上传）
-          </template>
-        </span>
-      </div>
-
-      <div class="upload-file-grid__batch-right">
-        <Transition name="fade">
-          <button
-            v-if="selectedIds.length > 0"
-            class="upload-file-grid__batch-delete"
-            @click="$emit('batch-delete', selectedIds)"
-          >
-            <el-icon><Delete /></el-icon>
-            删除选中 ({{ selectedIds.length }})
-          </button>
-        </Transition>
-
-        <!-- AI 模式：批量应用 AI 推荐 -->
-        <Transition name="fade">
-          <button
-            v-if="uploadMode === 'ai' && filesWithAiButNoTarget > 0"
-            class="upload-file-grid__batch-apply"
-            @click="$emit('apply-all-ai')"
-          >
-            <span>🤖</span>
-            应用全部 AI 推荐 ({{ filesWithAiButNoTarget }})
-          </button>
-        </Transition>
+          <UploadFileItem
+            v-for="file in files"
+            :key="file.id"
+            :file="file"
+            :is-selected="selectedId === file.id"
+            :is-checked="selectedIds.includes(file.id)"
+            :uploading="uploading"
+            @select="$emit('select', file)"
+            @remove="$emit('remove', $event)"
+            @change-target="$emit('change-target', file)"
+            @toggle-check="toggleCheck"
+            @edit-ai="$emit('edit-ai', file)"
+          />
+        </TransitionGroup>
       </div>
     </div>
 
-    <!-- 图片网格 -->
-    <div class="upload-file-grid__grid">
-      <TransitionGroup name="grid">
-        <UploadFileItem
-          v-for="file in files"
-          :key="file.id"
-          :file="file"
-          :is-selected="selectedId === file.id"
-          :is-checked="selectedIds.includes(file.id)"
-          :uploading="uploading"
-          :upload-mode="uploadMode"
-          @select="$emit('select', file)"
-          @remove="$emit('remove', $event)"
-          @change-target="$emit('change-target', file)"
-          @toggle-check="toggleCheck"
-          @edit-ai="$emit('edit-ai', file)"
-        />
-      </TransitionGroup>
+    <div v-else key="empty" class="upload-file-grid__empty">
+      <el-icon class="upload-file-grid__empty-icon"><Picture /></el-icon>
+      <p>暂无待上传文件</p>
+      <p class="upload-file-grid__empty-hint">支持 JPG、PNG、WebP，单个最大 25MB</p>
     </div>
-  </div>
-
-  <!-- 空状态 -->
-  <div v-else class="upload-file-grid__empty">
-    <span class="upload-file-grid__empty-icon">🖼️</span>
-    <p>暂无待上传文件</p>
-    <p class="upload-file-grid__empty-hint">支持 JPG、PNG、WebP，单个最大 25MB</p>
-  </div>
+  </Transition>
 </template>
 
 <script setup>
 import { ref, computed, watch } from 'vue'
-import { Delete } from '@element-plus/icons-vue'
+import { Delete, Cpu, Picture } from '@element-plus/icons-vue'
 import UploadFileItem from './UploadFileItem.vue'
 
 const props = defineProps({
   files: { type: Array, default: () => [] },
   selectedId: { type: String, default: null },
-  uploading: { type: Boolean, default: false },
-  uploadMode: { type: String, default: 'ai' }
+  uploading: { type: Boolean, default: false }
 })
 
 defineEmits(['select', 'remove', 'change-target', 'batch-delete', 'apply-all-ai', 'edit-ai'])
 
 const selectedIds = ref([])
+const leavingItemStyles = new WeakMap()
+const leavingStyleProperties = ['position', 'left', 'top', 'width', 'height', 'right']
 
-// 待处理文件
+function lockLeavingItem(element) {
+  const previous = Object.fromEntries(
+    leavingStyleProperties.map(name => [name, element.style[name]])
+  )
+  const geometry = {
+    left: element.offsetLeft,
+    top: element.offsetTop,
+    width: element.offsetWidth,
+    height: element.offsetHeight
+  }
+  leavingItemStyles.set(element, previous)
+  Object.assign(element.style, {
+    position: 'absolute',
+    left: `${geometry.left}px`,
+    top: `${geometry.top}px`,
+    width: `${geometry.width}px`,
+    height: `${geometry.height}px`,
+    right: 'auto'
+  })
+}
+
+function releaseLeavingItem(element) {
+  const previous = leavingItemStyles.get(element)
+  if (!previous) return
+  Object.assign(element.style, previous)
+  leavingItemStyles.delete(element)
+}
+
 const pendingFiles = computed(() =>
   props.files.filter(f => f.status === 'pending' || f.status === 'error')
 )
 
-// AI 模式下有 AI 数据但未设置目标路径的文件数
 const filesWithAiButNoTarget = computed(
   () => props.files.filter(f => f.status === 'pending' && f.aiMetadata && !f.targetPath).length
 )
 
-// 全选状态
 const selectAll = computed(
   () => pendingFiles.value.length > 0 && selectedIds.value.length === pendingFiles.value.length
 )
 
-// 半选状态
 const isIndeterminate = computed(
   () => selectedIds.value.length > 0 && selectedIds.value.length < pendingFiles.value.length
 )
 
-// 文件列表变化时清理已删除的选中项
 watch(
   () => props.files,
   files => {
@@ -122,7 +147,6 @@ watch(
   { deep: true }
 )
 
-// 全选/取消全选
 function handleSelectAll(val) {
   if (val) {
     selectedIds.value = pendingFiles.value.map(f => f.id)
@@ -131,7 +155,6 @@ function handleSelectAll(val) {
   }
 }
 
-// 切换单个文件的选中状态
 function toggleCheck(fileId) {
   const index = selectedIds.value.indexOf(fileId)
   if (index > -1) {
@@ -141,7 +164,6 @@ function toggleCheck(fileId) {
   }
 }
 
-// 暴露方法供父组件调用
 defineExpose({
   clearSelection: () => {
     selectedIds.value = []
@@ -236,6 +258,7 @@ defineExpose({
   }
 
   &__grid {
+    position: relative;
     --upload-grid-item-size: 144px;
 
     flex: 1;
@@ -302,32 +325,18 @@ defineExpose({
     &-hint {
       margin-top: $spacing-2 !important;
       font-size: $font-size-xs !important;
-      color: $gray-600;
+      color: var(--studio-muted);
     }
   }
 }
 
-// 过渡动画
-.grid-enter-active {
-  transition: opacity $duration-normal $ease-out;
+.upload-file-grid__grid :deep(.studio-list-enter-active),
+.upload-file-grid__grid :deep(.studio-list-leave-active),
+.upload-file-grid__grid :deep(.studio-list-move) {
+  transition:
+    opacity 220ms var(--studio-ease-out),
+    transform 240ms var(--studio-ease-out);
 }
-
-.grid-leave-active {
-  transition: opacity $duration-fast $ease-out;
-}
-
-.grid-enter-from {
-  opacity: 0;
-}
-
-.grid-leave-to {
-  opacity: 0;
-}
-
-.grid-move {
-  transition: transform $duration-normal $ease-out;
-}
-
 .fade-enter-active,
 .fade-leave-active {
   transition: opacity $duration-normal;
@@ -336,5 +345,26 @@ defineExpose({
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
+}
+
+.upload-file-grid__empty-icon {
+  color: var(--studio-muted);
+  font-size: 36px;
+}
+.upload-file-grid__empty p {
+  color: var(--studio-muted);
+  font-size: 13px;
+}
+.upload-file-grid__empty .upload-file-grid__empty-hint {
+  font-size: 11px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .upload-file-grid__grid :deep(.studio-list-enter-active),
+  .upload-file-grid__grid :deep(.studio-list-leave-active),
+  .upload-file-grid__grid :deep(.studio-list-move),
+  .fade-enter-active,
+  .fade-leave-active {
+    transition: none;
+  }
 }
 </style>

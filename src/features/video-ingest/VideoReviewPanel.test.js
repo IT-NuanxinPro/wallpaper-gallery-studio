@@ -37,12 +37,14 @@ function createPanel() {
 }
 
 describe('视频候选帧审核交互', () => {
-  it('固定显示 GPT-6.1 Sol，未配置 Key 时禁止 AI 分析但仍可人工编辑', async () => {
+  it('固定模型的分析入口可点击以触发配置提示，仍可编辑审核信息', async () => {
     const panel = createPanel()
     const controls = panel.get('.video-review__ai')
     expect(controls.text()).toContain('GPT-6.1 Sol')
     expect(controls.find('select').exists()).toBe(false)
-    expect(controls.get('button').attributes('disabled')).toBeDefined()
+    expect(controls.get('button').attributes('disabled')).toBeUndefined()
+    await controls.get('button').trigger('click')
+    expect(panel.emitted('analyze')).toHaveLength(1)
     expect(controls.getComponent(RouterLinkStub).props('to')).toBe('/settings#ai-config')
     const title = panel.get('input[placeholder="面向访客的视频标题"]')
     await title.setValue('人工填写标题')
@@ -50,7 +52,7 @@ describe('视频候选帧审核交互', () => {
     await panel.setProps({ hasCredentials: true })
     expect(controls.get('button').attributes('disabled')).toBeUndefined()
     await controls.get('button').trigger('click')
-    expect(panel.emitted('analyze')).toHaveLength(1)
+    expect(panel.emitted('analyze')).toHaveLength(2)
     panel.unmount()
   })
 
@@ -72,14 +74,31 @@ describe('视频候选帧审核交互', () => {
   it('仅显示服务端已有视频主题，主题读取失败时保持输入框可编辑', async () => {
     const panel = createPanel()
     await panel.setProps({ topicSuggestions: ['宝可梦', '二次元'], topicsError: '读取失败' })
-    expect(panel.findAll('#video-topics option').map(option => option.attributes('value'))).toEqual(
-      ['宝可梦', '二次元']
-    )
-    const topic = panel.find('input[list="video-topics"]')
-    await topic.setValue('手工分类')
+    const topic = panel.getComponent({ name: 'ElSelect' })
+    expect(topic.props('filterable')).toBe(true)
+    expect(topic.props('allowCreate')).toBe(true)
+    expect(
+      panel.findAllComponents({ name: 'ElOption' }).map(option => option.props('value'))
+    ).toEqual(['宝可梦', '二次元'])
+    topic.vm.$emit('update:modelValue', '手工分类')
     expect(panel.emitted('update:draft').at(-1)[0].topic).toBe('手工分类')
-    expect(topic.attributes('disabled')).toBeUndefined()
+    expect(topic.props('disabled')).toBe(false)
     expect(panel.text()).toContain('仍可直接输入主题')
+    panel.unmount()
+  })
+
+  it('用途使用可访问的分段控件，发布后显示只读成果且不残留表单和 AI 操作', async () => {
+    const panel = createPanel()
+    expect(panel.find('select').exists()).toBe(false)
+    const usage = panel.getComponent({ name: 'ElSegmented' })
+    usage.vm.$emit('update:modelValue', 'mobile')
+    expect(panel.emitted('update:draft').at(-1)[0].usage).toBe('mobile')
+    await panel.setProps({ job: { ...panel.props('job'), status: 'published' } })
+    expect(panel.text()).toContain('已发布到画廊')
+    expect(panel.text()).toContain('星空描述')
+    expect(panel.find('form').exists()).toBe(false)
+    expect(panel.find('.video-review__ai').exists()).toBe(false)
+    expect(panel.find('.video-review__frames').exists()).toBe(false)
     panel.unmount()
   })
 
