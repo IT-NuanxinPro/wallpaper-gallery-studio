@@ -18,6 +18,7 @@ vi.mock('@/stores/credentials', () => ({
     hasCredentials: false,
     hasModelReady: false,
     selectedModel: '',
+    getCredentialsByProvider: () => ({ apiKey: '', model: '' }),
     loadCredentials: vi.fn()
   })
 }))
@@ -29,7 +30,8 @@ vi.mock('@/features/video-ingest/api', () => ({ createVideoApi: () => ({ configu
 vi.mock('@/features/video-ingest/uploader', () => ({
   createVideoUploader: () => ({ upload: vi.fn() })
 }))
-vi.mock('@/features/video-ingest/workspace', () => ({
+vi.mock('@/features/video-ingest/workspace', async importOriginal => ({
+  ...(await importOriginal()),
   createVideoWorkspace: () => state.workspace
 }))
 vi.mock('@/features/video-ingest/upload-manager', () => ({
@@ -160,24 +162,6 @@ describe('视频工作区真实过渡', () => {
     expect(scroller.scrollTop).toBe(0)
   })
 
-  it('发布进度和完成提示共享一个反馈区，关闭时收起包含间距的容器', async () => {
-    state.workspace.publications.value = [{ id: 'new', status: 'deploying', jobs: ['job'] }]
-    const panel = await mountTransitionPanel()
-    vi.useFakeTimers()
-    state.workspace.publications.value = [{ id: 'new', status: 'published', jobs: ['job'] }]
-    await nextTick()
-    const progress = panel.get('.video-workspace__publications').element
-    const notice = panel.get('.video-workspace__published-notice').element
-    expect(progress.parentElement).toBe(notice.parentElement)
-    expect(progress.parentElement.classList.contains('video-workspace__feedback')).toBe(true)
-    await vi.runAllTimersAsync()
-    const feedback = panel.get('.video-workspace__feedback').element
-    await panel.get('[aria-label="关闭发布完成提示"]').trigger('click')
-    expect(feedback.classList.contains('el-collapse-transition-leave-active')).toBe(true)
-    await vi.runAllTimersAsync()
-    expect(feedback.style.display).toBe('none')
-  })
-
   it('上传完成的进度项从原始内边距位置离场并恢复临时样式', async () => {
     state.transfers.value = [
       { id: 'first', filename: 'first.mp4', stage: 'uploading', percent: 40 },
@@ -300,39 +284,6 @@ describe('发布完成提示', () => {
     state.workspace.selectedJob.value = { id: 'video-2', status: 'awaiting_review' }
     await flushPromises()
     expect(panel.getComponent({ name: 'VideoReviewPanel' }).vm.$.uid).not.toBe(original)
-    panel.unmount()
-  })
-
-  it('初始历史不提示，只提示本次发布状态转换；关闭后刷新不重新出现', async () => {
-    const router = createRouter({
-      history: createMemoryHistory(),
-      routes: [{ path: '/', component: VideoUploadView }]
-    })
-    await router.push('/')
-    const panel = mount(
-      { template: '<router-view />' },
-      {
-        global: {
-          plugins: [ElementPlus, router],
-          stubs: { VideoJobQueue: true, VideoReviewPanel: true }
-        }
-      }
-    )
-    await flushPromises()
-    expect(panel.find('.video-workspace__published-notice').exists()).toBe(false)
-    state.workspace.publications.value.push({ id: 'new', status: 'deploying', jobs: ['new-job'] })
-    await flushPromises()
-    state.workspace.publications.value = state.workspace.publications.value.map(item =>
-      item.id === 'new' ? { ...item, status: 'published' } : item
-    )
-    await flushPromises()
-    expect(panel.get('.video-workspace__published-notice').text()).toContain('1 个视频已发布')
-    await panel.get('[aria-label="关闭发布完成提示"]').trigger('click')
-    state.workspace.publications.value = state.workspace.publications.value.map(item => ({
-      ...item
-    }))
-    await flushPromises()
-    expect(panel.find('.video-workspace__published-notice').exists()).toBe(false)
     panel.unmount()
   })
 })

@@ -35,6 +35,94 @@ function memoryStorage(initial = {}) {
 }
 
 describe('视频工作台恢复与审核', () => {
+  it('单条发布只冻结当前任务，保留其他批量选择并阻止重复提交', async () => {
+    let finish
+    const publish = vi.fn(
+      jobs =>
+        new Promise(resolve => {
+          finish = () => resolve({ id: 'single', status: 'queued', jobs })
+        })
+    )
+    const state = createVideoWorkspace({
+      owner: 'owner',
+      storage: memoryStorage(),
+      api: {
+        listJobs: async () => ({ jobs: [job, { ...job, id: 'job-2' }] }),
+        publish
+      }
+    })
+    await state.refresh()
+    state.selectedIds.value = ['job-1', 'job-2']
+    const pending = state.publishJob('job-1')
+    await expect(state.publishJob('job-1')).rejects.toThrow('进行中')
+    finish()
+    await pending
+    expect(publish).toHaveBeenCalledExactlyOnceWith([{ id: 'job-1', revision: 1 }])
+    expect(state.selectedIds.value).toEqual(['job-2'])
+    expect(state.jobs.value.find(item => item.id === 'job-1').status).toBe('publishing')
+  })
+
+  it('单条发布拦截未保存草稿和版本冲突，保存后使用最新审核版本', async () => {
+    const publish = vi.fn(async jobs => ({ id: 'single', status: 'queued', jobs }))
+    const state = createVideoWorkspace({
+      owner: 'owner',
+      storage: memoryStorage(),
+      api: {
+        listJobs: async () => ({ jobs: [job] }),
+        publish,
+        saveReview: async (id, { review }) => ({ ...job, id, revision: 2, review })
+      }
+    })
+    await state.refresh()
+    state.reviewDraft.value.displayTitle = '新标题'
+    await expect(state.publishJob(job.id)).rejects.toThrow('未保存')
+    state.upsertJob({ ...job, revision: 2 })
+    await expect(state.publishJob(job.id)).rejects.toThrow('冲突')
+    expect(publish).not.toHaveBeenCalled()
+    await state.saveReview({ useLatest: true })
+    await state.publishJob(job.id)
+    expect(publish).toHaveBeenCalledExactlyOnceWith([{ id: job.id, revision: 2 }])
+  })
+
+  it('竖屏默认电脑壁纸，兼容旧云端默认草稿并保留历史已发布用途', async () => {
+    const portrait = {
+      ...job,
+      status: 'awaiting_ai',
+      result: { ...job.result, metadata: { width: 1080, height: 1920 } },
+      review: {
+        selectedFrameId: 'frame-1',
+        usage: 'mobile',
+        topic: '通用',
+        filename: 'source.mp4',
+        displayTitle: '',
+        description: '',
+        keywords: []
+      }
+    }
+    const state = createVideoWorkspace({
+      owner: 'owner',
+      storage: memoryStorage(),
+      api: {
+        listJobs: async () => ({
+          jobs: [
+            portrait,
+            {
+              ...job,
+              id: 'history',
+              status: 'published',
+              review: { ...job.review, usage: 'mobile' }
+            }
+          ]
+        })
+      }
+    })
+    await state.refresh()
+    expect(state.reviewDraft.value.usage).toBe('desktop')
+    expect(state.canAutoAnalyze(job.id)).toBe(true)
+    state.selectJob('history')
+    expect(state.reviewDraft.value.usage).toBe('mobile')
+  })
+
   it('当前处理任务轮询进入待审核后立即建立可写审核会话，不要求再次点击任务', async () => {
     let remote = { ...job, status: 'processing', revision: 1, result: undefined, review: undefined }
     const state = createVideoWorkspace({

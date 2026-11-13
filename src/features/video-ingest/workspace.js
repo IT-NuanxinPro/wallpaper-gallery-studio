@@ -2,6 +2,18 @@ import { computed, reactive, ref } from 'vue'
 import { canPublish, canReview, createReviewDraft, errorMessage, validateReview } from './domain'
 import { analyzeVideoFrame } from './review-service'
 
+export function videoProcessingIdentity(job) {
+  return (
+    job.processingVersion ||
+    job.result?.processingVersion ||
+    JSON.stringify([
+      job.result?.download?.sha256 || '',
+      job.result?.defaultFrameId || '',
+      (job.result?.frames || []).map(frame => [frame.id, frame.timestamp])
+    ])
+  )
+}
+
 export function createVideoWorkspace({ api, owner, storage = globalThis.localStorage }) {
   const jobs = ref([])
   const publications = ref([])
@@ -21,6 +33,7 @@ export function createVideoWorkspace({ api, owner, storage = globalThis.localSto
   let topicsPromise
   let pollingTimer
   let disposed = false
+  let analysisController = null
 
   let trackedIds = []
   try {
@@ -38,7 +51,8 @@ export function createVideoWorkspace({ api, owner, storage = globalThis.localSto
       activeSession.value?.draft ||
       (selectedJob.value ? createReviewDraft(selectedJob.value) : null),
     set: value => {
-      if (activeSession.value && canReview(selectedJob.value)) activeSession.value.draft = value
+      if (!reviewBusy.value && activeSession.value && canReview(selectedJob.value))
+        activeSession.value.draft = value
     }
   })
   const draftRevision = computed(() => activeSession.value?.revision)
@@ -214,6 +228,7 @@ export function createVideoWorkspace({ api, owner, storage = globalThis.localSto
   }
 
   async function saveReview({ useLatest = false } = {}) {
+    if (reviewBusy.value) throw new Error('审核操作进行中，请稍后重试')
     const job = selectedJob.value
     if (!job || !canReview(job)) throw new Error('当前任务不能编辑审核信息')
     const draft = JSON.parse(JSON.stringify(reviewDraft.value))
@@ -236,39 +251,104 @@ export function createVideoWorkspace({ api, owner, storage = globalThis.localSto
     }
   }
 
-  async function analyzeReview(options) {
-    const job = selectedJob.value
+  function canAutoAnalyze(id) {
+    const job = jobs.value.find(item => item.id === id)
+    if (disposed || job?.status !== 'awaiting_ai' || !job.result?.frames?.length) return false
+    const session = sessions[id]
+    if (session?.conflict || (session && JSON.stringify(session.draft) !== session.baseline))
+      return false
+    if (!job.review) return true
+    const defaults = createReviewDraft({ ...job, review: undefined })
+    const review = job.review
+    return (
+      !review.ai &&
+      Object.entries(review).every(([key, value]) => {
+        if (key === 'topic') return !value || value === '通用'
+        if (key === 'usage')
+          return (
+            value === 'desktop' ||
+            (value === 'mobile' && job.result.metadata?.height > job.result.metadata?.width)
+          )
+        return key in defaults && JSON.stringify(value) === JSON.stringify(defaults[key])
+      })
+    )
+  }
+
+  async function analyzeJob(id, options, { automatic = false } = {}) {
+    if (reviewBusy.value) throw new Error('审核操作进行中，请稍后重试')
+    if (disposed) throw new globalThis.DOMException('工作台已关闭', 'AbortError')
+    const job = jobs.value.find(item => item.id === id)
     if (!job || !canReview(job)) throw new Error('当前任务不能进行 AI 分析')
-    if (conflict.value) throw new Error('请先处理审核版本冲突')
+    if (automatic && !canAutoAnalyze(id)) return null
+    if (!sessions[id]) resetSession(job)
+    const session = sessions[id]
+    if (session.conflict) throw new Error('请先处理审核版本冲突')
+    const draft = JSON.parse(JSON.stringify(session.draft))
+    const draftSnapshot = JSON.stringify(draft)
+    const remoteReview = JSON.stringify(job.review)
+    const processingSnapshot = videoProcessingIdentity(job)
+    const sourceSignal = options.credentials?.signal
+    const controller = new globalThis.AbortController()
+    analysisController = controller
+    const abort = () => controller.abort()
+    sourceSignal?.addEventListener('abort', abort, { once: true })
+    if (sourceSignal?.aborted) abort()
     reviewBusy.value = true
     try {
       const updated = await analyzeVideoFrame({
         ...options,
+        credentials: { ...options.credentials, signal: controller.signal },
         topics: topics.value,
         api,
-        job: { ...job, revision: draftRevision.value },
-        review: JSON.parse(JSON.stringify(reviewDraft.value))
+        job: { ...job, revision: session.revision },
+        review: draft,
+        beforeSave: async nextReview => {
+          const current = jobs.value.find(item => item.id === id)
+          if (
+            disposed ||
+            controller.signal.aborted ||
+            !current ||
+            JSON.stringify(sessions[id]?.draft) !== draftSnapshot ||
+            JSON.stringify(current.review) !== remoteReview ||
+            videoProcessingIdentity(current) !== processingSnapshot ||
+            (automatic && !canAutoAnalyze(id))
+          )
+            return false
+          return options.beforeSave ? options.beforeSave(nextReview) : true
+        }
       })
-      upsertJob(updated, { acceptReview: true })
+      if (!disposed && !controller.signal.aborted) {
+        upsertJob(updated, { acceptReview: JSON.stringify(sessions[id]?.draft) === draftSnapshot })
+      }
       return updated
     } catch (failure) {
-      await recordConflict(failure, job.id)
+      if (!disposed && !automatic) await recordConflict(failure, job.id)
 
-      await api
-        .getJob(job.id)
-        .then(updated => upsertJob(updated))
-        .catch(() => undefined)
+      if (!disposed)
+        await api
+          .getJob(job.id)
+          .then(updated => upsertJob(updated))
+          .catch(() => undefined)
       throw failure
     } finally {
+      sourceSignal?.removeEventListener('abort', abort)
+      analysisController = null
       reviewBusy.value = false
     }
   }
 
-  async function publishSelected() {
-    const selected = selectedIds.value.map(id => jobs.value.find(job => job.id === id))
+  function analyzeReview(options) {
+    return analyzeJob(selectedJobId.value, options)
+  }
+
+  async function publishJobs(ids) {
+    if (publishing.value || reviewBusy.value) throw new Error('发布或审核操作进行中，请稍后重试')
+    const selected = [...new Set(ids)].map(id => jobs.value.find(job => job.id === id))
     if (selected.length > 30) throw new Error('每个发布批次最多30个视频，请分批选择')
     if (!selected.length || selected.some(job => !canPublish(job)))
       throw new Error('请选择审核完整且待发布的任务')
+    if (selected.some(job => sessions[job.id]?.conflict))
+      throw new Error('审核版本存在冲突，请先核对并保存')
     if (
       selected.some(
         job =>
@@ -283,7 +363,7 @@ export function createVideoWorkspace({ api, owner, storage = globalThis.localSto
         selected.map(job => ({ id: job.id, revision: job.revision }))
       )
       upsertPublication(publication)
-      selectedIds.value = []
+      selectedIds.value = selectedIds.value.filter(id => !ids.includes(id))
       selected.forEach(job =>
         upsertJob({ ...job, status: 'publishing', publicationId: publication.id })
       )
@@ -291,6 +371,14 @@ export function createVideoWorkspace({ api, owner, storage = globalThis.localSto
     } finally {
       publishing.value = false
     }
+  }
+
+  function publishSelected() {
+    return publishJobs(selectedIds.value)
+  }
+
+  function publishJob(id) {
+    return publishJobs([id])
   }
 
   async function retryPublication(id) {
@@ -318,6 +406,7 @@ export function createVideoWorkspace({ api, owner, storage = globalThis.localSto
 
   function dispose() {
     disposed = true
+    analysisController?.abort()
     clearTimeout(pollingTimer)
   }
 
@@ -348,8 +437,11 @@ export function createVideoWorkspace({ api, owner, storage = globalThis.localSto
     upsertJob,
     saveReview,
     analyzeReview,
+    analyzeJob,
+    canAutoAnalyze,
     acceptRemoteReview,
     publishSelected,
+    publishJob,
     retryPublication,
     retryJob,
     startPolling,

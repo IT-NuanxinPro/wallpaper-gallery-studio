@@ -85,8 +85,13 @@ export class OpenAICompatibleProvider extends BaseAIProvider {
           message = 'API Key 无效或已过期，请检查当前标签页配置'
         } else if (response.status === 429) {
           message = 'AI 请求频率超限，请稍后重试'
+        } else if (response.status === 503) {
+          message =
+            '当前模型服务不可用（HTTP 503），请检查此 Key 的上游分组和账号状态，或选择其他可用模型'
+        } else if (response.status === 502) {
+          message = '上游模型调用失败（HTTP 502），请检查网关中的账号状态后重试'
         }
-        throw Object.assign(new Error(message), { code: 'AI_HTTP_ERROR' })
+        throw Object.assign(new Error(message), { code: 'AI_HTTP_ERROR', status: response.status })
       }
       const data = await response.json()
       if (signal?.aborted) throw sessionCancelled()

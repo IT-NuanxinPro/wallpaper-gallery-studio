@@ -21,7 +21,7 @@
           aria-label="按任务状态筛选"
         />
         <el-button v-if="publishable.length && canWrite" link @click="toggleAll">
-          {{ allSelected ? '取消全选' : '选择可发布' }}
+          {{ allSelected ? '取消全选' : '批量选择' }}
         </el-button>
       </template>
       <span v-else class="video-job-queue__history-label">已发布内容 · 只读查看</span>
@@ -35,7 +35,7 @@
           :disabled="!canWrite || publishing"
           :loading="publishing"
           @click="$emit('publish')"
-          >发布所选</el-button
+          >批量发布</el-button
         >
       </div></el-collapse-transition
     >
@@ -83,7 +83,7 @@
                 v-if="canPublish(job)"
                 :model-value="selected.includes(job.id)"
                 :disabled="!canWrite || publishing"
-                :aria-label="`选择发布 ${job.filename}`"
+                :aria-label="`加入批量发布 ${job.filename}`"
                 @change="toggleJob(job.id, $event)"
               />
             </span>
@@ -117,7 +117,7 @@
               </span>
             </button>
             <el-tag :type="statusType(job.status)" size="small" effect="plain">{{
-              JOB_STATUS[job.status] || job.status
+              analyzingJobId === job.id ? '分析中' : JOB_STATUS[job.status] || job.status
             }}</el-tag>
           </div>
           <Transition name="studio-feedback"
@@ -167,7 +167,9 @@ const props = defineProps({
   publishing: Boolean,
   loading: Boolean,
   activeJobIds: { type: Array, default: () => [] },
-  retryingIds: { type: Array, default: () => [] }
+  retryingIds: { type: Array, default: () => [] },
+  analyzingJobId: { type: String, default: '' },
+  analysisErrors: { type: Object, default: () => ({}) }
 })
 const emit = defineEmits([
   'update:tab',
@@ -237,6 +239,8 @@ function statusType(status) {
         : 'info'
 }
 function nextStep(job) {
+  if (props.analyzingJobId === job.id) return '正在自动分析封面'
+  if (props.analysisErrors[job.id]) return '分析已暂停，打开任务后可重试'
   if (props.activeJobIds.includes(job.id)) return '正在上传源视频'
   if (canPublish(job)) return '审核已保存，可发布'
   return (

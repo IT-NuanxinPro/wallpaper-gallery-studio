@@ -78,12 +78,12 @@ describe('视频任务分区', () => {
       props: { jobs, canWrite: true, selectedIds: ['review'] },
       global: { plugins: [ElementPlus] }
     })
-    expect(queue.text()).toContain('发布所选')
+    expect(queue.text()).toContain('批量发布')
     await queue.setProps({
       jobs: jobs.map(job => (job.id === 'review' ? { ...job, status: 'published' } : job))
     })
     expect(queue.text()).not.toContain('待审核.mp4')
-    expect(queue.text()).not.toContain('发布所选')
+    expect(queue.text()).not.toContain('批量发布')
     await queue.setProps({ tab: 'published' })
     expect(queue.text()).toContain('待审核.mp4')
     expect(queue.find('input[type="checkbox"]').exists()).toBe(false)

@@ -3,12 +3,17 @@ import { normalizeModelId } from '@/services/ai/model'
 
 export async function frameToBase64(
   frame,
-  { fetchImpl = (...args) => fetch(...args), compress = compressImage } = {}
+  { fetchImpl = (...args) => fetch(...args), compress = compressImage, signal } = {}
 ) {
   const url = frame.url || frame.thumbnailUrl
   if (!url) throw new Error('封面地址已失效，请刷新任务')
   // 资源使用短期签名访问，不把业务 token 发送给对象存储。
-  const response = await fetchImpl(url, { mode: 'cors', credentials: 'omit', cache: 'no-store' })
+  const response = await fetchImpl(url, {
+    mode: 'cors',
+    credentials: 'omit',
+    cache: 'no-store',
+    ...(signal ? { signal } : {})
+  })
   if (!response.ok) throw new Error('封面下载失败，请刷新任务后重试')
   const blob = await response.blob()
   if (blob.size > 20000000) throw new Error('封面图片过大，无法分析')
@@ -34,7 +39,8 @@ export async function analyzeVideoFrame({
   providerType,
   credentials,
   topics = [],
-  frameToBase64: readFrame = frameToBase64
+  frameToBase64: readFrame = frameToBase64,
+  beforeSave = () => true
 }) {
   const model = normalizeModelId(credentials?.model)
   if (!model) throw new Error('请先从远程列表选择 AI 模型')
@@ -48,7 +54,9 @@ export async function analyzeVideoFrame({
   let primaryError
   let updated
   try {
-    const imageBase64 = await readFrame(frame)
+    if (snapshot.signal?.aborted) throw new globalThis.DOMException('AI 分析已取消', 'AbortError')
+    const imageBase64 = await readFrame(frame, { signal: snapshot.signal })
+    if (snapshot.signal?.aborted) throw new globalThis.DOMException('AI 分析已取消', 'AbortError')
     const analysis = await analyzeImage({
       imageBase64,
       series: review.usage === 'mobile' ? 'mobile' : 'desktop',
@@ -75,6 +83,9 @@ export async function analyzeVideoFrame({
         confidence: analysis.confidence || 0,
         analyzedAt: new Date().toISOString()
       }
+    }
+    if ((await beforeSave(nextReview)) === false || snapshot.signal?.aborted) {
+      throw new globalThis.DOMException('审核内容已变更，AI 结果未写回', 'AbortError')
     }
     updated = await api.saveReview(job.id, {
       revision: lease.revision,

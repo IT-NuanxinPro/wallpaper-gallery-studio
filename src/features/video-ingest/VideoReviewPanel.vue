@@ -115,7 +115,7 @@
             }}
           </el-tag>
           <el-button :loading="busy" :disabled="busy || !!conflict" @click="$emit('analyze')">
-            分析所选封面
+            {{ autoAnalyzing ? '正在自动分析' : analysisError ? '重试分析封面' : '分析所选封面' }}
           </el-button>
         </div>
         <p class="video-review__hint">
@@ -123,6 +123,11 @@
             {{ hasModelReady ? '管理 AI 配置' : '去设置 AI' }} </router-link
           >；也可直接人工填写。
         </p>
+        <el-collapse-transition>
+          <p v-if="analysisError" class="video-review__analysis-error" role="alert">
+            {{ analysisError }}
+          </p>
+        </el-collapse-transition>
       </div>
 
       <Transition name="studio-panel" mode="out-in"
@@ -162,15 +167,9 @@
         <form v-else class="video-review__form" @submit.prevent="$emit('save')">
           <fieldset :disabled="!editable || busy">
             <div class="video-review__fields">
-              <div class="video-review__field video-review__wide">
-                <span id="video-usage-label">视频用途</span>
-                <el-segmented
-                  :model-value="draft.usage"
-                  :options="VIDEO_USAGES"
-                  :disabled="!editable || busy"
-                  aria-labelledby="video-usage-label"
-                  @update:model-value="update('usage', $event)"
-                />
+              <div class="video-review__destination video-review__wide">
+                <el-icon><Monitor /></el-icon>
+                <span>发布到电脑壁纸</span>
               </div>
               <div class="video-review__field video-review__wide">
                 <label for="video-topic">主题分类</label>
@@ -243,21 +242,32 @@
               · 封面已更换，保存时清除旧分析标记</span
             >
           </p>
-          <div class="video-review__footer">
-            <p class="video-review__hint">
-              {{ editable ? '保存审核后，可在左侧勾选并批量发布。' : '该任务当前不可编辑。' }}
-            </p>
-            <el-button
-              v-if="editable"
-              type="primary"
-              native-type="submit"
-              :loading="busy"
-              :disabled="busy || !!conflict"
-              >保存审核</el-button
-            >
-          </div>
         </form></Transition
       >
+      <div v-if="!isPublished" class="video-review__footer">
+        <div class="video-review__save-state" aria-live="polite">
+          <span class="video-review__save-dot" :class="{ 'is-ready': publishReady }" />
+          <span>{{ publishHint }}</span>
+        </div>
+        <div class="video-review__footer-actions">
+          <el-button
+            v-if="editable"
+            :loading="busy"
+            :disabled="busy || publishing || !!conflict"
+            @click="$emit('save')"
+            >保存审核</el-button
+          >
+          <el-button
+            type="primary"
+            :icon="Promotion"
+            :loading="publishing"
+            :disabled="!editable || busy || publishing"
+            @click="publish"
+          >
+            {{ job.status === 'publishing' ? '视频发布中' : '直接发布视频' }}
+          </el-button>
+        </div>
+      </div>
     </template>
     <div v-else class="video-review__waiting">
       <el-icon :size="36"><VideoCamera /></el-icon>
@@ -269,8 +279,8 @@
 
 <script setup>
 import { computed, ref, watch } from 'vue'
-import { VideoCamera, CircleCheck } from '@element-plus/icons-vue'
-import { JOB_STATUS, VIDEO_USAGES, formatBytes } from './domain'
+import { VideoCamera, CircleCheck, Monitor, Promotion } from '@element-plus/icons-vue'
+import { JOB_STATUS, VIDEO_USAGES, formatBytes, canPublish } from './domain'
 
 const props = defineProps({
   job: { type: Object, required: true },
@@ -279,16 +289,21 @@ const props = defineProps({
   dirty: Boolean,
   editable: Boolean,
   busy: Boolean,
+  publishing: Boolean,
   conflict: Object,
   hasCredentials: Boolean,
   hasModelReady: Boolean,
   model: { type: String, default: '' },
+  autoAnalyzing: Boolean,
+  analysisError: { type: String, default: '' },
   topicSuggestions: { type: Array, default: () => [] },
   topicsError: String
 })
 const emit = defineEmits([
   'update:draft',
   'save',
+  'publish',
+  'publish-blocked',
   'analyze',
   'accept-remote',
   'reapply',
@@ -296,6 +311,22 @@ const emit = defineEmits([
   'back-to-pending'
 ])
 const isPublished = computed(() => props.job.status === 'published')
+const publishReady = computed(
+  () => props.editable && canPublish(props.job) && !props.dirty && !props.conflict
+)
+const publishHint = computed(() => {
+  if (props.job.status === 'publishing') return '云端正在发布，可继续处理其他视频'
+  if (!props.editable) return '当前任务暂不可发布'
+  if (props.conflict) return '请先处理审核版本冲突'
+  if (props.dirty) return '有未保存的修改，请先保存审核'
+  if (!canPublish(props.job)) return '完善信息并保存审核后即可发布'
+  return '审核已保存，可以直接发布'
+})
+function publish() {
+  if (!publishReady.value) return emit('publish-blocked', publishHint.value)
+  emit('publish')
+}
+
 const usageLabel = computed(
   () => VIDEO_USAGES.find(usage => usage.value === props.draft.usage)?.label || props.draft.usage
 )
@@ -359,6 +390,12 @@ watch(
 
 <style scoped lang="scss">
 .video-review {
+  &__analysis-error {
+    margin: 10px 0 0;
+    color: #efb4a0;
+    font-size: 12px;
+    line-height: 1.6;
+  }
   --review-text: var(--studio-text, #f4f6fb);
   --review-muted: var(--studio-muted, #b1b9c9);
   --review-border: var(--studio-border, rgba(255, 255, 255, 0.13));
@@ -519,18 +556,12 @@ watch(
   &__wide {
     grid-column: 1 / -1;
   }
-  &__field :deep(.el-segmented) {
-    align-self: flex-start;
-    border-radius: 999px;
-    padding: 4px;
-    background: rgba(91, 106, 130, 0.22);
-    box-shadow: inset 0 1px rgba(255, 255, 255, 0.09);
-    --el-segmented-item-selected-color: #fff;
-    --el-segmented-item-selected-bg-color: rgba(177, 197, 226, 0.19);
-  }
-  &__field :deep(.el-segmented__item),
-  &__field :deep(.el-segmented__item-selected) {
-    border-radius: 999px;
+  &__destination {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    color: var(--review-muted);
+    font-size: 12px;
   }
   input,
   textarea {
@@ -586,13 +617,43 @@ watch(
     cursor: pointer;
   }
   &__footer {
-    margin-top: 22px;
-    padding-top: 16px;
+    position: sticky;
+    z-index: 2;
+    bottom: calc(-1 * var(--review-padding, 22px));
+    margin: 24px calc(-1 * var(--review-padding, 22px)) calc(-1 * var(--review-padding, 22px));
+    padding: 14px var(--review-padding, 22px) 16px;
     border-top: 1px solid var(--review-border);
+    background: rgba(25, 31, 42, 0.94);
+    backdrop-filter: blur(24px) saturate(1.4);
+    box-shadow: 0 -8px 24px rgba(8, 12, 20, 0.08);
     justify-content: space-between;
   }
-  &__footer .video-review__hint {
-    margin: 0;
+  &__save-state {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 11px;
+    color: var(--review-muted);
+  }
+  &__save-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #d9ba83;
+    flex: none;
+    &.is-ready {
+      background: #9bd5b7;
+    }
+  }
+  &__footer-actions {
+    display: flex;
+    gap: 8px;
+    margin-left: auto;
+    :deep(.el-button) {
+      margin: 0;
+      border-radius: 12px;
+      min-height: 38px;
+    }
   }
   &__waiting {
     padding: 72px 20px;
@@ -661,9 +722,11 @@ watch(
       align-items: stretch;
       flex-direction: column;
     }
-    &__field :deep(.el-segmented) {
-      width: 100%;
-      font-size: 12px;
+    &__footer-actions {
+      margin-left: 0;
+      :deep(.el-button) {
+        flex: 1;
+      }
     }
   }
   @media (prefers-reduced-motion: reduce) {

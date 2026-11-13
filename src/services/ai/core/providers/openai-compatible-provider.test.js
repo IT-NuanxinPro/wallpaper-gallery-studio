@@ -22,6 +22,15 @@ afterEach(() => {
 })
 
 describe('当前会话的模型请求', () => {
+  it('503保留状态供自动队列暂停，并提示检查上游而不显示原始响应', async () => {
+    const readBody = vi.fn(async () => ({ error: { message: apiKey } }))
+    fetch.mockResolvedValueOnce({ ok: false, status: 503, json: readBody })
+    const error = await new Sub2apiProvider().analyze(request).catch(error => error)
+    expect(error).toMatchObject({ code: 'AI_HTTP_ERROR', status: 503 })
+    expect(error.message).toContain('上游分组和账号状态')
+    expect(error.message).not.toContain(apiKey)
+    expect(readBody).not.toHaveBeenCalled()
+  })
   it.each(['vision-alpha', 'vendor/vision-beta'])('请求使用当前会话选择的模型 %s', async model => {
     await new Sub2apiProvider({ baseUrl: 'https://default.example/v1' }).analyze({
       ...request,

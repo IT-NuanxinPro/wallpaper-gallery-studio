@@ -19,14 +19,6 @@ export const JOB_STATUS = {
   failed: '失败',
   expired: '已过期'
 }
-export const PUBLICATION_STATUS = {
-  queued: '等待发布',
-  publishing: '写入图床',
-  deploying: '部署中',
-  published: '已发布',
-  failed: '发布失败'
-}
-
 export function abortError() {
   const error = new Error('上传已暂停，可重选同一文件继续')
   error.name = 'AbortError'
@@ -72,17 +64,18 @@ export async function hashVideoFile(
 }
 
 export function createReviewDraft(job) {
-  const metadata = job.result?.metadata || {}
   const defaults = {
     selectedFrameId: job.result?.defaultFrameId || job.result?.frames?.[0]?.id || '',
-    usage: metadata.height > metadata.width ? 'mobile' : 'desktop',
+    usage: 'desktop',
     topic: '',
     filename: `${(job.filename || '视频').replace(/\.[^.]+$/, '')}.mp4`,
     displayTitle: '',
     description: '',
     keywords: []
   }
-  return JSON.parse(JSON.stringify({ ...defaults, ...job.review }))
+  const draft = { ...defaults, ...job.review }
+  if (canReview(job)) draft.usage = 'desktop'
+  return JSON.parse(JSON.stringify(draft))
 }
 
 export function validateReview(review, frames = []) {
@@ -112,7 +105,9 @@ export function canReview(job) {
 
 export function canPublish(job) {
   return (
-    job?.status === 'awaiting_review' && validateReview(job.review, job.result?.frames).length === 0
+    job?.status === 'awaiting_review' &&
+    job.review?.usage === 'desktop' &&
+    validateReview(job.review, job.result?.frames).length === 0
   )
 }
 

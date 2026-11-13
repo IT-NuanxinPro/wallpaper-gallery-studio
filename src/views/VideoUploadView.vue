@@ -75,6 +75,11 @@
           <p class="video-workspace__hint">
             上传可暂停并继续。云端任务会自动保存，离开后仍可回来审核。
           </p>
+          <div class="video-workspace__auto-analysis">
+            <el-switch v-model="autoAnalysisEnabled" aria-label="云端就绪后自动分析封面" />
+            <span>就绪后自动分析封面</span>
+            <span class="video-workspace__auto-status" role="status">{{ autoAnalysisStatus }}</span>
+          </div>
           <el-collapse-transition
             ><TransitionGroup
               v-if="transfers.length"
@@ -168,94 +173,13 @@
                 :loading="loading"
                 :active-job-ids="activeJobIds"
                 :retrying-ids="retryingIds"
+                :analyzing-job-id="autoActiveJobId"
+                :analysis-errors="autoErrors"
                 @select="selectJob"
                 @publish="publishSelected"
                 @resume="chooseResume"
                 @retry="retryJob"
               />
-              <el-collapse-transition>
-                <div v-show="hasPublicationFeedback" class="video-workspace__feedback">
-                  <Transition name="studio-feedback">
-                    <section
-                      v-if="hasActivePublicationFeedback"
-                      key="progress"
-                      class="video-workspace__publications"
-                      data-scroll-region
-                      aria-label="发布进度"
-                    >
-                      <div class="video-workspace__section-heading">
-                        <h2>发布进度</h2>
-                        <span>自动更新</span>
-                      </div>
-                      <article
-                        v-for="publication in activePublications"
-                        :key="publication.id"
-                        class="video-workspace__publication"
-                      >
-                        <div class="video-workspace__section-heading">
-                          <strong>{{ publication.jobs?.length || 0 }} 个视频</strong>
-                          <el-tag :type="statusType(publication.status)" size="small">{{
-                            PUBLICATION_STATUS[publication.status] || publication.status
-                          }}</el-tag>
-                        </div>
-                        <ol class="video-workspace__stages" aria-label="发布阶段">
-                          <li
-                            v-for="(label, index) in publicationStages"
-                            :key="label"
-                            :class="{ 'is-complete': publicationStage(publication) >= index }"
-                          >
-                            {{ label }}
-                          </li>
-                        </ol>
-                        <p v-if="publication.error" class="video-workspace__transfer-error">
-                          {{ errorMessage(publication.error) }}
-                        </p>
-                        <el-button
-                          v-if="publication.status === 'failed'"
-                          size="small"
-                          :disabled="!canWrite || retryingIds.includes(publication.id)"
-                          :loading="retryingIds.includes(publication.id)"
-                          @click="retryPublication(publication.id)"
-                          >继续发布</el-button
-                        >
-                        <p
-                          v-if="publicationErrors[publication.id]"
-                          class="video-workspace__transfer-error"
-                        >
-                          进度刷新失败：{{ publicationErrors[publication.id] }}
-                        </p>
-                      </article>
-                      <p
-                        v-for="(message, id) in missingPublicationErrors"
-                        :key="id"
-                        class="video-workspace__transfer-error"
-                      >
-                        批次加载失败：{{ message }}
-                      </p>
-                    </section>
-                    <div
-                      v-else-if="showCompletedPublication"
-                      key="completed"
-                      class="video-workspace__published-notice"
-                      role="status"
-                    >
-                      <el-icon><CircleCheck /></el-icon>
-                      <div>
-                        <strong>{{ completedPublication.jobs?.length || 0 }} 个视频已发布</strong
-                        ><span>已移入发布历史，待办已更新。</span>
-                      </div>
-                      <el-button link @click="showPublishedHistory">查看历史</el-button>
-                      <el-button
-                        circle
-                        text
-                        :icon="Close"
-                        aria-label="关闭发布完成提示"
-                        @click="completedPublication = null"
-                      />
-                    </div>
-                  </Transition>
-                </div>
-              </el-collapse-transition>
             </div>
           </Transition>
 
@@ -287,13 +211,18 @@
                   :dirty="isDirty"
                   :editable="canWrite && canReview(selectedJob)"
                   :busy="reviewBusy"
+                  :publishing="publishing"
                   :conflict="conflict"
                   :has-credentials="credentialsStore.hasCredentials"
                   :has-model-ready="credentialsStore.hasModelReady"
                   :model="credentialsStore.selectedModel"
+                  :auto-analyzing="autoActiveJobId === selectedJob.id"
+                  :analysis-error="autoErrors[selectedJob.id] || ''"
                   :topic-suggestions="topics"
                   :topics-error="topicsError"
                   @save="saveReview()"
+                  @publish="publishCurrent"
+                  @publish-blocked="showReviewFeedback('warning', $event)"
                   @analyze="analyzeReview"
                   @accept-remote="workspace.acceptRemoteReview()"
                   @reapply="saveReview(true)"
@@ -317,6 +246,17 @@
         </div>
       </template>
     </div>
+    <VideoPublicationNotice
+      v-if="configured"
+      :publications="publications"
+      :errors="publicationErrors"
+      :submitting="publishing"
+      :can-write="canWrite"
+      :retrying-ids="retryingIds"
+      @retry="retryPublication"
+      @refresh="refresh"
+      @history="showPublishedHistory"
+    />
   </MainLayout>
 </template>
 
@@ -324,14 +264,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { onBeforeRouteLeave } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import {
-  Upload,
-  VideoCamera,
-  CircleCheck,
-  Refresh,
-  Close,
-  ArrowLeft
-} from '@element-plus/icons-vue'
+import { Upload, VideoCamera, Refresh, ArrowLeft } from '@element-plus/icons-vue'
 import MainLayout from '@/components/MainLayout.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useConfigStore } from '@/stores/config'
@@ -339,12 +272,14 @@ import { useCredentialsStore } from '@/stores/credentials'
 import { useAiConfigurationGuard } from '@/composables/useAiConfigurationGuard'
 import { analyzeImage } from '@/services/ai/classifier'
 import VideoReviewPanel from '@/features/video-ingest/VideoReviewPanel.vue'
+import VideoPublicationNotice from '@/features/video-ingest/VideoPublicationNotice.vue'
 import VideoJobQueue from '@/features/video-ingest/VideoJobQueue.vue'
 import { createVideoUploadManager } from '@/features/video-ingest/upload-manager'
 import { createVideoApi } from '@/features/video-ingest/api'
 import { createVideoUploader } from '@/features/video-ingest/uploader'
 import { createVideoWorkspace } from '@/features/video-ingest/workspace'
-import { canReview, errorMessage, PUBLICATION_STATUS } from '@/features/video-ingest/domain'
+import { createVideoAutoAnalysis } from '@/features/video-ingest/auto-analysis'
+import { canReview, errorMessage } from '@/features/video-ingest/domain'
 
 const authStore = useAuthStore()
 const configStore = useConfigStore()
@@ -433,6 +368,57 @@ function backToPending() {
 }
 const retryingIds = ref([])
 const canWrite = computed(() => authStore.canUpload)
+const autoAnalysisEnabled = ref(true)
+const autoAnalysisReady = ref(false)
+const autoAnalysis = createVideoAutoAnalysis({
+  workspace,
+  getCredentials: () => credentialsStore.getCredentialsByProvider('sub2api'),
+  canRun: () =>
+    autoAnalysisReady.value &&
+    autoAnalysisEnabled.value &&
+    canWrite.value &&
+    credentialsStore.hasModelReady &&
+    !publishing.value,
+  contextKey: JSON.stringify([authStore.user?.login, configStore.config.videoApiUrl])
+})
+const {
+  activeJobId: autoActiveJobId,
+  errors: autoErrors,
+  paused: autoPaused,
+  pauseReason: autoPauseReason
+} = autoAnalysis
+const autoAnalysisStatus = computed(() => {
+  if (!autoAnalysisEnabled.value) return '已关闭，可手动分析'
+  if (!credentialsStore.hasModelReady) return '配置 API Key 和模型后继续'
+  if (autoActiveJobId.value) return '正在分析封面，请稍候'
+  if (autoPaused.value) return autoPauseReason.value || '分析已暂停，请检查模型配置后手动重试'
+  if (Object.keys(autoErrors.value).length) return '部分任务需要手动重试'
+  return '本页打开时自动分析，已编辑的任务会跳过'
+})
+watch(
+  () => credentialsStore.sessionRevision,
+  () => {
+    autoAnalysis.reset()
+    autoAnalysis.run()
+  }
+)
+watch(
+  [
+    jobs,
+    reviewBusy,
+    publishing,
+    canWrite,
+    autoAnalysisEnabled,
+    autoAnalysisReady,
+    () => credentialsStore.hasModelReady
+  ],
+  () => {
+    if (!autoAnalysisEnabled.value || !canWrite.value || !credentialsStore.hasModelReady)
+      autoAnalysis.cancel()
+    else autoAnalysis.run()
+  },
+  { deep: false }
+)
 const uploadManager = createVideoUploadManager({
   uploader,
   onJob: job => workspace.upsertJob(job),
@@ -442,30 +428,9 @@ const { transfers, hasActiveTransfers } = uploadManager
 const activeJobIds = computed(() =>
   transfers.value.filter(isTransferring).map(transfer => transfer.jobId)
 )
-const activePublications = computed(() =>
-  publications.value.filter(publication => publication.status !== 'published')
-)
-const completedPublication = ref(null)
-const observedPublicationStates = new Map()
-
-watch(
-  () => publications.value.map(publication => [publication.id, publication.status]),
-  states => {
-    for (const [id, status] of states) {
-      const previousStatus = observedPublicationStates.get(id)
-      if (previousStatus && previousStatus !== 'published' && status === 'published') {
-        completedPublication.value = publications.value.find(publication => publication.id === id)
-      }
-      observedPublicationStates.set(id, status)
-    }
-  },
-  { immediate: true }
-)
-
 function showPublishedHistory() {
   queueTab.value = 'published'
   mobilePane.value = 'queue'
-  completedPublication.value = null
 }
 
 watch([queueTab, () => selectedJob.value?.status], () => {
@@ -476,23 +441,6 @@ watch([queueTab, () => selectedJob.value?.status], () => {
     workspace.selectJob(candidates[0]?.id || '')
 })
 
-const missingPublicationErrors = computed(() =>
-  Object.fromEntries(
-    Object.entries(publicationErrors.value).filter(
-      ([id]) => !publications.value.some(publication => publication.id === id)
-    )
-  )
-)
-const hasActivePublicationFeedback = computed(
-  () =>
-    activePublications.value.length > 0 || Object.keys(missingPublicationErrors.value).length > 0
-)
-const showCompletedPublication = computed(
-  () => !!completedPublication.value && queueTab.value === 'pending'
-)
-const hasPublicationFeedback = computed(
-  () => hasActivePublicationFeedback.value || showCompletedPublication.value
-)
 const transferLabels = {
   waiting: '等待上传',
   hashing: '校验文件',
@@ -502,7 +450,6 @@ const transferLabels = {
   paused: '已暂停',
   error: '上传失败'
 }
-const publicationStages = ['排队', '写入', '部署', '完成']
 
 function isTransferring(transfer) {
   return ['waiting', 'hashing', 'uploading', 'completing'].includes(transfer.stage)
@@ -510,22 +457,6 @@ function isTransferring(transfer) {
 function hasActiveTransfer(jobId) {
   return uploadManager.hasActive(jobId)
 }
-function statusType(status) {
-  return status === 'published'
-    ? 'success'
-    : ['failed', 'expired'].includes(status)
-      ? 'danger'
-      : ['awaiting_ai', 'awaiting_review'].includes(status)
-        ? 'warning'
-        : 'info'
-}
-function publicationStage(publication) {
-  if (publication.status === 'published') return 3
-  if (publication.status === 'deploying' || publication.deploymentId) return 2
-  if (publication.status === 'publishing' || publication.metadataCommitSha) return 1
-  return 0
-}
-
 async function refresh() {
   await Promise.allSettled([workspace.refresh(), workspace.loadTopics()])
 }
@@ -586,35 +517,53 @@ function handleResume(event) {
   if (file && job) addFiles([file], job)
 }
 
+let reviewFeedback
+function showReviewFeedback(type, message) {
+  reviewFeedback?.close()
+  reviewFeedback = ElMessage({ type, message })
+}
 async function saveReview(useLatest = false) {
   try {
     await workspace.saveReview({ useLatest })
-    ElMessage.success('审核已保存')
+    showReviewFeedback('success', '审核已保存')
   } catch (failure) {
-    ElMessage.error(errorMessage(failure))
+    showReviewFeedback('error', errorMessage(failure))
   }
 }
 async function analyzeReview() {
   if (!requireAiConfiguration()) return
+  if (reviewBusy.value) return
+  const id = selectedJob.value?.id
+  if (!id) return
+  autoAnalysis.block(id)
   try {
     await workspace.analyzeReview({
       analyzeImage,
       providerType: 'sub2api',
       credentials: credentialsStore.getCredentialsByProvider('sub2api')
     })
-    ElMessage.success('封面分析完成，建议已保存，可继续人工审核')
+    showReviewFeedback('success', '封面分析完成，建议已保存，可继续人工审核')
   } catch (failure) {
-    ElMessage.error(errorMessage(failure))
+    autoAnalysis.block(id, failure)
+    showReviewFeedback('error', errorMessage(failure))
   }
 }
-async function publishSelected() {
+async function publish(action) {
+  if (!canWrite.value || publishing.value) return
+  reviewFeedback?.close()
   try {
-    await workspace.publishSelected()
-    ElMessage.success('发布批次已加入云端队列')
+    await action()
   } catch (failure) {
-    ElMessage.error(errorMessage(failure))
+    showReviewFeedback('error', errorMessage(failure))
     await refresh()
   }
+}
+function publishSelected() {
+  return publish(() => workspace.publishSelected())
+}
+function publishCurrent() {
+  const id = selectedJob.value?.id
+  if (id) return publish(() => workspace.publishJob(id))
 }
 async function retryJob(job) {
   retryingIds.value.push(job.id)
@@ -632,7 +581,6 @@ async function retryPublication(id) {
   retryingIds.value.push(id)
   try {
     await workspace.retryPublication(id)
-    ElMessage.success('发布批次已恢复')
     await refresh()
   } catch (failure) {
     ElMessage.error(errorMessage(failure))
@@ -672,9 +620,13 @@ onMounted(async () => {
     workspace.refresh(),
     workspace.loadTopics()
   ])
+  autoAnalysisReady.value = true
+  autoAnalysis.run()
   workspace.startPolling()
 })
 onBeforeUnmount(() => {
+  reviewFeedback?.close()
+  autoAnalysis.dispose()
   workspace.dispose()
   uploadManager.dispose()
   window.removeEventListener('beforeunload', beforeUnload)
@@ -804,6 +756,20 @@ onBeforeUnmount(() => {
     margin: 10px 0 0;
     padding-left: 4px;
   }
+  &__auto-analysis {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px 10px;
+    margin-top: 8px;
+    padding-left: 4px;
+    font-size: 12px;
+    color: var(--studio-text);
+  }
+  &__auto-status {
+    color: var(--studio-muted);
+    font-size: 11px;
+  }
   &__transfers {
     position: relative;
     max-height: min(150px, 20vh);
@@ -860,103 +826,8 @@ onBeforeUnmount(() => {
     display: flex;
     flex-direction: column;
   }
-  &__feedback {
-    flex: 0 1 auto;
-    min-height: 0;
-    height: 160px;
-    max-height: 28%;
-    padding-top: 18px;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: minmax(0, 1fr);
-    overflow: hidden;
-    overflow-anchor: none;
-  }
-  &__feedback > * {
-    grid-area: 1 / 1;
-    min-width: 0;
-    min-height: 0;
-  }
-  &__publications {
-    overflow: auto;
-    overscroll-behavior: contain;
-    scrollbar-width: thin;
-    padding: 18px 12px;
-    border-top: 1px solid var(--studio-border, rgba(255, 255, 255, 0.13));
-  }
-  &__section-heading {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-  }
-  &__section-heading h2 {
-    margin: 0;
-    font-size: 13px;
-    font-weight: 600;
-  }
-  &__section-heading > span {
-    color: var(--studio-muted, #b1b9c9);
-    font-size: 11px;
-  }
-  &__section-heading strong {
-    font-size: 13px;
-    font-weight: 500;
-  }
-  &__publication {
-    margin-top: 18px;
-  }
-  &__stages {
-    display: flex;
-    gap: 8px;
-    list-style: none;
-    padding: 0;
-    margin: 14px 0 0;
-  }
-  &__stages li {
-    flex: 1;
-    color: #929caf;
-    border-top: 3px solid rgba(255, 255, 255, 0.11);
-    padding-top: 8px;
-    font-size: 11px;
-  }
-  &__stages li.is-complete {
-    color: #c6defd;
-    border-color: #7db7ff;
-  }
-  &__published-notice {
-    align-self: start;
-    overflow: auto;
-    max-height: 100%;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 16px;
-    background: rgba(70, 113, 92, 0.17);
-    border-radius: 18px;
-  }
-  &__published-notice > .el-icon {
-    color: #a1dfbc;
-    font-size: 22px;
-  }
-  &__published-notice > div {
-    display: flex;
-    flex: 1;
-    flex-direction: column;
-    gap: 4px;
-  }
-  &__published-notice strong {
-    font-size: 13px;
-    font-weight: 500;
-  }
-  &__published-notice span {
-    font-size: 11px;
-    color: #b8cfc1;
-  }
-  &__published-notice :deep(.el-button + .el-button) {
-    margin-left: 0;
-  }
   &__review {
+    --review-padding: 22px;
     min-width: 0;
     min-height: 0;
     overflow: auto;
@@ -1001,6 +872,7 @@ onBeforeUnmount(() => {
       gap: 18px;
     }
     &__review {
+      --review-padding: 18px;
       padding: 18px;
     }
   }
@@ -1058,11 +930,9 @@ onBeforeUnmount(() => {
       display: none;
     }
     &__review {
+      --review-padding: 16px;
       padding: 16px;
       border-radius: 20px;
-    }
-    &__published-notice {
-      flex-wrap: wrap;
     }
   }
   &__mobile-navigation {

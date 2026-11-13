@@ -37,6 +37,23 @@ function createPanel() {
 }
 
 describe('视频候选帧审核交互', () => {
+  it('单条发布始终显眼，未保存时明确提示；保存后直接发布，无需勾选', async () => {
+    const panel = createPanel()
+    const job = { ...panel.props('job'), review: { ...draft } }
+    await panel.setProps({ job, dirty: true })
+    const button = panel.get('.video-review__footer-actions .el-button--primary')
+    expect(button.text()).toBe('直接发布视频')
+    await button.trigger('click')
+    expect(panel.emitted('publish')).toBeUndefined()
+    expect(panel.emitted('publish-blocked')).toEqual([['有未保存的修改，请先保存审核']])
+    await panel.setProps({ dirty: false })
+    await button.trigger('click')
+    expect(panel.emitted('publish')).toHaveLength(1)
+    await panel.setProps({ publishing: true })
+    expect(button.attributes('disabled')).toBeDefined()
+    panel.unmount()
+  })
+
   it('未选模型的分析入口可点击以触发配置提示，仍可编辑审核信息', async () => {
     const panel = createPanel()
     const controls = panel.get('.video-review__ai')
@@ -88,12 +105,11 @@ describe('视频候选帧审核交互', () => {
     panel.unmount()
   })
 
-  it('用途使用可访问的分段控件，发布后显示只读成果且不残留表单和 AI 操作', async () => {
+  it('用途固定电脑壁纸，发布后显示只读成果且不残留表单和 AI 操作', async () => {
     const panel = createPanel()
     expect(panel.find('select').exists()).toBe(false)
-    const usage = panel.getComponent({ name: 'ElSegmented' })
-    usage.vm.$emit('update:modelValue', 'mobile')
-    expect(panel.emitted('update:draft').at(-1)[0].usage).toBe('mobile')
+    expect(panel.findComponent({ name: 'ElSegmented' }).exists()).toBe(false)
+    expect(panel.get('.video-review__destination').text()).toContain('电脑壁纸')
     await panel.setProps({ job: { ...panel.props('job'), status: 'published' } })
     expect(panel.text()).toContain('已发布到画廊')
     expect(panel.text()).toContain('星空描述')
