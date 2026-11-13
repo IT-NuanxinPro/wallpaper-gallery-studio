@@ -12,16 +12,19 @@
         @update:model-value="$emit('update:tab', $event)"
       />
     </div>
-    <div v-if="tab === 'pending'" class="video-job-queue__toolbar">
-      <el-segmented
-        v-model="filter"
-        class="video-job-queue__filters"
-        :options="filters"
-        aria-label="按任务状态筛选"
-      />
-      <el-button v-if="publishable.length && canWrite" link @click="toggleAll">
-        {{ allSelected ? '取消全选' : '选择可发布' }}
-      </el-button>
+    <div class="video-job-queue__toolbar">
+      <template v-if="tab === 'pending'">
+        <el-segmented
+          v-model="filter"
+          class="video-job-queue__filters"
+          :options="filters"
+          aria-label="按任务状态筛选"
+        />
+        <el-button v-if="publishable.length && canWrite" link @click="toggleAll">
+          {{ allSelected ? '取消全选' : '选择可发布' }}
+        </el-button>
+      </template>
+      <span v-else class="video-job-queue__history-label">已发布内容 · 只读查看</span>
     </div>
     <el-collapse-transition
       ><div v-if="tab === 'pending' && selected.length" class="video-job-queue__bulk" role="status">
@@ -36,113 +39,116 @@
         >
       </div></el-collapse-transition
     >
-    <Transition name="studio-feedback"
-      ><div v-if="!visibleJobs.length" class="video-job-queue__empty">
-        <el-icon><VideoCamera /></el-icon>
-        <strong>{{
-          loading
-            ? '正在加载任务'
-            : tab === 'published'
-              ? '暂无发布记录'
-              : pendingJobs.length
-                ? '此状态下没有任务'
-                : '待办已清空'
-        }}</strong>
-        <p>
-          {{
-            tab === 'published'
-              ? '发布完成的视频会保留在这里。'
-              : '添加视频后，在这里跟进上传、审核与发布。'
-          }}
-        </p>
-      </div></Transition
-    >
-    <TransitionGroup
-      v-show="visibleJobs.length"
-      name="studio-list"
-      tag="ul"
-      class="video-job-queue__list"
-      data-scroll-region
-      tabindex="0"
-      aria-label="视频队列，可独立滚动"
-    >
-      <li
-        v-for="job in visibleJobs"
-        :key="job.id"
-        class="video-job-queue__item"
-        :class="{ 'is-active': selectedJobId === job.id }"
+    <div class="video-job-queue__viewport">
+      <Transition name="studio-feedback"
+        ><div v-if="!visibleJobs.length" class="video-job-queue__empty">
+          <el-icon><VideoCamera /></el-icon>
+          <strong>{{
+            loading
+              ? '正在加载任务'
+              : tab === 'published'
+                ? '暂无发布记录'
+                : pendingJobs.length
+                  ? '此状态下没有任务'
+                  : '待办已清空'
+          }}</strong>
+          <p>
+            {{
+              tab === 'published'
+                ? '发布完成的视频会保留在这里。'
+                : '添加视频后，在这里跟进上传、审核与发布。'
+            }}
+          </p>
+        </div></Transition
       >
-        <div class="video-job-queue__row">
-          <span v-if="tab === 'pending'" class="video-job-queue__check">
-            <el-checkbox
-              v-if="canPublish(job)"
-              :model-value="selected.includes(job.id)"
-              :disabled="!canWrite || publishing"
-              :aria-label="`选择发布 ${job.filename}`"
-              @change="toggleJob(job.id, $event)"
-            />
-          </span>
-          <button
-            class="video-job-queue__select"
-            type="button"
-            :aria-current="selectedJobId === job.id ? 'true' : undefined"
-            :disabled="busy"
-            @click="$emit('select', job.id)"
-          >
-            <span class="video-job-queue__thumbnail">
-              <img
-                v-if="thumbnail(job) && !failedImages.includes(job.id)"
-                :src="thumbnail(job)"
-                alt=""
-                crossorigin="anonymous"
-                loading="lazy"
-                @error="failedImages.push(job.id)"
+      <TransitionGroup
+        :aria-hidden="!visibleJobs.length"
+        :inert="!visibleJobs.length"
+        name="studio-list"
+        tag="ul"
+        class="video-job-queue__list"
+        data-scroll-region
+        tabindex="0"
+        aria-label="视频队列，可独立滚动"
+      >
+        <li
+          v-for="job in visibleJobs"
+          :key="job.id"
+          class="video-job-queue__item"
+          :class="{ 'is-active': selectedJobId === job.id }"
+        >
+          <div class="video-job-queue__row">
+            <span v-if="tab === 'pending'" class="video-job-queue__check">
+              <el-checkbox
+                v-if="canPublish(job)"
+                :model-value="selected.includes(job.id)"
+                :disabled="!canWrite || publishing"
+                :aria-label="`选择发布 ${job.filename}`"
+                @change="toggleJob(job.id, $event)"
               />
-              <el-icon v-else><VideoCamera /></el-icon>
             </span>
-            <span class="video-job-queue__copy">
-              <strong :title="job.filename">{{ job.filename }}</strong>
-              <span
-                >{{ formatBytes(job.size)
-                }}<template v-if="job.result?.metadata?.duration">
-                  · {{ Number(job.result.metadata.duration).toFixed(0) }} 秒</template
-                ></span
-              >
-              <span class="video-job-queue__next">{{ nextStep(job) }}</span>
-            </span>
-          </button>
-          <el-tag :type="statusType(job.status)" size="small" effect="plain">{{
-            JOB_STATUS[job.status] || job.status
-          }}</el-tag>
-        </div>
-        <Transition name="studio-feedback"
-          ><p v-if="job.error" class="video-job-queue__error">
-            {{ errorMessage(job.error) }}
-          </p></Transition
-        >
-        <div
-          v-if="['uploading', 'failed', 'expired'].includes(job.status)"
-          class="video-job-queue__actions"
-        >
-          <el-button
-            v-if="job.status === 'uploading'"
-            link
-            :disabled="!canWrite || activeJobIds.includes(job.id)"
-            @click="$emit('resume', job.id)"
-            >{{ activeJobIds.includes(job.id) ? '本页上传中' : '重选源视频继续' }}</el-button
+            <button
+              class="video-job-queue__select"
+              type="button"
+              :aria-current="selectedJobId === job.id ? 'true' : undefined"
+              :disabled="busy"
+              @click="$emit('select', job.id)"
+            >
+              <span class="video-job-queue__thumbnail">
+                <img
+                  v-if="thumbnail(job) && !failedImages.includes(job.id)"
+                  :src="thumbnail(job)"
+                  alt=""
+                  crossorigin="anonymous"
+                  loading="lazy"
+                  @error="failedImages.push(job.id)"
+                />
+                <el-icon v-else><VideoCamera /></el-icon>
+              </span>
+              <span class="video-job-queue__copy">
+                <strong :title="job.filename">{{ job.filename }}</strong>
+                <span
+                  >{{ formatBytes(job.size)
+                  }}<template v-if="job.result?.metadata?.duration">
+                    · {{ Number(job.result.metadata.duration).toFixed(0) }} 秒</template
+                  ></span
+                >
+                <span class="video-job-queue__next">{{ nextStep(job) }}</span>
+              </span>
+            </button>
+            <el-tag :type="statusType(job.status)" size="small" effect="plain">{{
+              JOB_STATUS[job.status] || job.status
+            }}</el-tag>
+          </div>
+          <Transition name="studio-feedback"
+            ><p v-if="job.error" class="video-job-queue__error">
+              {{ errorMessage(job.error) }}
+            </p></Transition
           >
-          <el-button
-            v-if="job.status === 'failed'"
-            link
-            :disabled="!canWrite || retryingIds.includes(job.id)"
-            :loading="retryingIds.includes(job.id)"
-            @click="$emit('retry', job)"
-            >{{ job.publicationId ? '继续发布' : '重试处理' }}</el-button
+          <div
+            v-if="['uploading', 'failed', 'expired'].includes(job.status)"
+            class="video-job-queue__actions"
           >
-          <span v-if="job.status === 'expired'">请重新添加源视频</span>
-        </div>
-      </li>
-    </TransitionGroup>
+            <el-button
+              v-if="job.status === 'uploading'"
+              link
+              :disabled="!canWrite || activeJobIds.includes(job.id)"
+              @click="$emit('resume', job.id)"
+              >{{ activeJobIds.includes(job.id) ? '本页上传中' : '重选源视频继续' }}</el-button
+            >
+            <el-button
+              v-if="job.status === 'failed'"
+              link
+              :disabled="!canWrite || retryingIds.includes(job.id)"
+              :loading="retryingIds.includes(job.id)"
+              @click="$emit('retry', job)"
+              >{{ job.publicationId ? '继续发布' : '重试处理' }}</el-button
+            >
+            <span v-if="job.status === 'expired'">请重新添加源视频</span>
+          </div>
+        </li>
+      </TransitionGroup>
+    </div>
   </section>
 </template>
 
@@ -293,6 +299,7 @@ function nextStep(job) {
       0 1px 3px rgba(0, 0, 0, 0.18);
   }
   &__toolbar {
+    min-height: 44px;
     flex: none;
     display: flex;
     align-items: center;
@@ -324,9 +331,19 @@ function nextStep(job) {
     border-radius: 16px;
     font-size: 12px;
   }
-  &__list {
+  &__history-label {
+    font-size: 12px;
+    color: var(--studio-muted);
+  }
+  &__viewport {
     position: relative;
     flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+  &__list {
+    position: relative;
+    height: 100%;
     min-height: 0;
     overscroll-behavior: contain;
     list-style: none;
@@ -447,9 +464,11 @@ function nextStep(job) {
     color: var(--studio-muted, #b1b9c9);
   }
   &__empty {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
     min-height: 0;
     overflow: auto;
-    flex: 1;
     display: flex;
     flex-direction: column;
     align-items: center;

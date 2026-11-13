@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import ElementPlus from 'element-plus'
 import VideoJobQueue from './VideoJobQueue.vue'
@@ -24,6 +24,34 @@ const jobs = [
 ]
 
 describe('视频任务分区', () => {
+  it('空待办退出期间，已发布列表始终留在独立且持久的内容槽', async () => {
+    vi.useFakeTimers()
+    const queue = mount(VideoJobQueue, {
+      props: { jobs: [jobs[1]], tab: 'pending', canWrite: true },
+      global: { plugins: [ElementPlus], stubs: { transition: false, 'transition-group': false } }
+    })
+    try {
+      const viewport = queue.get('.video-job-queue__viewport').element
+      const list = queue.get('.video-job-queue__list').element
+      const toolbar = queue.get('.video-job-queue__toolbar').element
+      await queue.setProps({ tab: 'published' })
+      const leavingEmpty = queue.get('.video-job-queue__empty')
+      expect(leavingEmpty.classes()).toContain('studio-feedback-leave-active')
+      expect(leavingEmpty.element.parentElement).toBe(viewport)
+      expect(queue.get('.video-job-queue__list').element).toBe(list)
+      expect(queue.get('.video-job-queue__toolbar').element).toBe(toolbar)
+      expect(queue.get('.video-job-queue__list').attributes('aria-hidden')).toBe('false')
+      await queue.setProps({ tab: 'pending' })
+      await queue.setProps({ tab: 'published' })
+      await vi.runAllTimersAsync()
+      expect(queue.find('.video-job-queue__empty').exists()).toBe(false)
+      expect(queue.findAll('.video-job-queue__item')).toHaveLength(1)
+      expect(queue.get('.video-job-queue__list').element).toBe(list)
+    } finally {
+      queue.unmount()
+      vi.useRealTimers()
+    }
+  })
   it('默认待办排除已发布；历史无勾选框和批量发布，切回待办可审核', async () => {
     const queue = mount(VideoJobQueue, {
       props: { jobs, canWrite: true },

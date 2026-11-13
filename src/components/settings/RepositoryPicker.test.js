@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import ElementPlus from 'element-plus'
 import RepositoryPicker from './RepositoryPicker.vue'
@@ -14,7 +14,41 @@ const repo = {
   private: true
 }
 beforeEach(() => vi.clearAllMocks())
+afterEach(() => vi.useRealTimers())
 describe('远程仓库选择', () => {
+  it('真实列表过渡下，加载、结果和搜索空态不会同时作为普通流兄弟节点出现', async () => {
+    let finishLoading
+    fetchRepositories.mockImplementationOnce(
+      () =>
+        new Promise(resolve => {
+          finishLoading = resolve
+        })
+    )
+    const panel = mount(RepositoryPicker, {
+      props: { token: 'test-token' },
+      global: { plugins: [ElementPlus], stubs: { transition: false, 'transition-group': false } }
+    })
+    const states = () =>
+      panel.element.querySelectorAll(
+        ':scope > .repository-picker__empty, :scope > .repository-picker__list'
+      )
+    expect(states()).toHaveLength(1)
+    expect(panel.get('.repository-picker__empty').attributes('role')).toBe('status')
+    finishLoading({ repositories: [repo], hasMore: false })
+    await flushPromises()
+    expect(states()).toHaveLength(1)
+    expect(panel.find('.repository-picker__list').exists()).toBe(true)
+    vi.useFakeTimers()
+    await panel.get('input[aria-label="搜索仓库"]').setValue('missing')
+    expect(states()).toHaveLength(1)
+    expect(panel.find('.repository-picker__empty').exists()).toBe(true)
+    await panel.get('input[aria-label="搜索仓库"]').setValue('gallery')
+    expect(states()).toHaveLength(1)
+    expect(panel.find('.repository-picker__list').exists()).toBe(true)
+    await vi.runAllTimersAsync()
+    panel.unmount()
+  })
+
   it('自动加载、客户端搜索、选择与加载更多均使用当前登录身份', async () => {
     fetchRepositories
       .mockResolvedValueOnce({ repositories: [repo], hasMore: true })

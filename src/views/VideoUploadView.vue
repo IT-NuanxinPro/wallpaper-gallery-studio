@@ -83,6 +83,9 @@
               class="video-workspace__transfers"
               data-scroll-region
               aria-live="polite"
+              @before-leave="lockLeavingTransfer"
+              @after-leave="releaseLeavingTransfer"
+              @leave-cancelled="releaseLeavingTransfer"
             >
               <div
                 v-for="transfer in transfers"
@@ -170,85 +173,91 @@
                 @resume="chooseResume"
                 @retry="retryJob"
               />
-              <Transition name="studio-feedback"
-                ><section
-                  v-if="activePublications.length || Object.keys(missingPublicationErrors).length"
-                  class="video-workspace__publications"
-                  data-scroll-region
-                  aria-label="发布进度"
-                >
-                  <div class="video-workspace__section-heading">
-                    <h2>发布进度</h2>
-                    <span>自动更新</span>
-                  </div>
-                  <article
-                    v-for="publication in activePublications"
-                    :key="publication.id"
-                    class="video-workspace__publication"
-                  >
-                    <div class="video-workspace__section-heading">
-                      <strong>{{ publication.jobs?.length || 0 }} 个视频</strong>
-                      <el-tag :type="statusType(publication.status)" size="small">{{
-                        PUBLICATION_STATUS[publication.status] || publication.status
-                      }}</el-tag>
-                    </div>
-                    <ol class="video-workspace__stages" aria-label="发布阶段">
-                      <li
-                        v-for="(label, index) in publicationStages"
-                        :key="label"
-                        :class="{ 'is-complete': publicationStage(publication) >= index }"
+              <el-collapse-transition>
+                <div v-show="hasPublicationFeedback" class="video-workspace__feedback">
+                  <Transition name="studio-feedback">
+                    <section
+                      v-if="hasActivePublicationFeedback"
+                      key="progress"
+                      class="video-workspace__publications"
+                      data-scroll-region
+                      aria-label="发布进度"
+                    >
+                      <div class="video-workspace__section-heading">
+                        <h2>发布进度</h2>
+                        <span>自动更新</span>
+                      </div>
+                      <article
+                        v-for="publication in activePublications"
+                        :key="publication.id"
+                        class="video-workspace__publication"
                       >
-                        {{ label }}
-                      </li>
-                    </ol>
-                    <p v-if="publication.error" class="video-workspace__transfer-error">
-                      {{ errorMessage(publication.error) }}
-                    </p>
-                    <el-button
-                      v-if="publication.status === 'failed'"
-                      size="small"
-                      :disabled="!canWrite || retryingIds.includes(publication.id)"
-                      :loading="retryingIds.includes(publication.id)"
-                      @click="retryPublication(publication.id)"
-                      >继续发布</el-button
+                        <div class="video-workspace__section-heading">
+                          <strong>{{ publication.jobs?.length || 0 }} 个视频</strong>
+                          <el-tag :type="statusType(publication.status)" size="small">{{
+                            PUBLICATION_STATUS[publication.status] || publication.status
+                          }}</el-tag>
+                        </div>
+                        <ol class="video-workspace__stages" aria-label="发布阶段">
+                          <li
+                            v-for="(label, index) in publicationStages"
+                            :key="label"
+                            :class="{ 'is-complete': publicationStage(publication) >= index }"
+                          >
+                            {{ label }}
+                          </li>
+                        </ol>
+                        <p v-if="publication.error" class="video-workspace__transfer-error">
+                          {{ errorMessage(publication.error) }}
+                        </p>
+                        <el-button
+                          v-if="publication.status === 'failed'"
+                          size="small"
+                          :disabled="!canWrite || retryingIds.includes(publication.id)"
+                          :loading="retryingIds.includes(publication.id)"
+                          @click="retryPublication(publication.id)"
+                          >继续发布</el-button
+                        >
+                        <p
+                          v-if="publicationErrors[publication.id]"
+                          class="video-workspace__transfer-error"
+                        >
+                          进度刷新失败：{{ publicationErrors[publication.id] }}
+                        </p>
+                      </article>
+                      <p
+                        v-for="(message, id) in missingPublicationErrors"
+                        :key="id"
+                        class="video-workspace__transfer-error"
+                      >
+                        批次加载失败：{{ message }}
+                      </p>
+                    </section>
+                    <div
+                      v-else-if="showCompletedPublication"
+                      key="completed"
+                      class="video-workspace__published-notice"
+                      role="status"
                     >
-                    <p
-                      v-if="publicationErrors[publication.id]"
-                      class="video-workspace__transfer-error"
-                    >
-                      进度刷新失败：{{ publicationErrors[publication.id] }}
-                    </p>
-                  </article>
-                  <p
-                    v-for="(message, id) in missingPublicationErrors"
-                    :key="id"
-                    class="video-workspace__transfer-error"
-                  >
-                    批次加载失败：{{ message }}
-                  </p>
-                </section></Transition
-              >
-              <Transition name="studio-feedback"
-                ><div
-                  v-if="completedPublication && queueTab === 'pending'"
-                  class="video-workspace__published-notice"
-                  role="status"
-                >
-                  <el-icon><CircleCheck /></el-icon>
-                  <div>
-                    <strong>{{ completedPublication.jobs?.length || 0 }} 个视频已发布</strong
-                    ><span>已移入发布历史，待办已更新。</span>
-                  </div>
-                  <el-button link @click="showPublishedHistory">查看历史</el-button>
-                  <el-button
-                    circle
-                    text
-                    :icon="Close"
-                    aria-label="关闭发布完成提示"
-                    @click="completedPublication = null"
-                  /></div
-              ></Transition></div
-          ></Transition>
+                      <el-icon><CircleCheck /></el-icon>
+                      <div>
+                        <strong>{{ completedPublication.jobs?.length || 0 }} 个视频已发布</strong
+                        ><span>已移入发布历史，待办已更新。</span>
+                      </div>
+                      <el-button link @click="showPublishedHistory">查看历史</el-button>
+                      <el-button
+                        circle
+                        text
+                        :icon="Close"
+                        aria-label="关闭发布完成提示"
+                        @click="completedPublication = null"
+                      />
+                    </div>
+                  </Transition>
+                </div>
+              </el-collapse-transition>
+            </div>
+          </Transition>
 
           <Transition name="studio-panel"
             ><section
@@ -268,7 +277,7 @@
                 @click="mobilePane = 'queue'"
                 >返回队列</el-button
               >
-              <Transition name="studio-panel" mode="out-in">
+              <Transition name="studio-panel" mode="out-in" @before-enter="prepareReviewEnter">
                 <VideoReviewPanel
                   v-if="selectedJob && reviewDraft"
                   :key="selectedJob.id"
@@ -375,6 +384,46 @@ const queueTab = ref('pending')
 const compactLayout = ref(window.innerWidth <= 980)
 const mobilePane = ref('queue')
 const reviewScroller = ref(null)
+let pendingReviewJobId = null
+watch(
+  () => selectedJob.value?.id || '',
+  id => {
+    pendingReviewJobId = id
+  },
+  { flush: 'sync' }
+)
+function prepareReviewEnter() {
+  if (pendingReviewJobId !== (selectedJob.value?.id || '')) return
+  pendingReviewJobId = null
+  if (!reviewScroller.value) return
+  reviewScroller.value.scrollTop = 0
+  if (!compactLayout.value || mobilePane.value === 'review') {
+    reviewScroller.value.focus({ preventScroll: true })
+  }
+}
+const leavingTransferStyles = new WeakMap()
+function lockLeavingTransfer(element) {
+  const properties = ['position', 'left', 'top', 'right', 'width', 'height']
+  leavingTransferStyles.set(
+    element,
+    Object.fromEntries(properties.map(property => [property, element.style[property]]))
+  )
+  const { offsetLeft, offsetTop, offsetWidth, offsetHeight } = element
+  Object.assign(element.style, {
+    position: 'absolute',
+    left: `${offsetLeft}px`,
+    top: `${offsetTop}px`,
+    right: 'auto',
+    width: `${offsetWidth}px`,
+    height: `${offsetHeight}px`
+  })
+}
+function releaseLeavingTransfer(element) {
+  const previous = leavingTransferStyles.get(element)
+  if (!previous) return
+  Object.assign(element.style, previous)
+  leavingTransferStyles.delete(element)
+}
 function syncCompactLayout() {
   compactLayout.value = window.innerWidth <= 980
 }
@@ -434,6 +483,16 @@ const missingPublicationErrors = computed(() =>
     )
   )
 )
+const hasActivePublicationFeedback = computed(
+  () =>
+    activePublications.value.length > 0 || Object.keys(missingPublicationErrors.value).length > 0
+)
+const showCompletedPublication = computed(
+  () => !!completedPublication.value && queueTab.value === 'pending'
+)
+const hasPublicationFeedback = computed(
+  () => hasActivePublicationFeedback.value || showCompletedPublication.value
+)
 const transferLabels = {
   waiting: '等待上传',
   hashing: '校验文件',
@@ -471,13 +530,11 @@ async function refresh() {
   await Promise.allSettled([workspace.refresh(), workspace.loadTopics()])
 }
 async function selectJob(id) {
+  const sameJob = id === selectedJob.value?.id
   workspace.selectJob(id)
   if (compactLayout.value) mobilePane.value = 'review'
   await nextTick()
-  if (reviewScroller.value) {
-    reviewScroller.value.scrollTop = 0
-    reviewScroller.value.focus({ preventScroll: true })
-  }
+  if (sameJob) reviewScroller.value?.focus({ preventScroll: true })
 }
 function pauseTransfer(id) {
   uploadManager.pause(id)
@@ -802,11 +859,25 @@ onBeforeUnmount(() => {
     overflow: hidden;
     display: flex;
     flex-direction: column;
-    gap: 18px;
+  }
+  &__feedback {
+    flex: 0 1 auto;
+    min-height: 0;
+    height: 160px;
+    max-height: 28%;
+    padding-top: 18px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+    overflow: hidden;
+    overflow-anchor: none;
+  }
+  &__feedback > * {
+    grid-area: 1 / 1;
+    min-width: 0;
+    min-height: 0;
   }
   &__publications {
-    flex: 0 1 auto;
-    max-height: 28%;
     overflow: auto;
     overscroll-behavior: contain;
     scrollbar-width: thin;
@@ -854,7 +925,9 @@ onBeforeUnmount(() => {
     border-color: #7db7ff;
   }
   &__published-notice {
-    flex: none;
+    align-self: start;
+    overflow: auto;
+    max-height: 100%;
     display: flex;
     align-items: center;
     gap: 10px;

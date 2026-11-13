@@ -9,6 +9,32 @@ afterEach(() => {
 })
 
 describe('上传网格离场', () => {
+  it('空态与文件网格互换时外层收到真实离场类，父面板可保持新列表原位', async () => {
+    wrapper = mount(UploadFileGrid, {
+      props: { files: [] },
+      global: {
+        stubs: {
+          transition: false,
+          'transition-group': false,
+          ElCheckbox: true,
+          ElIcon: true,
+          UploadFileItem: { props: ['file'], template: '<div>{{ file.id }}</div>' }
+        }
+      }
+    })
+    const host = wrapper.element.parentElement
+    vi.useFakeTimers()
+    await wrapper.setProps({ files: [{ id: 'first', status: 'pending' }] })
+    expect(host.querySelector('.upload-file-grid__empty.studio-panel-leave-active')).not.toBeNull()
+    expect(wrapper.find('.upload-file-grid').exists()).toBe(true)
+    await vi.runAllTimersAsync()
+    await wrapper.setProps({ files: [] })
+    expect(host.querySelector('.upload-file-grid.studio-panel-leave-active')).not.toBeNull()
+    expect(wrapper.find('.upload-file-grid__empty').exists()).toBe(true)
+    await vi.runAllTimersAsync()
+    expect(wrapper.find('.upload-file-grid').exists()).toBe(false)
+  })
+
   it('删除非首列卡片时从原位置退出，并在退出完成后清理临时定位', async () => {
     vi.useFakeTimers()
     const files = ['first', 'second', 'third'].map(id => ({ id, status: 'pending' }))
