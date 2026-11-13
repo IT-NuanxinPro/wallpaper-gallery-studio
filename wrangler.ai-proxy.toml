@@ -1,0 +1,17 @@
+name = "ai-proxy"
+main = "worker/ai-proxy.js"
+account_id = "729fde45e0df2077211b705f0822d43a"
+compatibility_date = "2026-03-17"
+compatibility_flags = ["enable_request_signal"]
+workers_dev = true
+
+routes = [
+  { pattern = "api.061129.xyz/v1/models", zone_name = "061129.xyz" },
+  { pattern = "api.061129.xyz/v1/chat/completions", zone_name = "061129.xyz" }
+]
+
+[vars]
+ALLOWED_ORIGINS = "https://wallpaper-gallery-studio.061129.xyz,https://wallpaper-gallery-studio.pages.dev,http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174,http://localhost:5176,http://127.0.0.1:5176"
+
+[observability]
+enabled = false

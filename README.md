@@ -128,7 +128,7 @@ wallpaper-gallery-studio/
 │   └── hash-worker.js       # Web Worker（文件 Hash 计算）
 ├── worker/
 │   ├── video/              # 视频任务与上传控制服务
-│   └── ai-proxy.js          # 历史代理，当前AI入口不再使用
+│   └── ai-proxy.js          # HTTPS固定上游转发（含旧代理兼容）
 ├── src/
 │   ├── components/
 │   │   ├── ai/              # AI 相关组件
@@ -284,3 +284,7 @@ MIT
 工作流仓库、网站仓库和视频服务在「设置 → 仓库连接」按需填写，留空则对应能力不可用。更换数据仓库会清空依附旧仓库的服务连接，防止误发到其他目标。OAuth 配置属于部署级连接，使用 Token 登录可以不配置 OAuth。源码不再回退到作者的工作流或网站仓库。
 
 API 地址支持 HTTP、HTTPS 和同源路径。HTTPS 页面访问远端 HTTP 仍可能受浏览器混合内容限制；需要通过同源代理或 HTTP 部署连接。模型列表只说明可访问的模型，不保证视觉能力。
+
+### HTTP AI 网关转发
+
+本实例支持填写 `https://api.061129.xyz/v1`，由 AI Worker 将模型列表和图片分析请求转发到固定 HTTP 上游。Key 仍在当前标签页填写，需使用上游签发的 Key；详见 [Worker部署说明](worker/README.md)。

@@ -1,56 +1,39 @@
-# Cloudflare Worker - AI 代理
+# AI 转发 Worker
 
-这个 Worker 用于代理 Cloudflare AI API 请求，解决浏览器 CORS 跨域问题。
+`ai-proxy.js` 保留原 Cloudflare AI 代理入口，并为工作台提供 OpenAI 兼容接口的 HTTPS 转发。
 
-## 🚀 快速部署
+## 当前转发
 
-```bash
-# 1. 安装 Wrangler CLI（如果还没安装）
-npm install -g wrangler
+工作台填写 API 地址：
 
-# 2. 登录 Cloudflare
-wrangler login
-
-# 3. 部署 Worker
-wrangler deploy
+```text
+https://api.061129.xyz/v1
 ```
 
-## 📝 配置文件
+代理只开放：
 
-- `ai-proxy.js` - Worker 代码
-- `../wrangler.toml` - Worker 配置
+- `GET /v1/models`
+- `POST /v1/chat/completions`
+- 对应路径的 `OPTIONS` 预检
 
-## 🔗 使用方式
+固定上游为 `http://studio-ai-origin.061129.xyz:8052`，该DNS-only A记录指向 `39.102.124.66`；避免Worker直接fetch IP产生1003，路径原样追加。API Key 必须使用这个上游服务签发的 Key；代理不替换或保存 Key，不修改模型和请求体。
 
-部署后，你会得到一个 Worker URL：
+域名仅给这两个路径配置 Worker Route，其他路径仍由原域名配置处理。旧 Cloudflare 代理根路径保存在 `legacy-cloudflare-proxy.js`，现有调用保持兼容。
 
-```
-https://ai-proxy.your-subdomain.workers.dev
-```
+## 部署与测试
 
-在前端代码中使用这个 URL 替换直接调用 Cloudflare API。
-
-## 📖 详细文档
-
-查看 `../WORKER-DEPLOY.md` 获取完整部署指南。
-
-## 🔒 安全说明
-
-- Worker 不存储任何敏感信息
-- Account ID 和 Token 由前端传递
-- 支持 CORS，允许跨域请求
-- 免费额度：100,000 请求/天
-
-## 🛠️ 本地开发
-
-```bash
-# 启动本地开发服务器
-wrangler dev
-
-# 访问 http://localhost:8787 进行测试
+```sh
+node --test worker/tests/openai-relay.test.mjs
+npx wrangler deploy --config wrangler.ai-proxy.toml
 ```
 
-## 📊 监控
+配置中的账号、域名与允许来源是本实例值。自行部署时修改 `wrangler.ai-proxy.toml` 和固定上游；不要建立接受任意 target/url 的开放代理。
 
-访问 Cloudflare Dashboard 查看 Worker 使用情况：
-https://dash.cloudflare.com/workers
+## 边界
+
+- 浏览器到 Worker 是 HTTPS，Worker 到指定上游仍为 HTTP。
+- 只允许配置中的工作台 Origin。命令行无 Origin 请求仍必须携带 Bearer Key。
+- 成功 JSON 和 SSE 响应直接透传；不缓存、不读取完整流，客户端取消信号传给上游。
+- Worker 用 manual 模式处理重定向，任何 3xx 拒绝，不把 Authorization 带到新目标。
+- 不转发 Cookie/Origin 等无关请求头，不返回 Set-Cookie；日志观测默认关闭。
+- 上游401/429等状态保留，Worker内部异常只返回固定提示。
