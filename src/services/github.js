@@ -213,6 +213,7 @@ class GitHubService {
   async checkRepoAccess(owner, repo) {
     try {
       const data = await this.request(`/repos/${owner}/${repo}`)
+      if (data.archived || data.disabled) return 'read'
 
       console.log('[GitHub] 仓库权限检查:', {
         repo: `${owner}/${repo}`,

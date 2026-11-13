@@ -14,38 +14,12 @@
               <h2 class="settings-view__title">仓库连接</h2>
             </div>
 
-            <el-form :model="formData" label-position="top" class="settings-view__form">
-              <el-form-item label="仓库所有者">
-                <el-input v-model="formData.owner" placeholder="GitHub 用户名或组织名" />
-              </el-form-item>
-
-              <el-form-item label="仓库名称">
-                <el-input v-model="formData.repo" placeholder="仓库名称" />
-              </el-form-item>
-
-              <div class="settings-view__row">
-                <el-form-item label="默认分支" class="settings-view__row-item">
-                  <el-input v-model="formData.branch" placeholder="main" />
-                </el-form-item>
-                <el-form-item label="Client ID" class="settings-view__row-item">
-                  <el-input v-model="formData.clientId" placeholder="OAuth Client ID" />
-                </el-form-item>
-              </div>
-
-              <el-form-item label="OAuth Worker URL">
-                <el-input
-                  v-model="formData.oauthWorkerUrl"
-                  placeholder="https://your-oauth-worker.your-subdomain.workers.dev"
-                />
-              </el-form-item>
-
-              <div class="settings-view__actions">
-                <el-button @click="handleReset">重置默认</el-button>
-                <el-button type="primary" :loading="validating" @click="handleSave">
-                  验证并保存
-                </el-button>
-              </div>
-            </el-form>
+            <RepositoryConfigForm
+              v-model="formData"
+              :busy="validating"
+              submit-label="验证并保存"
+              @submit="handleSave"
+            />
 
             <Transition name="studio-feedback">
               <div v-if="validationResult" class="settings-view__result">
@@ -135,28 +109,26 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import MainLayout from '@/components/MainLayout.vue'
 import GlassCard from '@/components/GlassCard.vue'
 import CredentialsConfig from '@/components/ai/CredentialsConfig.vue'
+import RepositoryConfigForm from '@/components/settings/RepositoryConfigForm.vue'
 import { useConfigStore } from '@/stores/config'
 import { useAuthStore } from '@/stores/auth'
+import { useUploadSessionStore } from '@/stores/upload-session'
+import { changesRepository, hasPendingRepositoryWrites } from '@/utils/repository-switch'
 
 const configStore = useConfigStore()
 const authStore = useAuthStore()
+const uploadSession = useUploadSessionStore()
 
 const viewRef = ref(null)
 const validating = ref(false)
 const validationResult = ref(null)
 
-const formData = reactive({
-  owner: configStore.config.owner,
-  repo: configStore.config.repo,
-  branch: configStore.config.branch,
-  clientId: configStore.config.clientId,
-  oauthWorkerUrl: configStore.config.oauthWorkerUrl
-})
+const formData = ref({ ...configStore.config })
 
 const permissionLabel = computed(() => {
   const labels = { admin: '管理员', write: '协作者', read: '只读', none: '无权限' }
@@ -172,55 +144,38 @@ const repoUrl = computed(
   () => `https://github.com/${configStore.config.owner}/${configStore.config.repo}`
 )
 
-async function handleSave() {
-  if (!configStore.isValidOwnerName(formData.owner)) {
-    ElMessage.error('仓库所有者名称格式不正确')
+async function handleSave(value) {
+  const input = value || formData.value
+  if (changesRepository(configStore.config, input) && hasPendingRepositoryWrites(uploadSession)) {
+    ElMessage.warning('请先完成或移除当前图片任务，再切换仓库')
     return
   }
-  if (!configStore.isValidRepoName(formData.repo)) {
-    ElMessage.error('仓库名称格式不正确')
+  const error = configStore.validateConfigInput(input)
+  if (error) {
+    ElMessage.error(error)
     return
   }
-
   validating.value = true
   validationResult.value = null
-
   try {
-    configStore.setConfig({
-      owner: formData.owner,
-      repo: formData.repo,
-      branch: formData.branch,
-      clientId: formData.clientId,
-      oauthWorkerUrl: formData.oauthWorkerUrl
-    })
-
-    const valid = await configStore.validateConfig()
-    if (valid) {
-      validationResult.value = { success: true, message: '仓库访问正常，配置已保存' }
-      ElMessage.success('配置保存成功')
-      await authStore.checkPermission(formData.owner, formData.repo)
-    } else {
+    if (!(await configStore.validateConfig(input))) {
       validationResult.value = {
         success: false,
         message: configStore.validationError || '验证失败'
       }
+      return
     }
+    configStore.setConfig(input)
+    authStore.invalidatePermission()
+    await authStore.checkPermission(input.owner, input.repo)
+    formData.value = { ...configStore.config }
+    validationResult.value = { success: true, message: '仓库与服务配置已保存' }
+    ElMessage.success('配置保存成功')
   } catch (error) {
-    validationResult.value = { success: false, message: error.message || '验证失败' }
+    validationResult.value = { success: false, message: error.message || '配置保存失败' }
   } finally {
     validating.value = false
   }
-}
-
-function handleReset() {
-  configStore.resetConfig()
-  formData.owner = configStore.config.owner
-  formData.repo = configStore.config.repo
-  formData.branch = configStore.config.branch
-  formData.clientId = configStore.config.clientId
-  formData.oauthWorkerUrl = configStore.config.oauthWorkerUrl
-  validationResult.value = null
-  ElMessage.success('已重置为默认配置')
 }
 
 onMounted(async () => {
@@ -292,30 +247,6 @@ onMounted(async () => {
   margin: 0;
   font-size: 16px;
   font-weight: 600;
-}
-.settings-view__form :deep(.el-form-item) {
-  margin-bottom: 18px;
-}
-.settings-view__form :deep(.el-form-item__label) {
-  color: var(--studio-muted, #a1a6b0);
-  font-size: 12px;
-  padding-bottom: 6px;
-}
-.settings-view__row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-}
-.settings-view__actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-  margin-top: 24px;
-  padding-top: 20px;
-  border-top: 1px solid var(--studio-border, #30343b);
-}
-.settings-view__actions .el-button + .el-button {
-  margin-left: 0;
 }
 .settings-view__result {
   margin-top: 16px;
@@ -407,10 +338,6 @@ onMounted(async () => {
 @media (max-width: 600px) {
   .settings-view {
     padding: 0;
-  }
-  .settings-view__row {
-    grid-template-columns: 1fr;
-    gap: 0;
   }
 }
 @media (prefers-reduced-motion: reduce) {

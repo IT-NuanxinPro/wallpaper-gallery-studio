@@ -37,10 +37,10 @@ function createPanel() {
 }
 
 describe('视频候选帧审核交互', () => {
-  it('固定模型的分析入口可点击以触发配置提示，仍可编辑审核信息', async () => {
+  it('未选模型的分析入口可点击以触发配置提示，仍可编辑审核信息', async () => {
     const panel = createPanel()
     const controls = panel.get('.video-review__ai')
-    expect(controls.text()).toContain('GPT-6.1 Sol')
+    expect(controls.text()).toContain('未选择模型')
     expect(controls.find('select').exists()).toBe(false)
     expect(controls.get('button').attributes('disabled')).toBeUndefined()
     await controls.get('button').trigger('click')
@@ -49,7 +49,8 @@ describe('视频候选帧审核交互', () => {
     const title = panel.get('input[placeholder="面向访客的视频标题"]')
     await title.setValue('人工填写标题')
     expect(panel.emitted('update:draft').at(-1)[0].displayTitle).toBe('人工填写标题')
-    await panel.setProps({ hasCredentials: true })
+    await panel.setProps({ hasCredentials: true, hasModelReady: true, model: 'vision-video' })
+    expect(controls.text()).toContain('vision-video')
     expect(controls.get('button').attributes('disabled')).toBeUndefined()
     await controls.get('button').trigger('click')
     expect(panel.emitted('analyze')).toHaveLength(2)

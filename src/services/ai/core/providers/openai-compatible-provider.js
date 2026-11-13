@@ -1,6 +1,10 @@
 import { BaseAIProvider } from './base-provider'
-import { AI_MODEL_ID } from '../../model'
-import { DEFAULT_AI_BASE_URL, normalizeAiBaseUrl } from '../../session-credentials'
+import { normalizeModelId } from '../../model'
+import {
+  DEFAULT_AI_BASE_URL,
+  normalizeAiBaseUrl,
+  aiConnectionError
+} from '../../session-credentials'
 
 function sessionCancelled() {
   return Object.assign(new Error('AI 会话配置已变更，请重新分析'), { name: 'AbortError' })
@@ -25,12 +29,11 @@ export class OpenAICompatibleProvider extends BaseAIProvider {
     if (!this.validateCredentials(credentials)) {
       throw new Error(`${this.providerName} 凭证无效`)
     }
+    const model = normalizeModelId(credentials.model)
+    if (!model) throw new Error('请先从远程列表选择 AI 模型')
 
     const {
       apiKey,
-      maxTokens = 4096,
-      temperature = 0.7,
-      reasoningEffort,
       timeoutMs = Number(import.meta.env.VITE_SUB2API_TIMEOUT_MS) || 120000,
       signal
     } = credentials
@@ -62,7 +65,7 @@ export class OpenAICompatibleProvider extends BaseAIProvider {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          model: AI_MODEL_ID,
+          model,
           messages: [
             {
               role: 'user',
@@ -71,10 +74,7 @@ export class OpenAICompatibleProvider extends BaseAIProvider {
                 ...(imageUrl ? [{ type: 'image_url', image_url: { url: imageUrl } }] : [])
               ]
             }
-          ],
-          temperature,
-          max_tokens: maxTokens,
-          ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {})
+          ]
         })
       })
       if (signal?.aborted) throw sessionCancelled()
@@ -100,9 +100,7 @@ export class OpenAICompatibleProvider extends BaseAIProvider {
         throw new Error(`${this.providerName} 请求超时（${Math.round(timeoutMs / 1000)} 秒）`)
       }
       if (error.code === 'AI_HTTP_ERROR') throw error
-      throw new Error(
-        response ? 'AI 返回内容无法解析，请重试' : 'AI 服务连接失败，请检查 API 地址和网络'
-      )
+      throw new Error(response ? 'AI 返回内容无法解析，请重试' : aiConnectionError(baseUrl))
     } finally {
       clearTimeout(timeout)
       signal?.removeEventListener('abort', abortSession)
@@ -180,7 +178,7 @@ export class OpenAICompatibleProvider extends BaseAIProvider {
 export class Sub2apiProvider extends OpenAICompatibleProvider {
   constructor(config = {}) {
     super({
-      name: 'GPT-6.1 Sol',
+      name: 'AI',
       baseUrl: DEFAULT_AI_BASE_URL,
       ...config
     })

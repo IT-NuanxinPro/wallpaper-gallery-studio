@@ -5,7 +5,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { useCredentialsStore } from './credentials'
-import { AI_MODEL_KEY, AI_PROVIDER } from '@/services/ai/model'
+import { normalizeModelId, AI_PROVIDER } from '@/services/ai/model'
 import { AIProviderFactory, AI_PROVIDERS, compressImage, IMAGE_CONFIG } from '@/services/ai/core'
 import {
   buildPromptWithLatestCategories,
@@ -17,54 +17,28 @@ import {
 export { AI_PROVIDERS }
 
 export const useAIStore = defineStore('ai', () => {
+  const credentialsStore = useCredentialsStore()
   const analyzing = ref(false)
-  const currentModel = ref(CLASSIFIER_CONFIG.defaultModel)
-  const currentProvider = ref(CLASSIFIER_CONFIG.defaultProvider)
+  const currentModel = computed(() => credentialsStore.selectedModel)
+  const currentProvider = computed(() => AI_PROVIDER)
   const promptTemplate = ref(CLASSIFIER_CONFIG.defaultPromptTemplate)
   const results = ref([])
   const error = ref(null)
 
   const hasResults = computed(() => results.value.length > 0)
   const currentModelConfig = computed(() => {
-    return getModelByKey(AI_MODEL_KEY)
+    return getModelByKey(currentModel.value)
   })
 
   /**
-   * 调用当前标签页配置的固定模型
+   * 使用开始分析时的会话快照，防止准备图片期间切换配置。
    */
-  async function callAI(imageBase64, prompt) {
-    const credentialsStore = useCredentialsStore()
-
-    if (!credentialsStore.hasCredentials) {
-      throw new Error('请先配置 API 凭证')
-    }
-
-    const modelConfig = currentModelConfig.value
-    if (!modelConfig) {
-      throw new Error('无效的模型配置')
-    }
-
-    // 根据当前 Provider 创建对应的 Provider 实例
+  async function callAI(imageBase64, prompt, credentials) {
     const provider = AIProviderFactory.create(AI_PROVIDER)
-
-    // 获取对应 Provider 的凭证
-    const credentials = credentialsStore.getCredentialsByProvider(AI_PROVIDER)
-
-    if (!credentials?.apiKey?.trim()) {
-      throw new Error('请先配置当前标签页的 API Key')
-    }
-
-    // 调用 Provider 的 analyze 方法
     const analysis = await provider.analyze({
       imageBase64,
       prompt,
-      credentials: {
-        ...credentials,
-        model: modelConfig.id,
-        maxTokens: modelConfig.maxTokens,
-        temperature: modelConfig.temperature,
-        reasoningEffort: modelConfig.reasoningEffort
-      }
+      credentials
     })
 
     if (credentials.signal?.aborted) {
@@ -82,6 +56,12 @@ export const useAIStore = defineStore('ai', () => {
     error.value = null
 
     try {
+      const credentials = credentialsStore.getCredentialsByProvider(AI_PROVIDER)
+      if (!credentials?.apiKey?.trim()) throw new Error('请先配置当前标签页的 API Key')
+      const model = normalizeModelId(credentials.model)
+      if (!credentialsStore.hasModelReady || !model) {
+        throw new Error('请先从远程列表选择 AI 模型')
+      }
       const imageBase64 = await compressImage(file, IMAGE_CONFIG)
       const prompt = await buildPromptWithLatestCategories(
         promptTemplate.value,
@@ -89,7 +69,7 @@ export const useAIStore = defineStore('ai', () => {
         customPrompt,
         currentProvider.value
       )
-      const analysis = await callAI(imageBase64, prompt)
+      const analysis = await callAI(imageBase64, prompt, { ...credentials, model })
 
       const result = {
         id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
@@ -106,7 +86,7 @@ export const useAIStore = defineStore('ai', () => {
         description: analysis.description || '',
         keywords: analysis.keywords || [],
         confidence: analysis.confidence || 0,
-        model: AI_MODEL_KEY,
+        model,
         provider: AI_PROVIDER,
         promptTemplate: promptTemplate.value,
         displayTitle: analysis.displayTitle || null,
@@ -155,14 +135,6 @@ export const useAIStore = defineStore('ai', () => {
     }
   }
 
-  function setModel() {
-    currentModel.value = AI_MODEL_KEY
-  }
-
-  function setProvider() {
-    currentProvider.value = AI_PROVIDER
-  }
-
   function setPromptTemplate(templateId) {
     promptTemplate.value = templateId
   }
@@ -183,8 +155,6 @@ export const useAIStore = defineStore('ai', () => {
     currentModelConfig,
     analyzeImage,
     analyzeBatch,
-    setModel,
-    setProvider,
     setPromptTemplate,
     clearResults
   }

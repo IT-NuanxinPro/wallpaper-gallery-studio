@@ -216,6 +216,7 @@
 <script setup>
 import { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
+import { onBeforeRouteLeave } from 'vue-router'
 import { gsap } from 'gsap'
 import MainLayout from '@/components/MainLayout.vue'
 import CategorySidebar from '@/components/upload/CategorySidebar.vue'
@@ -247,6 +248,14 @@ const configStore = useConfigStore()
 const uploadStore = useUploadStore()
 const authStore = useAuthStore()
 const workflowStore = useWorkflowStore()
+
+onBeforeRouteLeave(() => {
+  if (uploadStore.uploading || uploadStore.metadataStatus === 'uploading') {
+    ElMessage.warning('图片正在提交，请完成后再切换页面或仓库')
+    return false
+  }
+  return true
+})
 
 const viewRef = ref(null)
 const sidebarRef = ref(null)
@@ -295,7 +304,7 @@ const currentSeriesLabel = computed(() => {
 
   return labels[series.value] || '未选择'
 })
-const currentContextLabel = computed(() => `模型 · ${aiConfig.value?.modelName || 'GPT-6.1 Sol'}`)
+const currentContextLabel = computed(() => `模型 · ${aiConfig.value?.modelName || '未选择模型'}`)
 
 const SIDEBAR_COLLAPSED_HEIGHT = 52
 

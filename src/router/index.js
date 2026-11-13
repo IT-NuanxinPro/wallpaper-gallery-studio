@@ -60,16 +60,16 @@ const router = createRouter({
 // 路由守卫
 router.beforeEach(async (to, from, next) => {
   const authStore = useAuthStore()
+  const configStore = useConfigStore()
+
+  if (to.meta.requiresAuth && !configStore.isConfigured) {
+    next({ name: 'Login', query: { setup: '1', redirect: to.fullPath } })
+    return
+  }
 
   // 需要认证的页面
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {
     next({ name: 'Login', query: { redirect: to.fullPath } })
-    return
-  }
-
-  // 已登录用户访问登录页，重定向到上传页
-  if (to.name === 'Login' && authStore.isAuthenticated) {
-    next({ name: 'Upload' })
     return
   }
 
@@ -80,7 +80,6 @@ router.beforeEach(async (to, from, next) => {
     !authStore.permissionChecked &&
     !from.name // 只在首次加载时检查，不在页面间导航时检查
   ) {
-    const configStore = useConfigStore()
     const { owner, repo } = configStore.config
     if (owner && repo) {
       // 异步检查权限，不阻塞页面加载

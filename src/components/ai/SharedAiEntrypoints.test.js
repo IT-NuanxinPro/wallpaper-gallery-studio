@@ -22,13 +22,16 @@ vi.mock('gsap', () => ({
 }))
 
 beforeEach(() => {
-  state.credentials = reactive({ hasCredentials: false, loadCredentials: vi.fn() })
-  state.requireAiConfiguration
-    .mockReset()
-    .mockImplementation(() => state.credentials.hasCredentials)
+  state.credentials = reactive({
+    hasCredentials: false,
+    hasModelReady: false,
+    selectedModel: '',
+    loadCredentials: vi.fn()
+  })
+  state.requireAiConfiguration.mockReset().mockImplementation(() => state.credentials.hasModelReady)
   state.ai = reactive({
     currentProvider: 'sub2api',
-    currentModel: 'sub2api-gpt-6.1-sol',
+    currentModel: 'vision-custom',
     promptTemplate: '',
     hasResults: false,
     analyzing: false,
@@ -44,10 +47,10 @@ const global = {
   stubs: { RouterLink: RouterLinkStub, PromptTemplateSelector: true, ResultCard: true }
 }
 
-describe('三个入口共用单一模型配置', () => {
+describe('三个入口共用已选远程模型', () => {
   it('图片上传只有AI链路，缺少Key点击上传会提示而不发出上传事件', async () => {
     const panel = mount(UploadHeader, { global })
-    expect(panel.text()).toContain('GPT-6.1 Sol')
+    expect(panel.text()).toContain('未选择模型')
     expect(panel.text()).not.toContain('手动上传')
     expect(panel.find('.upload-header__mode-switch').exists()).toBe(false)
     expect(panel.getComponent(RouterLinkStub).props('to')).toBe('/settings#ai-config')
@@ -55,7 +58,13 @@ describe('三个入口共用单一模型配置', () => {
     await panel.get('.upload-header__btn-upload').trigger('click')
     expect(state.requireAiConfiguration).toHaveBeenCalledOnce()
     expect(panel.emitted('upload')).toBeUndefined()
-    state.credentials.hasCredentials = true
+    Object.assign(state.credentials, {
+      hasCredentials: true,
+      hasModelReady: true,
+      selectedModel: 'vision-custom'
+    })
+    await flushPromises()
+    expect(panel.text()).toContain('vision-custom')
     await panel.get('.upload-header__btn-upload').trigger('click')
     expect(panel.emitted('upload')).toHaveLength(1)
     panel.unmount()
@@ -73,20 +82,32 @@ describe('三个入口共用单一模型配置', () => {
   it('工坊选图与分析即时检查Key，配置被清除后点击分析会提示且不会发请求', async () => {
     const panel = mount(AIAssistantPanel, { global })
     await flushPromises()
-    expect(panel.text()).toContain('GPT-6.1 Sol')
+    expect(panel.text()).toContain('未选择模型')
     await panel.get('.upload-area').trigger('click')
     expect(state.requireAiConfiguration).toHaveBeenCalledOnce()
     expect(panel.find('.analyze-btn').exists()).toBe(false)
-    state.credentials.hasCredentials = true
+    Object.assign(state.credentials, {
+      hasCredentials: true,
+      hasModelReady: true,
+      selectedModel: 'vision-custom'
+    })
     panel.getComponent({ name: 'ElUpload' }).props('onChange')({}, [{ name: 'test.png' }])
     await flushPromises()
-    state.credentials.hasCredentials = false
+    Object.assign(state.credentials, {
+      hasCredentials: false,
+      hasModelReady: false,
+      selectedModel: ''
+    })
     await flushPromises()
     expect(panel.get('.analyze-btn').attributes('disabled')).toBeUndefined()
     await panel.get('.analyze-btn').trigger('click')
     expect(state.ai.analyzeImage).not.toHaveBeenCalled()
     expect(state.requireAiConfiguration).toHaveBeenCalledTimes(3)
-    state.credentials.hasCredentials = true
+    Object.assign(state.credentials, {
+      hasCredentials: true,
+      hasModelReady: true,
+      selectedModel: 'vision-custom'
+    })
     await panel.get('.analyze-btn').trigger('click')
     expect(state.ai.analyzeImage).toHaveBeenCalledOnce()
     panel.unmount()

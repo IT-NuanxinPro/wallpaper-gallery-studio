@@ -332,15 +332,10 @@ function getProgressTitle() {
   return '工作流运行中...'
 }
 
-const LEGACY_WORKFLOW_OWNER = 'IT-NuanxinPro'
-const LEGACY_WORKFLOW_REPO = 'wallpaper-gallery-workflow'
-const LEGACY_FRONTEND_OWNER = 'IT-NuanxinPro'
-const LEGACY_FRONTEND_REPO = 'wallpaper-gallery'
-
-const WORKFLOW_OWNER = import.meta.env.VITE_WORKFLOW_OWNER || LEGACY_WORKFLOW_OWNER
-const WORKFLOW_REPO = import.meta.env.VITE_WORKFLOW_REPO || LEGACY_WORKFLOW_REPO
-const FRONTEND_OWNER = import.meta.env.VITE_FRONTEND_OWNER || LEGACY_FRONTEND_OWNER
-const FRONTEND_REPO = import.meta.env.VITE_FRONTEND_REPO || LEGACY_FRONTEND_REPO
+const workflowOwner = computed(() => configStore.config.workflowOwner)
+const workflowRepo = computed(() => configStore.config.workflowRepo)
+const frontendOwner = computed(() => configStore.config.frontendOwner)
+const frontendRepo = computed(() => configStore.config.frontendRepo)
 
 async function refresh() {
   const { owner, repo, branch } = configStore.config
@@ -350,8 +345,8 @@ async function refresh() {
       workflowStore.refreshStatsData(owner, repo, branch)
     ]
 
-    if (WORKFLOW_OWNER && WORKFLOW_REPO) {
-      tasks.push(workflowStore.refreshWorkflowStatus(WORKFLOW_OWNER, WORKFLOW_REPO))
+    if (workflowOwner.value && workflowRepo.value) {
+      tasks.push(workflowStore.refreshWorkflowStatus(workflowOwner.value, workflowRepo.value))
     }
 
     await Promise.all(tasks)
@@ -361,16 +356,16 @@ async function refresh() {
 }
 
 async function handleTrigger() {
-  if (!WORKFLOW_OWNER || !WORKFLOW_REPO) {
-    ElMessage.warning('未配置工作流仓库，请先配置 VITE_WORKFLOW_OWNER 和 VITE_WORKFLOW_REPO')
+  if (!workflowOwner.value || !workflowRepo.value) {
+    ElMessage.warning('请先在设置中填写工作流仓库')
     return
   }
   try {
     const publisher = authStore.user?.login || ''
-    await workflowStore.triggerWorkflow(WORKFLOW_OWNER, WORKFLOW_REPO, '', publisher)
+    await workflowStore.triggerWorkflow(workflowOwner.value, workflowRepo.value, '', publisher)
     ElMessage.success('工作流已触发，正在处理中...')
     setTimeout(() => {
-      workflowStore.refreshWorkflowStatus(WORKFLOW_OWNER, WORKFLOW_REPO)
+      workflowStore.refreshWorkflowStatus(workflowOwner.value, workflowRepo.value)
     }, 2000)
   } catch (error) {
     if (error.type === 'WORKFLOW_PERMISSION_DENIED') {
@@ -384,7 +379,10 @@ async function handleTrigger() {
         }
       )
         .then(() => {
-          window.open(`https://github.com/${WORKFLOW_OWNER}/${WORKFLOW_REPO}/actions`, '_blank')
+          window.open(
+            `https://github.com/${workflowOwner.value}/${workflowRepo.value}/actions`,
+            '_blank'
+          )
         })
         .catch(() => {})
     } else {
@@ -394,8 +392,8 @@ async function handleTrigger() {
 }
 
 async function handleRollback() {
-  if (!WORKFLOW_OWNER || !WORKFLOW_REPO) {
-    ElMessage.warning('未配置工作流仓库，请先配置 VITE_WORKFLOW_OWNER 和 VITE_WORKFLOW_REPO')
+  if (!workflowOwner.value || !workflowRepo.value) {
+    ElMessage.warning('请先在设置中填写工作流仓库')
     return
   }
   const tagName = pendingInfo.value.latestTag
@@ -421,8 +419,8 @@ async function handleRollback() {
     const result = await workflowStore.rollbackLastRelease(
       owner,
       repo,
-      WORKFLOW_OWNER,
-      WORKFLOW_REPO,
+      workflowOwner.value,
+      workflowRepo.value,
       tagName
     )
 
@@ -437,8 +435,8 @@ async function handleRollback() {
 }
 
 async function handleDeployFrontend() {
-  if (!FRONTEND_OWNER || !FRONTEND_REPO) {
-    ElMessage.warning('未配置前端仓库，请先配置 VITE_FRONTEND_OWNER 和 VITE_FRONTEND_REPO')
+  if (!frontendOwner.value || !frontendRepo.value) {
+    ElMessage.warning('请先在设置中填写网站仓库')
     return
   }
   try {
@@ -453,7 +451,7 @@ async function handleDeployFrontend() {
     )
 
     deploying.value = true
-    await workflowStore.triggerFrontendDeploy(FRONTEND_OWNER, FRONTEND_REPO)
+    await workflowStore.triggerFrontendDeploy(frontendOwner.value, frontendRepo.value)
     ElMessage.success('前端部署已触发，请稍后查看 GitHub Actions 状态')
   } catch (error) {
     if (error !== 'cancel') {
@@ -495,8 +493,8 @@ function getWorkflowRunUrl() {
   if (!run) return ''
   return (
     run.html_url ||
-    (WORKFLOW_OWNER && WORKFLOW_REPO
-      ? `https://github.com/${WORKFLOW_OWNER}/${WORKFLOW_REPO}/actions/runs/${run.id}`
+    (workflowOwner.value && workflowRepo.value
+      ? `https://github.com/${workflowOwner.value}/${workflowRepo.value}/actions/runs/${run.id}`
       : '')
   )
 }

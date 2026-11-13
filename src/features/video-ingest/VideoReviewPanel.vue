@@ -108,9 +108,11 @@
       <div v-if="editable && !isPublished" class="video-review__ai">
         <span class="video-review__section-label">辅助填写</span>
         <div class="video-review__ai-controls">
-          <strong>GPT-6.1 Sol</strong>
-          <el-tag :type="hasCredentials ? 'success' : 'warning'" size="small">
-            {{ hasCredentials ? '当前标签页已配置' : '未配置 API Key' }}
+          <strong :title="model">{{ model || '未选择模型' }}</strong>
+          <el-tag :type="hasModelReady ? 'success' : 'warning'" size="small">
+            {{
+              hasModelReady ? '当前标签页已配置' : hasCredentials ? '未选择模型' : '未配置 API Key'
+            }}
           </el-tag>
           <el-button :loading="busy" :disabled="busy || !!conflict" @click="$emit('analyze')">
             分析所选封面
@@ -118,7 +120,7 @@
         </div>
         <p class="video-review__hint">
           与图片上传、AI 工坊共用当前标签页配置。<router-link to="/settings#ai-config">
-            {{ hasCredentials ? '管理 AI 配置' : '去设置 API Key' }} </router-link
+            {{ hasModelReady ? '管理 AI 配置' : '去设置 AI' }} </router-link
           >；也可直接人工填写。
         </p>
       </div>
@@ -279,6 +281,8 @@ const props = defineProps({
   busy: Boolean,
   conflict: Object,
   hasCredentials: Boolean,
+  hasModelReady: Boolean,
+  model: { type: String, default: '' },
   topicSuggestions: { type: Array, default: () => [] },
   topicsError: String
 })
@@ -488,6 +492,8 @@ watch(
     margin-bottom: 10px;
   }
   &__ai-controls strong {
+    max-width: 100%;
+    overflow-wrap: anywhere;
     font-size: 13px;
     font-weight: 500;
   }

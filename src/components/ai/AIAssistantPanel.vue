@@ -11,12 +11,20 @@
         <p>分析图片，生成分类、标题与关键词。</p>
       </div>
       <div class="shared-ai-config">
-        <strong>GPT-6.1 Sol</strong>
-        <span :class="{ 'config-missing': !credentialsStore.hasCredentials }">
-          {{ credentialsStore.hasCredentials ? '当前标签页已配置' : '未配置 API Key' }}
+        <strong :title="credentialsStore.selectedModel">{{
+          credentialsStore.selectedModel || '未选择模型'
+        }}</strong>
+        <span :class="{ 'config-missing': !credentialsStore.hasModelReady }">
+          {{
+            credentialsStore.hasModelReady
+              ? '当前标签页已配置'
+              : credentialsStore.hasCredentials
+                ? '未选择模型'
+                : '未配置 API Key'
+          }}
         </span>
         <router-link to="/settings#ai-config">
-          {{ credentialsStore.hasCredentials ? '管理 AI 配置' : '去设置 API Key' }}
+          {{ credentialsStore.hasModelReady ? '管理 AI 配置' : '去设置 AI' }}
         </router-link>
       </div>
     </header>
@@ -356,6 +364,10 @@ p {
   font-size: 12px;
 }
 .shared-ai-config strong {
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 13px;
   font-weight: 500;
 }

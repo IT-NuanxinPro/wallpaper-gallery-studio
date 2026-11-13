@@ -9,12 +9,13 @@ import { useConfigStore } from './config'
 import { useHistoryStore } from './history'
 import { useUploadSessionStore } from './upload-session'
 import { useUploadWorkspaceStore } from './upload-workspace'
-import { AI_MODEL_KEY, AI_PROVIDER } from '@/services/ai/model'
+import { AI_PROVIDER } from '@/services/ai/model'
+import { useCredentialsStore } from './credentials'
 import { previewManager } from '@/utils/previewManager'
 import { hashWorker } from '@/utils/hashWorker'
 import { sha256Hex } from '@/utils/file-hash'
 import { imageCompressor } from '@/utils/imageCompressor'
-import { getModelList } from '@/services/ai/classifier'
+import { getModelByKey } from '@/services/ai/classifier'
 
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp']
 const ALLOWED_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp']
@@ -34,7 +35,7 @@ export const useUploadStore = defineStore('upload', () => {
         repository: useConfigStore().config
       })
   })
-  const sessionCache = createUploadSessionCache()
+  const sessionCache = createUploadSessionCache({ getRepositoryContext: repository.getContext })
   const uploadFileLifecycleService = createUploadFileLifecycleService({
     sessionCache,
     imageCompressor,
@@ -67,7 +68,9 @@ export const useUploadStore = defineStore('upload', () => {
   } = storeToRefs(sessionStore)
 
   function getUploadModelList() {
-    return getModelList()
+    return useCredentialsStore()
+      .models.map(model => getModelByKey(model.id))
+      .filter(Boolean)
   }
 
   function generateId() {
@@ -120,8 +123,6 @@ export const useUploadStore = defineStore('upload', () => {
   }
 
   async function triggerAiAnalysis(filesToAnalyze) {
-    selectedModelKey.value = AI_MODEL_KEY
-
     const filesNeedingAnalysis = filesToAnalyze
       .map(file => files.value.find(candidate => candidate.id === file.id))
       .filter(file => file && (!file.aiMetadata || file.aiMetadata.error))
@@ -229,10 +230,6 @@ export const useUploadStore = defineStore('upload', () => {
     return sessionCache.isHashUploaded(hash)
   }
 
-  function markHashesMetadataCommitted(uploadedFiles) {
-    sessionCache.markHashesMetadataCommitted(uploadedFiles)
-  }
-
   function clearUploadedHashes() {
     sessionCache.clearUploadedHashes()
   }
@@ -266,7 +263,7 @@ export const useUploadStore = defineStore('upload', () => {
     metadataStatus.value = 'idle'
     metadataError.value = null
     const pending = files.value.filter(file => file.status === 'pending')
-    const { results, uploadedFiles, permissionError } =
+    const { results, uploadedFiles, permissionError, writeSession } =
       await uploadSessionService.uploadPendingFiles(pending, {
         uploadDelayMs: UPLOAD_DELAY,
         targetPath: targetPath.value,
@@ -278,15 +275,12 @@ export const useUploadStore = defineStore('upload', () => {
       })
 
     currentFileIndex.value = -1
-    uploading.value = false
-
     let metadataResult = null
     if (uploadedFiles.length > 0 && !permissionError) {
       metadataStatus.value = 'uploading'
-      metadataResult = await generatePendingMetadata(uploadedFiles)
+      metadataResult = await generatePendingMetadata(uploadedFiles, writeSession)
 
       if (metadataResult?.success) {
-        markHashesMetadataCommitted(uploadedFiles)
         metadataStatus.value = 'success'
         metadataError.value = null
         metadataPendingPath.value = metadataResult.path || ''
@@ -300,6 +294,7 @@ export const useUploadStore = defineStore('upload', () => {
     } else if (!permissionError) {
       metadataStatus.value = 'idle'
     }
+    uploading.value = false
 
     return { results, permissionError, metadataResult }
   }
@@ -344,7 +339,6 @@ export const useUploadStore = defineStore('upload', () => {
     const result = await generatePendingMetadata(retryFiles)
 
     if (result?.success) {
-      markHashesMetadataCommitted(retryFiles)
       metadataStatus.value = 'success'
       metadataPendingPath.value = result.path || ''
       metadataRetryFileIds.value = []
@@ -356,11 +350,12 @@ export const useUploadStore = defineStore('upload', () => {
     return result
   }
 
-  async function generatePendingMetadata(uploadedFiles) {
+  async function generatePendingMetadata(uploadedFiles, writeSession) {
     return uploadSessionService.generatePendingMetadata(uploadedFiles, {
       targetPath: targetPath.value,
       series: series.value,
-      getExtension
+      getExtension,
+      writeSession
     })
   }
 
@@ -386,24 +381,27 @@ export const useUploadStore = defineStore('upload', () => {
     return pending.every(f => f.aiMetadata && !f.aiMetadata.error && f.targetPath)
   }
 
-  function setAiModel(modelKey) {
-    workspaceStore.setAiModel(modelKey)
-  }
-
   function getCurrentAiConfig() {
-    selectedModelKey.value = AI_MODEL_KEY
     const availableModels = getUploadModelList()
     return {
       provider: AI_PROVIDER,
-      providerName: 'GPT-6.1 Sol',
+      providerName: 'OpenAI 兼容服务',
       providerIcon: '🤖',
-      modelKey: AI_MODEL_KEY,
-      modelName: availableModels[0].name,
+      modelKey: selectedModelKey.value,
+      modelName: selectedModelKey.value || '未选择模型',
       availableModels
     }
   }
 
   function cleanup() {
+    if (
+      uploading.value ||
+      metadataStatus.value === 'uploading' ||
+      metadataRetryFileIds.value.length > 0
+    ) {
+      sessionCache.flush()
+      return
+    }
     previewManager.revokeAll()
 
     hashWorker.terminate()
@@ -448,7 +446,6 @@ export const useUploadStore = defineStore('upload', () => {
     retryPendingMetadata,
     setTarget,
     setSeries,
-    setAiModel,
     getCurrentAiConfig,
     getUploadModelList,
     updateFileTarget,

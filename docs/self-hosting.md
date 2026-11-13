@@ -169,9 +169,9 @@ VITE_OAUTH_WORKER_URL=https://wallpaper-oauth.your-subdomain.workers.dev
 
 ---
 
-## 第四步：在标签页配置 GPT-6.1 Sol
+## 第四步：在标签页配置 AI 模型
 
-工作台仅使用GPT-6.1 Sol。每位同事使用自己网关账户的API Key，在工作台「上传设置 → AI配置」中填写API地址和Key；三个AI入口共用一次配置。
+每位同事使用自己网关账户的 API Key，在「设置 → AI 配置」填写地址与 Key，获取远程模型列表并选择支持图片输入的模型。三个入口共用一次配置，不再固定模型。
 
 Key不放在Cloudflare Pages环境变量、仓库、localStorage或任务记录中。当前标签页刷新可恢复，新标签页或关闭重开需重新填写；清除配置立即取消旧会话请求。网关需要允许工作台来源的CORS请求。
 
@@ -390,7 +390,7 @@ http://localhost:5173/callback
 ### Q: AI 分析一直失败
 
 1. 在「上传设置 → AI 共用配置」确认当前标签页已填写 API 地址和自己的 Key
-2. 确认网关支持 `gpt-6.1-sol`，Key 未过期且有可用额度
+2. 确认所选模型支持 Chat Completions 图片输入，Key 未过期且有可用额度
 3. 检查网关是否允许工作台域名的 CORS 请求，按页面错误提示处理
 
 ### Q: 想换一个图床仓库

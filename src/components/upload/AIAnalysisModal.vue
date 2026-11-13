@@ -2,9 +2,16 @@
   <el-dialog v-model="visible" title="AI 智能分析" width="800px" :close-on-click-modal="false">
     <div class="ai-analysis-modal">
       <p class="ai-analysis-modal__config">
-        GPT-6.1 Sol · {{ credentialsStore.hasCredentials ? '当前标签页已配置' : '未配置 API Key' }}
+        {{ credentialsStore.selectedModel || '未选择模型' }} ·
+        {{
+          credentialsStore.hasModelReady
+            ? '当前标签页已配置'
+            : credentialsStore.hasCredentials
+              ? '未选择模型'
+              : '未配置 API Key'
+        }}
         <router-link to="/settings#ai-config" @click="visible = false">
-          {{ credentialsStore.hasCredentials ? '管理 AI 配置' : '去设置 API Key' }}
+          {{ credentialsStore.hasModelReady ? '管理 AI 配置' : '去设置 AI' }}
         </router-link>
       </p>
 
@@ -119,7 +126,7 @@
 import { ref, computed, onBeforeUnmount, watch } from 'vue'
 import { ArrowRight } from '@element-plus/icons-vue'
 import { analyzeImage } from '@/services/ai/classifier'
-import { AI_MODEL_KEY, AI_PROVIDER } from '@/services/ai/model'
+import { AI_PROVIDER } from '@/services/ai/model'
 import { useCredentialsStore } from '@/stores/credentials'
 import { useAiConfigurationGuard } from '@/composables/useAiConfigurationGuard'
 
@@ -195,7 +202,7 @@ watch(
 )
 
 async function startAnalysis() {
-  if (!props.file || !credentialsStore.hasCredentials) return
+  if (!props.file || !credentialsStore.hasModelReady) return
   const currentRequestId = ++requestId
   const credentials = credentialsStore.getCredentialsByProvider(AI_PROVIDER)
   analyzing.value = true
@@ -214,7 +221,6 @@ async function startAnalysis() {
       file: props.file,
       series: props.series,
       providerType: AI_PROVIDER,
-      modelKey: AI_MODEL_KEY,
       credentials
     })
     if (currentRequestId !== requestId) return

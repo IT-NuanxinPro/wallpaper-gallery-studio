@@ -89,9 +89,9 @@ const emit = defineEmits([
 const fileGridRef = ref(null)
 
 const dropzoneText = computed(() =>
-  credentialsStore.hasCredentials
+  credentialsStore.hasModelReady
     ? '拖拽多张图片到此处，AI 将逐张分析并推荐分类'
-    : '先配置 API Key，再添加图片进行 AI 分析'
+    : '先配置 API Key 并选择模型，再添加图片进行 AI 分析'
 )
 
 function preventDefaultDrag(e) {

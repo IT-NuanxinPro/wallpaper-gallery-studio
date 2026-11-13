@@ -63,3 +63,11 @@ describe('GitHubService.uploadImage', () => {
     })
   })
 })
+
+it('归档仓库即使有管理员权限也只允许只读进入', async () => {
+  vi.spyOn(githubService, 'request').mockResolvedValue({
+    archived: true,
+    permissions: { admin: true, push: true, pull: true }
+  })
+  expect(await githubService.checkRepoAccess('owner', 'archived')).toBe('read')
+})

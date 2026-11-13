@@ -74,14 +74,20 @@
         </div>
         <div class="upload-header__ai-btn">
           <span class="upload-header__ai-btn-copy"
-            ><span class="upload-header__ai-btn-text">GPT-6.1 Sol</span
+            ><span class="upload-header__ai-btn-text" :title="credentialsStore.selectedModel">{{
+              credentialsStore.selectedModel || '未选择模型'
+            }}</span
             ><span class="upload-header__ai-btn-provider">{{
-              credentialsStore.hasCredentials ? '当前标签页已配置' : '未配置 API Key'
+              credentialsStore.hasModelReady
+                ? '当前标签页已配置'
+                : credentialsStore.hasCredentials
+                  ? '未选择模型'
+                  : '未配置 API Key'
             }}</span></span
           >
           <span v-if="aiAnalyzing" class="upload-header__ai-btn-badge">{{ aiAnalyzingCount }}</span>
           <router-link to="/settings#ai-config" class="upload-header__ai-settings">{{
-            credentialsStore.hasCredentials ? 'AI 配置' : '去设置'
+            credentialsStore.hasModelReady ? 'AI 配置' : '去设置'
           }}</router-link>
         </div>
       </div>
@@ -219,6 +225,9 @@ function requestAction(action) {
   gap: 7px 10px;
 }
 .upload-header__ai-btn-text {
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
   color: var(--studio-text, #f3f4f6);
   font-size: 13px;
   font-weight: 500;

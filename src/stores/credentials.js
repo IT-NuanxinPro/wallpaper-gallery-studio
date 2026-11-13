@@ -1,15 +1,19 @@
-/** 当前标签页共用AI配置。用户Key不读取构建环境，也不写入长期本地存储。 */
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import {
   createSessionCredentialStorage,
   DEFAULT_AI_BASE_URL,
-  normalizeAiBaseUrl
+  normalizeAiBaseUrl,
+  normalizeAiKey
 } from '@/services/ai/session-credentials'
+import { normalizeModelId } from '@/services/ai/model'
+import { normalizeModelList } from '@/services/ai/model-catalog'
 
 export const useCredentialsStore = defineStore('credentials', () => {
   const apiKey = ref('')
   const baseUrl = ref(DEFAULT_AI_BASE_URL)
+  const selectedModel = ref('')
+  const models = ref([])
   const loaded = ref(false)
   const loading = ref(false)
   const storageWarning = ref('')
@@ -18,16 +22,20 @@ export const useCredentialsStore = defineStore('credentials', () => {
   let controller = new globalThis.AbortController()
 
   const hasCredentials = computed(() => !!apiKey.value)
+  const hasModelReady = computed(
+    () => hasCredentials.value && models.value.some(item => item.id === selectedModel.value)
+  )
   const defaultProvider = computed(() => 'sub2api')
   const credentialsSource = computed(() => '当前标签页')
   const availableProviders = computed(() =>
-    hasCredentials.value ? [{ key: 'sub2api', name: 'GPT-6.1 Sol', source: '当前标签页' }] : []
+    hasModelReady.value ? [{ key: 'sub2api', name: 'OpenAI 兼容接口', source: '当前标签页' }] : []
   )
 
   function getCredentials() {
     return {
       apiKey: apiKey.value,
       baseUrl: baseUrl.value,
+      model: hasModelReady.value ? selectedModel.value : '',
       signal: controller.signal,
       sessionRevision: sessionRevision.value
     }
@@ -43,6 +51,18 @@ export const useCredentialsStore = defineStore('credentials', () => {
     sessionRevision.value++
   }
 
+  function persist() {
+    const persisted = storage.write({
+      apiKey: apiKey.value,
+      baseUrl: baseUrl.value,
+      model: selectedModel.value,
+      models: models.value
+    })
+    storageWarning.value = persisted
+      ? ''
+      : '浏览器未允许会话缓存，本次配置仅保留在当前页面，刷新后需重新填写。'
+  }
+
   function loadCredentials() {
     if (loaded.value) return hasCredentials.value
     loading.value = true
@@ -51,6 +71,8 @@ export const useCredentialsStore = defineStore('credentials', () => {
       if (value) {
         apiKey.value = value.apiKey
         baseUrl.value = value.baseUrl
+        models.value = value.models
+        selectedModel.value = value.model
       }
       loaded.value = true
       return hasCredentials.value
@@ -61,29 +83,40 @@ export const useCredentialsStore = defineStore('credentials', () => {
 
   function saveCredentials(value) {
     loadCredentials()
-    const nextKey = String(value?.apiKey ?? value?.sub2apiApiKey ?? '').trim()
-    if (
-      !nextKey ||
-      nextKey.length > 8192 ||
-      /\s/.test(nextKey) ||
-      [...nextKey].some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127)
-    )
-      throw new Error('请输入有效的 API Key，不要包含空格或换行')
-    const nextUrl = normalizeAiBaseUrl(value?.baseUrl || baseUrl.value || DEFAULT_AI_BASE_URL)
+    const nextKey = normalizeAiKey(value?.apiKey)
+    const nextUrl = normalizeAiBaseUrl(value?.baseUrl || DEFAULT_AI_BASE_URL)
+    const nextModels = normalizeModelList(value?.models, nextKey)
+    const nextModel = normalizeModelId(value?.model)
+    if (!nextModel || !nextModels.some(item => item.id === nextModel)) {
+      throw new Error('请获取模型列表并选择一个模型')
+    }
     renewSession()
     apiKey.value = nextKey
     baseUrl.value = nextUrl
-    const persisted = storage.write({ apiKey: nextKey, baseUrl: nextUrl })
-    storageWarning.value = persisted
-      ? ''
-      : '浏览器未允许会话缓存，本次配置仅保留在当前页面，刷新后需重新填写。'
+    models.value = nextModels
+    selectedModel.value = nextModel
+    persist()
     return true
+  }
+
+  function selectModel(value) {
+    loadCredentials()
+    const nextModel = normalizeModelId(value)
+    if (!hasCredentials.value || !models.value.some(item => item.id === nextModel)) {
+      throw new Error('请从当前模型列表中选择')
+    }
+    if (nextModel === selectedModel.value) return
+    renewSession()
+    selectedModel.value = nextModel
+    persist()
   }
 
   function clearCredentials() {
     renewSession()
     apiKey.value = ''
     baseUrl.value = DEFAULT_AI_BASE_URL
+    selectedModel.value = ''
+    models.value = []
     storage.clear()
     storageWarning.value = ''
     loaded.value = true
@@ -94,11 +127,14 @@ export const useCredentialsStore = defineStore('credentials', () => {
   return {
     apiKey,
     baseUrl,
+    selectedModel,
+    models,
     loaded,
     loading,
     storageWarning,
     sessionRevision,
     hasCredentials,
+    hasModelReady,
     defaultProvider,
     credentialsSource,
     availableProviders,
@@ -106,6 +142,7 @@ export const useCredentialsStore = defineStore('credentials', () => {
     sub2apiCredentials,
     loadCredentials,
     saveCredentials,
+    selectModel,
     clearCredentials,
     getCredentials,
     getCredentialsByProvider

@@ -9,7 +9,7 @@ credentials.loadCredentials()
 watch(
   () => credentials.sessionRevision,
   () => {
-    if (credentials.hasCredentials) resumeAiTaskQueue()
+    if (credentials.hasModelReady) resumeAiTaskQueue()
   }
 )
 // 浏览器从页面快照恢复时不重新执行setup，主动丢弃旧页面中的AI会话。

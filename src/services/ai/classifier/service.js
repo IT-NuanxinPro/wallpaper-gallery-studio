@@ -5,8 +5,7 @@
 
 import { AIProviderFactory, compressImage, IMAGE_CONFIG } from '../core'
 import { buildPromptWithLatestCategories, validatePrompt } from './prompts'
-import { getModelByKey } from './config'
-import { AI_MODEL_KEY, AI_PROVIDER } from '../model'
+import { normalizeModelId, AI_PROVIDER } from '../model'
 /**
  * 分析图片并生成分类和文件名建议
  */
@@ -18,6 +17,8 @@ export async function analyzeImage({
   promptTemplate = 'default',
   customPrompt = ''
 }) {
+  const model = normalizeModelId(credentials?.model)
+  if (!model) throw new Error('请先从远程列表选择 AI 模型')
   let base64Image = imageBase64
   if (!base64Image && file) {
     base64Image = await compressImage(file, IMAGE_CONFIG)
@@ -37,8 +38,6 @@ export async function analyzeImage({
     throw new Error('Invalid prompt')
   }
 
-  const modelConfig = getModelByKey(AI_MODEL_KEY)
-
   const provider = AIProviderFactory.create(AI_PROVIDER)
 
   const analysis = await provider.analyze({
@@ -46,10 +45,7 @@ export async function analyzeImage({
     prompt,
     credentials: {
       ...credentials,
-      model: modelConfig.id,
-      maxTokens: modelConfig.maxTokens,
-      temperature: modelConfig.temperature,
-      reasoningEffort: modelConfig.reasoningEffort
+      model
     }
   })
 
@@ -66,7 +62,7 @@ export async function analyzeImage({
     reasoning: analysis.reasoning || null,
     meta: {
       provider: AI_PROVIDER,
-      model: AI_MODEL_KEY,
+      model,
       series,
       promptTemplate,
       timestamp: Date.now()
@@ -78,9 +74,7 @@ export async function analyzeImage({
 export async function analyzeBatch({
   files,
   series,
-  providerType,
   credentials,
-  modelKey,
   promptTemplate = 'default',
   customPrompt = '',
   onProgress
@@ -92,9 +86,7 @@ export async function analyzeBatch({
       const result = await analyzeImage({
         file: files[i],
         series,
-        providerType,
         credentials,
-        modelKey,
         promptTemplate,
         customPrompt
       })

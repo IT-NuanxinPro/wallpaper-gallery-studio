@@ -10,9 +10,16 @@ vi.mock('@/components/MainLayout.vue', () => ({ default: { template: '<main><slo
 vi.mock('@/stores/auth', () => ({
   useAuthStore: () => ({ canUpload: true, permissionChecked: true, user: { login: 'tester' } })
 }))
-vi.mock('@/stores/config', () => ({ useConfigStore: () => ({ isConfigured: false }) }))
+vi.mock('@/stores/config', () => ({
+  useConfigStore: () => ({ isConfigured: false, config: { videoApiUrl: 'http://video.test' } })
+}))
 vi.mock('@/stores/credentials', () => ({
-  useCredentialsStore: () => ({ hasCredentials: false, loadCredentials: vi.fn() })
+  useCredentialsStore: () => ({
+    hasCredentials: false,
+    hasModelReady: false,
+    selectedModel: '',
+    loadCredentials: vi.fn()
+  })
 }))
 vi.mock('@/services/ai/classifier', () => ({
   analyzeImage: vi.fn(),

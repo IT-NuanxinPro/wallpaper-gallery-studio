@@ -5,7 +5,7 @@ const apiKey = 'test-secret-session-key'
 const request = {
   imageBase64: 'data:image/png;base64,test',
   prompt: '分类',
-  credentials: { apiKey, model: 'gpt-6.1-sol' }
+  credentials: { apiKey, model: 'vision-alpha' }
 }
 const response = content => ({
   ok: true,
@@ -22,21 +22,39 @@ afterEach(() => {
 })
 
 describe('当前会话的模型请求', () => {
-  it('使用当前会话地址和Key，且旧model参数不能调用其他模型', async () => {
+  it.each(['vision-alpha', 'vendor/vision-beta'])('请求使用当前会话选择的模型 %s', async model => {
     await new Sub2apiProvider({ baseUrl: 'https://default.example/v1' }).analyze({
       ...request,
-      credentials: { apiKey, model: 'grok-4.6', baseUrl: 'https://session.example/custom/v1/' }
+      credentials: { apiKey, model, baseUrl: 'https://session.example/custom/v1/' }
     })
     const [url, options] = fetch.mock.calls[0]
     expect(url).toBe('https://session.example/custom/v1/chat/completions')
     expect(options.headers.Authorization).toBe(`Bearer ${apiKey}`)
-    expect(JSON.parse(options.body).model).toBe('gpt-6.1-sol')
+    expect(JSON.parse(options.body)).toEqual({
+      model,
+      messages: [
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: '分类' },
+            { type: 'image_url', image_url: { url: 'data:image/png;base64,test' } }
+          ]
+        }
+      ]
+    })
+  })
+
+  it('没有选择模型时阻止请求，不回退到内置模型', async () => {
+    await expect(
+      new Sub2apiProvider().analyze({ ...request, credentials: { apiKey } })
+    ).rejects.toThrow('模型')
+    expect(fetch).not.toHaveBeenCalled()
   })
 
   it('没有手填Key时不读取环境Key并阻止请求', async () => {
     vi.stubEnv('VITE_SUB2API_API_KEY', 'environment-secret')
     await expect(
-      new Sub2apiProvider().analyze({ ...request, credentials: { model: 'gpt-6.1-sol' } })
+      new Sub2apiProvider().analyze({ ...request, credentials: { model: 'vision-alpha' } })
     ).rejects.toThrow()
     expect(fetch).not.toHaveBeenCalled()
   })

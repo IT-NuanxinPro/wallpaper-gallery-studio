@@ -1,9 +1,10 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { AI_MODEL_KEY } from '@/services/ai/model'
+import { useCredentialsStore } from './credentials'
 
 export const useUploadWorkspaceStore = defineStore('upload-workspace', () => {
-  const selectedModelKey = ref(AI_MODEL_KEY)
+  const credentialsStore = useCredentialsStore()
+  const selectedModelKey = computed(() => credentialsStore.selectedModel)
   const series = ref('desktop')
   const categoryL1 = ref('')
   const categoryL2 = ref('')
@@ -27,10 +28,6 @@ export const useUploadWorkspaceStore = defineStore('upload-workspace', () => {
     series.value = newSeries
   }
 
-  function setAiModel() {
-    selectedModelKey.value = AI_MODEL_KEY
-  }
-
   return {
     selectedModelKey,
     series,
@@ -38,7 +35,6 @@ export const useUploadWorkspaceStore = defineStore('upload-workspace', () => {
     categoryL2,
     targetPath,
     setTarget,
-    setSeries,
-    setAiModel
+    setSeries
   }
 })

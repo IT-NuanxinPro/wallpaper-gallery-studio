@@ -1,15 +1,6 @@
 export { analyzeImage, analyzeBatch, validateCredentials } from './service'
 
-export {
-  CLASSIFIER_CONFIG,
-  CLASSIFIER_MODELS,
-  SPEED_LEVELS,
-  ACCURACY_LEVELS,
-  COST_LEVELS,
-  getModelList,
-  getModelByKey,
-  getRecommendedModel
-} from './config'
+export { CLASSIFIER_CONFIG, getModelByKey } from './config'
 
 export {
   PROMPT_TEMPLATES,

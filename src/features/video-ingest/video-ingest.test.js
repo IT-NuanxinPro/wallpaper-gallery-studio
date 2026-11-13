@@ -301,7 +301,7 @@ describe('视频接口与 AI 审核租约', () => {
       review,
       modelKey: 'existing-model',
       providerType: 'sub2api',
-      credentials: { apiKey: 'existing-key' },
+      credentials: { apiKey: 'existing-key', model: 'vision-alpha' },
       topics: ['风景', '宝可梦'],
       frameToBase64: async () => 'data:image/webp;base64,AA',
       analyzeImage: async args => {
@@ -318,13 +318,14 @@ describe('视频接口与 AI 审核租约', () => {
     })
     expect(input.imageBase64).toBe('data:image/webp;base64,AA')
     expect(input.file).toBeUndefined()
+    expect(input.credentials.model).toBe('vision-alpha')
     expect(saved.revision).toBe(5)
     expect(saved.leaseToken).toBe('lease')
     expect(saved.review.filename).toBe('星空.mp4')
     expect(saved.review.topic).toBe('风景')
     expect(saved.review.ai).toMatchObject({
       frameId: 'frame-1',
-      model: 'existing-model',
+      model: 'vision-alpha',
       confidence: 0.9
     })
     expect(released).toBe('lease')
@@ -344,7 +345,11 @@ describe('视频接口与 AI 审核租约', () => {
         api,
         job: { id: 'job', revision: 1, result: { frames: [{ id: 'frame-1', url: 'signed' }] } },
         review,
-        credentials: { apiKey: 'session-key', signal: controller.signal },
+        credentials: {
+          apiKey: 'session-key',
+          model: 'vendor/vision-beta',
+          signal: controller.signal
+        },
         frameToBase64: async () => 'data:image/webp;base64,AA',
         analyzeImage: async () => {
           controller.abort()
@@ -356,6 +361,22 @@ describe('视频接口与 AI 审核租约', () => {
     expect(releaseAi).toHaveBeenCalledWith('job', 'lease')
   })
 
+  it('未选模型时不领取视频AI租约或调用模型', async () => {
+    const claimAi = vi.fn()
+    const analyzeImage = vi.fn()
+    await expect(
+      analyzeVideoFrame({
+        api: { claimAi },
+        job: { id: 'job' },
+        review,
+        credentials: { apiKey: 'test-key' },
+        analyzeImage
+      })
+    ).rejects.toThrow('模型')
+    expect(claimAi).not.toHaveBeenCalled()
+    expect(analyzeImage).not.toHaveBeenCalled()
+  })
+
   it('分析失败仍释放AI租约，避免审核被长期锁住', async () => {
     const releaseAi = vi.fn().mockResolvedValue(undefined)
     const api = { claimAi: async () => ({ leaseToken: 'lease', revision: 2 }), releaseAi }
@@ -364,6 +385,7 @@ describe('视频接口与 AI 审核租约', () => {
         api,
         job: { id: 'job', revision: 1, result: { frames: [{ id: 'frame-1', url: 'signed' }] } },
         review,
+        credentials: { apiKey: 'session-key', model: 'vision-alpha' },
         frameToBase64: async () => {
           throw new Error('封面下载失败')
         }

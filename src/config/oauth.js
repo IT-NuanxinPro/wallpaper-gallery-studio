@@ -5,7 +5,8 @@ const CONFIG_STORAGE_KEY = 'wallpaper_admin_config'
 function getStoredConfig() {
   try {
     const raw = globalThis.localStorage?.getItem(CONFIG_STORAGE_KEY)
-    return raw ? JSON.parse(raw) : {}
+    const value = raw ? JSON.parse(raw) : {}
+    return value && typeof value === 'object' && !Array.isArray(value) ? value : {}
   } catch {
     return {}
   }
@@ -14,12 +15,16 @@ function getStoredConfig() {
 export const oauthConfig = {
   get clientId() {
     const stored = getStoredConfig()
-    return import.meta.env.VITE_GITHUB_CLIENT_ID || stored.clientId || ''
+    return typeof stored.clientId === 'string'
+      ? stored.clientId
+      : import.meta.env.VITE_GITHUB_CLIENT_ID || ''
   },
   // Worker 地址
   get tokenEndpoint() {
     const stored = getStoredConfig()
-    return import.meta.env.VITE_OAUTH_WORKER_URL || stored.oauthWorkerUrl || ''
+    return typeof stored.oauthWorkerUrl === 'string'
+      ? stored.oauthWorkerUrl
+      : import.meta.env.VITE_OAUTH_WORKER_URL || ''
   },
   // 授权地址
   authorizeUrl: 'https://github.com/login/oauth/authorize',
@@ -31,8 +36,8 @@ export const oauthConfig = {
 
 // 生成授权 URL
 export function getAuthUrl() {
-  if (!oauthConfig.clientId) {
-    throw new Error('未配置 GitHub Client ID，请在设置页或环境变量中填写')
+  if (!oauthConfig.clientId || !oauthConfig.tokenEndpoint) {
+    throw new Error('请先在登录页配置 OAuth，或使用 Token 登录')
   }
 
   const params = new URLSearchParams({
@@ -55,13 +60,13 @@ function generateState() {
 export function verifyState(state) {
   const saved = sessionStorage.getItem('oauth_state')
   sessionStorage.removeItem('oauth_state')
-  return saved === state
+  return typeof state === 'string' && !!state && saved === state
 }
 
 // 用 code 换 token
 export async function exchangeToken(code) {
   if (!oauthConfig.tokenEndpoint) {
-    throw new Error('未配置 OAuth Worker URL，请在设置页或环境变量中填写')
+    throw new Error('请先在登录页配置 OAuth 服务地址')
   }
 
   const response = await fetch(oauthConfig.tokenEndpoint, {

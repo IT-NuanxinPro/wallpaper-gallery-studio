@@ -2,7 +2,7 @@ import { AI_TASK_STATUS, useAiTasksStore } from '@/stores/ai-tasks'
 import { useCredentialsStore } from '@/stores/credentials'
 import { useUploadSessionStore } from '@/stores/upload-session'
 import { analyzeImage as classifierAnalyze } from '@/services/ai/classifier'
-import { AI_MODEL_KEY, AI_PROVIDER } from './model'
+import { normalizeModelId, AI_PROVIDER } from './model'
 
 let runningPromise = null
 
@@ -26,8 +26,9 @@ function buildTargetPath(series, metadata) {
   return ['wallpaper', series, category, subcategory].filter(Boolean).join('/')
 }
 
-function buildAiMetadata(series, result) {
+function buildAiMetadata(series, result, model) {
   return {
+    model,
     series,
     category: result.secondary || '通用',
     subcategory: result.third || '',
@@ -78,7 +79,14 @@ async function runQueue() {
 
     // 每次执行（包括重试）读取当前会话，不在持久化任务中携带凭据。
     const credentials = credentialsStore.getCredentialsByProvider(AI_PROVIDER)
-    if (!credentials?.apiKey?.trim() || credentials.signal?.aborted) return
+    const model = normalizeModelId(credentials?.model)
+    if (
+      !credentialsStore.hasModelReady ||
+      !credentials?.apiKey?.trim() ||
+      !model ||
+      credentials.signal?.aborted
+    )
+      return
 
     const uploadFile = sessionStore.files.find(file => file.id === task.fileId)
     if (!uploadFile?.file) {
@@ -90,11 +98,11 @@ async function runQueue() {
       continue
     }
 
-    const previousAttempts = task.attempts || 0
+    const previousAttempts = task.modelKey === model ? task.attempts || 0 : 0
     const attemptNumber = previousAttempts + 1
     task = await taskStore.updateTask(task.id, {
       provider: AI_PROVIDER,
-      modelKey: AI_MODEL_KEY,
+      modelKey: model,
       status: AI_TASK_STATUS.ANALYZING,
       attempts: attemptNumber,
       startedAt: task.startedAt || Date.now(),
@@ -108,14 +116,13 @@ async function runQueue() {
         file: uploadFile.file,
         series: task.series,
         providerType: AI_PROVIDER,
-        credentials,
-        modelKey: AI_MODEL_KEY
+        credentials: { ...credentials, model }
       })
       if (credentials.signal?.aborted) {
         throw Object.assign(new Error('AI 会话已变更'), { name: 'AbortError' })
       }
 
-      const metadata = buildAiMetadata(task.series, result)
+      const metadata = buildAiMetadata(task.series, result, model)
       applyResultToUploadFile(uploadFile, task, metadata)
       await taskStore.updateTask(task.id, {
         status: AI_TASK_STATUS.COMPLETED,

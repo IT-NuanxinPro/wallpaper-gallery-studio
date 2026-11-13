@@ -8,6 +8,9 @@ const state = vi.hoisted(() => ({ records: [], files: [], credentials: null }))
 vi.mock('@/stores/credentials', () => ({
   useCredentialsStore: () => ({
     loadCredentials: async () => {},
+    get hasModelReady() {
+      return !!state.credentials?.apiKey && !!state.credentials?.model
+    },
     getCredentialsByProvider: provider => (provider === 'sub2api' ? state.credentials : null)
   })
 }))
@@ -37,9 +40,15 @@ vi.mock('@/services/ai/task-storage', () => ({
   formatTaskStorageError: () => '任务存储失败'
 }))
 
-function credentials(apiKey = 'current-key') {
+function credentials(apiKey = 'current-key', model = 'vision-alpha') {
   const controller = new globalThis.AbortController()
-  return { apiKey, baseUrl: 'https://session.example/v1', signal: controller.signal, controller }
+  return {
+    apiKey,
+    model,
+    baseUrl: 'https://session.example/v1',
+    signal: controller.signal,
+    controller
+  }
 }
 
 async function queueTask() {
@@ -66,7 +75,7 @@ beforeEach(() => {
 })
 
 describe('AI 任务恢复与会话凭据边界', () => {
-  it('旧待处理任务迁移到当前模型，已完成历史结果保留', async () => {
+  it('恢复任务保留历史模型与次数，等待会话决定实际执行模型', async () => {
     state.records = [
       {
         id: 'pending',
@@ -89,9 +98,9 @@ describe('AI 任务恢复与会话凭据边界', () => {
     await store.initialize()
     expect(store.tasks.find(task => task.id === 'pending')).toMatchObject({
       status: 'queued',
-      provider: 'sub2api',
-      modelKey: 'sub2api-gpt-6.1-sol',
-      attempts: 0
+      provider: 'zhipu',
+      modelKey: 'zhipu-glm-4v-flash',
+      attempts: 2
     })
     expect(store.tasks.find(task => task.id === 'done')).toMatchObject({
       provider: 'groq',
@@ -108,7 +117,7 @@ describe('AI 任务恢复与会话凭据边界', () => {
       baseUrl: 'https://secret.example',
       credentials: state.credentials
     })
-    expect(state.records[0]).toMatchObject({ provider: 'sub2api', modelKey: 'sub2api-gpt-6.1-sol' })
+    expect(state.records[0]).toMatchObject({ provider: 'sub2api', modelKey: '' })
     expect(state.records[0]).not.toHaveProperty('credentials')
     expect(state.records[0]).not.toHaveProperty('apiKey')
     expect(state.records[0]).not.toHaveProperty('baseUrl')
@@ -125,9 +134,50 @@ describe('AI 任务恢复与会话凭据边界', () => {
     expect(useAiTasksStore().tasks[0]).toMatchObject({ id: task.id, status: 'completed' })
     expect(analyzeImage.mock.calls[0][0]).toMatchObject({
       providerType: 'sub2api',
-      modelKey: 'sub2api-gpt-6.1-sol',
-      credentials: { apiKey: 'new-key' }
+      credentials: { apiKey: 'new-key', model: 'vision-alpha' }
     })
+  })
+
+  it('仅有Key没有模型时保持等待，选择模型后用该模型运行', async () => {
+    const task = await queueTask()
+    state.credentials = credentials('current-key', '')
+    await resumeAiTaskQueue()
+    expect(analyzeImage).not.toHaveBeenCalled()
+    expect(useAiTasksStore().tasks[0]).toMatchObject({
+      id: task.id,
+      status: 'queued',
+      modelKey: '',
+      attempts: 0
+    })
+    state.credentials = credentials('current-key', 'vendor/vision-beta')
+    await resumeAiTaskQueue()
+    expect(useAiTasksStore().tasks[0]).toMatchObject({
+      modelKey: 'vendor/vision-beta',
+      result: { model: 'vendor/vision-beta' }
+    })
+  })
+
+  it('切换模型丢弃旧结果并以新模型执行，完成历史不改写', async () => {
+    await queueTask()
+    analyzeImage.mockImplementationOnce(async () => {
+      state.credentials.controller.abort()
+      state.credentials = credentials('current-key', 'vendor/vision-beta')
+      return { description: '旧模型结果' }
+    })
+    await resumeAiTaskQueue()
+    expect(analyzeImage.mock.calls.map(([request]) => request.credentials.model)).toEqual([
+      'vision-alpha',
+      'vendor/vision-beta'
+    ])
+    expect(useAiTasksStore().tasks[0]).toMatchObject({
+      status: 'completed',
+      attempts: 1,
+      modelKey: 'vendor/vision-beta',
+      result: { model: 'vendor/vision-beta', description: '新结果' }
+    })
+    state.credentials = credentials('current-key', 'vision-alpha')
+    await resumeAiTaskQueue()
+    expect(useAiTasksStore().tasks[0].modelKey).toBe('vendor/vision-beta')
   })
 
   it('清除Key后丢弃旧在途结果，任务回到等待且不消耗失败次数', async () => {

@@ -1,30 +1,26 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
+import { normalizeModelId } from '../model'
+import { getModelByKey } from './config'
 
-afterEach(() => {
-  vi.unstubAllEnvs()
-  vi.resetModules()
-})
+describe('远程模型标识', () => {
+  it.each(['vision-alpha', 'vendor/vision-beta'])('合法模型 %s 可用于显示历史结果', id => {
+    expect(getModelByKey(id)).toEqual({ id, key: id, name: id, provider: 'sub2api' })
+  })
 
-describe('固定 AI 模型', () => {
-  it.each(['sub2api-grok-4.6', 'zhipu-glm-4v-flash', 'missing-model'])(
-    '旧配置 %s 不会恢复已下架模型',
-    async previousModel => {
-      vi.stubEnv('VITE_AI_DEFAULT_MODEL', previousModel)
-      vi.resetModules()
-      const { CLASSIFIER_CONFIG, getModelByKey, getModelList } = await import('./config')
-      expect(CLASSIFIER_CONFIG.defaultProvider).toBe('sub2api')
-      expect(CLASSIFIER_CONFIG.defaultModel).toBe('sub2api-gpt-6.1-sol')
-      expect(getModelByKey(CLASSIFIER_CONFIG.defaultModel).id).toBe('gpt-6.1-sol')
-      expect(getModelList().map(model => model.key)).toEqual(['sub2api-gpt-6.1-sol'])
-      expect(getModelByKey(previousModel)).toBeNull()
-    }
-  )
-
-  it('工厂拒绝所有已下架服务', async () => {
-    const { AIProviderFactory } = await import('../core')
-    expect(AIProviderFactory.getSupportedTypes()).toEqual(['sub2api'])
-    for (const provider of ['zhipu', 'groq', 'cloudflare', 'doubao']) {
-      expect(() => AIProviderFactory.create(provider)).toThrow()
+  it('去除首尾空白但不接受空模型、内部空白、控制字符或超长ID', () => {
+    expect(normalizeModelId('  vendor/vision-beta  ')).toBe('vendor/vision-beta')
+    for (const value of [
+      '',
+      null,
+      '   ',
+      'bad model',
+      'bad\nmodel',
+      `bad${String.fromCharCode(0)}model`,
+      `bad${String.fromCharCode(128)}model`,
+      'x'.repeat(201)
+    ]) {
+      expect(normalizeModelId(value)).toBe('')
+      expect(getModelByKey(value)).toBeNull()
     }
   })
 })

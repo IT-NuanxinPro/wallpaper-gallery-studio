@@ -1,6 +1,6 @@
 import { computed, ref, toRaw } from 'vue'
 import { defineStore } from 'pinia'
-import { AI_MODEL_KEY, AI_PROVIDER } from '@/services/ai/model'
+import { AI_PROVIDER } from '@/services/ai/model'
 import {
   clearAiTaskRecords,
   deleteAiTaskRecord,
@@ -49,12 +49,6 @@ function taskRecord(record) {
   const task = Object.fromEntries(
     TASK_FIELDS.filter(key => key in source).map(key => [key, toRaw(source[key])])
   )
-  if (
-    [AI_TASK_STATUS.QUEUED, AI_TASK_STATUS.ANALYZING, AI_TASK_STATUS.RETRYING].includes(task.status)
-  ) {
-    task.provider = AI_PROVIDER
-    task.modelKey = AI_MODEL_KEY
-  }
   return task
 }
 
@@ -96,13 +90,10 @@ export const useAiTasksStore = defineStore('ai-tasks', () => {
           AI_TASK_STATUS.ANALYZING,
           AI_TASK_STATUS.RETRYING
         ].includes(record.status)
-        const retired = record.provider !== AI_PROVIDER || record.modelKey !== AI_MODEL_KEY
         if (pending) {
           next.status = AI_TASK_STATUS.QUEUED
           next.retryAt = null
           next.error = null
-          // 退役模型的失败次数不占用新模型的重试预算。
-          if (retired) next.attempts = 0
         }
         if (pending || Object.keys(next).length !== Object.keys(record).length) {
           next.updatedAt = now
@@ -140,7 +131,7 @@ export const useAiTasksStore = defineStore('ai-tasks', () => {
       blob: file,
       series,
       provider: AI_PROVIDER,
-      modelKey: AI_MODEL_KEY,
+      modelKey: '',
       status: AI_TASK_STATUS.QUEUED,
       attempts: 0,
       maxAttempts: 3,

@@ -1,4 +1,5 @@
 import { compressImage, IMAGE_CONFIG } from '@/services/ai/core/image-processor'
+import { normalizeModelId } from '@/services/ai/model'
 
 export async function frameToBase64(
   frame,
@@ -30,12 +31,17 @@ export async function analyzeVideoFrame({
   job,
   review,
   analyzeImage,
-  modelKey,
   providerType,
   credentials,
   topics = [],
   frameToBase64: readFrame = frameToBase64
 }) {
+  const model = normalizeModelId(credentials?.model)
+  if (!model) throw new Error('请先从远程列表选择 AI 模型')
+  const snapshot = { ...credentials, model }
+  if (snapshot.signal?.aborted) {
+    throw new globalThis.DOMException('AI 配置已变更，请重新分析', 'AbortError')
+  }
   const frame = job.result?.frames?.find(candidate => candidate.id === review.selectedFrameId)
   if (!frame) throw new Error('请选择有效封面后再分析')
   const lease = await api.claimAi(job.id, job.revision)
@@ -47,10 +53,9 @@ export async function analyzeVideoFrame({
       imageBase64,
       series: review.usage === 'mobile' ? 'mobile' : 'desktop',
       providerType,
-      credentials,
-      modelKey
+      credentials: snapshot
     })
-    if (credentials?.signal?.aborted) {
+    if (snapshot.signal?.aborted) {
       throw new globalThis.DOMException('AI 配置已变更，请重新分析', 'AbortError')
     }
     const filename = analysis.filenameSuggestions?.[0] || review.filename
@@ -66,7 +71,7 @@ export async function analyzeVideoFrame({
       keywords: analysis.keywords?.length ? analysis.keywords : review.keywords,
       ai: {
         frameId: frame.id,
-        model: modelKey,
+        model,
         confidence: analysis.confidence || 0,
         analyzedAt: new Date().toISOString()
       }

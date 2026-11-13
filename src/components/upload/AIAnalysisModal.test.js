@@ -17,14 +17,15 @@ vi.mock('@/services/ai/classifier', () => ({ analyzeImage: state.analyzeImage })
 
 beforeEach(() => {
   state.analyzeImage.mockReset()
-  state.requireAiConfiguration
-    .mockReset()
-    .mockImplementation(() => state.credentials.hasCredentials)
+  state.requireAiConfiguration.mockReset().mockImplementation(() => state.credentials.hasModelReady)
   state.credentials = reactive({
     hasCredentials: false,
+    hasModelReady: false,
+    selectedModel: '',
     getCredentialsByProvider: vi.fn(() => ({
       apiKey: 'session-key',
-      baseUrl: 'https://api.test/v1'
+      baseUrl: 'https://api.test/v1',
+      model: 'vision-remote'
     }))
   })
   URL.createObjectURL = vi.fn(() => 'blob:preview')
@@ -49,14 +50,18 @@ describe('图片分析弹窗共用配置', () => {
       global
     })
     await flushPromises()
-    expect(panel.text()).toContain('GPT-6.1 Sol')
+    expect(panel.text()).toContain('未选择模型')
     expect(panel.getComponent(RouterLinkStub).props('to')).toBe('/settings#ai-config')
     expect(state.analyzeImage).not.toHaveBeenCalled()
     panel.unmount()
   })
 
   it('失败后Key被清除，重新分析可点击但只提示配置，不发起新请求', async () => {
-    state.credentials.hasCredentials = true
+    Object.assign(state.credentials, {
+      hasCredentials: true,
+      hasModelReady: true,
+      selectedModel: 'vision-remote'
+    })
     state.analyzeImage.mockRejectedValue(new Error('分析失败'))
     const panel = mount(AIAnalysisModal, {
       props: {
@@ -66,7 +71,11 @@ describe('图片分析弹窗共用配置', () => {
       global
     })
     await flushPromises()
-    state.credentials.hasCredentials = false
+    Object.assign(state.credentials, {
+      hasCredentials: false,
+      hasModelReady: false,
+      selectedModel: ''
+    })
     await flushPromises()
     const retry = panel.findAll('button').find(button => button.text().includes('重新分析'))
     expect(retry.attributes('disabled')).toBeUndefined()
@@ -76,8 +85,12 @@ describe('图片分析弹窗共用配置', () => {
     panel.unmount()
   })
 
-  it('使用共用 Key 与固定模型分析，并适配分类服务结果', async () => {
-    state.credentials.hasCredentials = true
+  it('使用共用 Key 与选中的远程模型分析，并适配分类服务结果', async () => {
+    Object.assign(state.credentials, {
+      hasCredentials: true,
+      hasModelReady: true,
+      selectedModel: 'vision-remote'
+    })
     state.analyzeImage.mockResolvedValue({
       filenameSuggestions: ['星空.jpg'],
       secondary: '风景',
@@ -92,8 +105,11 @@ describe('图片分析弹窗共用配置', () => {
       expect.objectContaining({
         file,
         providerType: 'sub2api',
-        modelKey: 'sub2api-gpt-6.1-sol',
-        credentials: { apiKey: 'session-key', baseUrl: 'https://api.test/v1' }
+        credentials: {
+          apiKey: 'session-key',
+          baseUrl: 'https://api.test/v1',
+          model: 'vision-remote'
+        }
       })
     )
     expect(panel.text()).toContain('星空描述')

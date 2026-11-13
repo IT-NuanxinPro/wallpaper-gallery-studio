@@ -8,6 +8,12 @@ const state = vi.hoisted(() => ({ credentials: null }))
 vi.mock('./credentials', () => ({
   useCredentialsStore: () => ({
     hasCredentials: true,
+    get hasModelReady() {
+      return !!state.credentials?.model
+    },
+    get selectedModel() {
+      return state.credentials?.model || ''
+    },
     getCredentialsByProvider: provider => (provider === 'sub2api' ? state.credentials : null)
   })
 }))
@@ -22,25 +28,38 @@ vi.mock('@/services/ai/classifier/prompts', () => ({
 beforeEach(() => {
   setActivePinia(createPinia())
   vi.restoreAllMocks()
-  state.credentials = { apiKey: 'session-key', signal: new globalThis.AbortController().signal }
+  state.credentials = {
+    apiKey: 'session-key',
+    model: 'vision-alpha',
+    signal: new globalThis.AbortController().signal
+  }
   vi.stubGlobal('URL', { createObjectURL: () => 'blob:preview' })
 })
 
 afterEach(() => vi.unstubAllGlobals())
 
-describe('工坊与上传的固定模型', () => {
-  it('旧Provider/模型选择不能重新启用已下架模型', async () => {
+describe('工坊与上传共用当前会话模型', () => {
+  it.each(['vision-alpha', 'vendor/vision-beta'])('请求与结果都记录当前模型 %s', async model => {
+    state.credentials.model = model
     const analyze = vi.fn().mockResolvedValue({ secondary: '科技' })
     vi.spyOn(AIProviderFactory, 'create').mockReturnValue({ analyze })
     const store = useAIStore()
-    store.setProvider('zhipu')
-    store.setModel('zhipu-glm-4v-flash')
     const result = await store.analyzeImage(new globalThis.File(['x'], 'wallpaper.png'), 'desktop')
-    expect(result).toMatchObject({ provider: 'sub2api', model: 'sub2api-gpt-6.1-sol' })
-    expect(analyze.mock.calls[0][0].credentials.model).toBe('gpt-6.1-sol')
-    const workspace = useUploadWorkspaceStore()
-    workspace.setAiModel('sub2api-grok-4.6')
-    expect(workspace.selectedModelKey).toBe('sub2api-gpt-6.1-sol')
+    expect(result).toMatchObject({ provider: 'sub2api', model })
+    expect(analyze.mock.calls[0][0].credentials.model).toBe(model)
+    expect(useUploadWorkspaceStore().selectedModelKey).toBe(model)
+  })
+
+  it('未选模型时不发起分析且不写入结果', async () => {
+    state.credentials.model = ''
+    const analyze = vi.fn()
+    vi.spyOn(AIProviderFactory, 'create').mockReturnValue({ analyze })
+    const store = useAIStore()
+    await expect(
+      store.analyzeImage(new globalThis.File(['x'], 'wallpaper.png'), 'desktop')
+    ).rejects.toThrow('模型')
+    expect(analyze).not.toHaveBeenCalled()
+    expect(store.results).toEqual([])
   })
 
   it('凭据切换后拒绝写入旧工坊结果', async () => {

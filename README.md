@@ -19,7 +19,7 @@
 
 ### 🤖 AI 智能分类
 
-- **GPT-6.1 Sol** - 图片上传、视频分析与 AI 工坊共享当前标签页的手动配置
+- **远程模型选择** - 从 OpenAI 兼容接口获取模型，图片上传、视频分析与 AI 工坊共享当前会话选择
 - **自动分类** - 上传图片后自动识别类型并推荐三级分类
 - **智能命名** - AI 生成 2 个中文文件名建议（8-15 汉字）
 - **关键词提取** - 自动提取图片关键词和描述
@@ -69,16 +69,16 @@
 
 ## 🛠️ 技术栈
 
-| 类别 | 技术                         |
-| ---- | ---------------------------- |
-| 框架 | Vue 3 + Composition API      |
-| 构建 | Vite 7                       |
-| UI   | Element Plus                 |
-| 状态 | Pinia                        |
-| 动画 | GSAP                         |
-| 样式 | SCSS + CSS Variables         |
-| AI   | GPT-6.1 Sol（兼容 API 网关） |
-| 规范 | ESLint + Prettier + Husky    |
+| 类别 | 技术                            |
+| ---- | ------------------------------- |
+| 框架 | Vue 3 + Composition API         |
+| 构建 | Vite 7                          |
+| UI   | Element Plus                    |
+| 状态 | Pinia                           |
+| 动画 | GSAP                            |
+| 样式 | SCSS + CSS Variables            |
+| AI   | OpenAI 兼容接口（远程模型列表） |
+| 规范 | ESLint + Prettier + Husky       |
 
 ## 🚀 快速开始
 
@@ -168,16 +168,16 @@ wallpaper-gallery-studio/
 │   │   │   ├── core/        # AI 核心层（共享）
 │   │   │   │   ├── providers/
 │   │   │   │   │   ├── base-provider.js        # Provider 基类
-│   │   │   │   │   ├── openai-compatible-provider.js # GPT-6.1 Sol网关
+│   │   │   │   │   ├── openai-compatible-provider.js # OpenAI兼容网关
 │   │   │   │   │   └── index.js                # Provider 工厂
 │   │   │   │   ├── image-processor.js          # 图片压缩处理
 │   │   │   │   └── index.js
 │   │   │   ├── classifier/  # 分类服务与提示词（上传、视频和工坊共用）
 │   │   │   │   ├── service.js   # analyzeImage / analyzeBatch
 │   │   │   │   ├── prompts.js   # 分类决策树提示词（desktop/mobile/avatar）
-│   │   │   │   ├── config.js    # 固定 GPT-6.1 Sol 配置
+│   │   │   │   ├── config.js    # 视觉分类通用配置
 │   │   │   │   └── index.js
-│   │   │   ├── model.js          # 固定模型标识
+│   │   │   ├── model.js          # 远程模型标识校验
 │   │   │   ├── session-credentials.js # 当前标签页凭据缓存
 │   │   │   ├── task-runner.js    # 图片分析队列与恢复
 │   │   │   └── task-storage.js   # AI 任务持久化
@@ -218,11 +218,11 @@ wallpaper-gallery-studio/
 
 ## 🔧 AI 配置
 
-打开「上传设置 → AI 配置」，填写 API 地址和自己的 API Key，点击「保存到当前标签页」。固定使用 GPT-6.1 Sol，图片上传、动态视频分析与 AI 工坊共用此配置。
+打开「设置 → AI 配置」，填写 API 地址和自己的 API Key，点击「获取模型」，从可搜索列表选择支持图片输入的模型，再保存到当前标签页。图片上传、视频封面分析与 AI 工坊共用所选模型。
 
 - 刷新当前标签页可以恢复；新建、复制标签页和关闭后重新打开需要重新填写。
 - Key仅存于Pinia内存和当前标签页sessionStorage；不会写入localStorage、上传任务或服务端。
-- 清除或更换Key会取消旧会话中的AI请求，后续任务只读取新配置。
+- 清除或更换Key、地址、模型会取消旧会话中的AI请求，后续任务只读取新配置。
 - 浏览器会话缓存仍属于页面可访问的数据，不等于系统密钥保险库；点击「清除配置」可立即移除。
 
 构建环境只放公开配置，不配置任何AI Key：
@@ -234,7 +234,7 @@ VITE_VIDEO_API_URL=https://your-video-worker.workers.dev
 
 本地开发可将公开地址设置为 `/sub2api/v1`，通过 `SUB2API_PROXY_TARGET` 指定网关。Key仍在设置页输入。上线后执行 `pnpm check:client-secrets` 检查构建产物不包含已配置的旧AI密钥。
 
-模型标识统一在 `src/services/ai/model.js`。图片上传、视频分析和 AI 工坊共用 GPT-6.1 Sol；图片在完成分析后可修改分类与元数据，再确认上传。无 Key 时图片保留在分析队列中，填写当前标签页配置后继续。
+模型标识来自当前网关的 `GET /models`，不再写死。图片上传、视频分析和 AI 工坊共用当前选择；图片在完成分析后可修改分类与元数据，再确认上传。无 Key 时图片保留在分析队列中，填写当前标签页配置后继续。
 
 ### 分类决策树
 
@@ -276,3 +276,11 @@ VITE_VIDEO_API_URL=https://your-video-worker.workers.dev
 ## 📄 License
 
 MIT
+
+### 首次使用
+
+先使用 GitHub OAuth 或 Token 登录，再从自动加载的可访问仓库列表中搜索选择壁纸数据仓库。默认分支来自 GitHub；选择后再次检查访问权限，成功才进入工作台。已有配置可显式继续上次仓库。
+
+工作流仓库、网站仓库和视频服务在「设置 → 仓库连接」按需填写，留空则对应能力不可用。更换数据仓库会清空依附旧仓库的服务连接，防止误发到其他目标。OAuth 配置属于部署级连接，使用 Token 登录可以不配置 OAuth。源码不再回退到作者的工作流或网站仓库。
+
+API 地址支持 HTTP、HTTPS 和同源路径。HTTPS 页面访问远端 HTTP 仍可能受浏览器混合内容限制；需要通过同源代理或 HTTP 部署连接。模型列表只说明可访问的模型，不保证视觉能力。

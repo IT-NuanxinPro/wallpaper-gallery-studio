@@ -15,6 +15,21 @@ export const useAuthStore = defineStore('auth', () => {
   const permissionLevel = ref('none') // admin | write | read | none
   const permissionChecked = ref(false) // 权限是否已检查完成
   const loading = ref(false)
+  let permissionCache = null
+  let permissionSequence = 0
+  let validationSequence = 0
+  let identityRevision = 0
+
+  function userIdentity(value = user.value) {
+    return value?.id ?? value?.login ?? null
+  }
+
+  function invalidatePermission() {
+    permissionSequence++
+    permissionCache = null
+    permissionLevel.value = 'none'
+    permissionChecked.value = false
+  }
 
   // 计算属性
   const isAuthenticated = computed(() => !!token.value && !!user.value)
@@ -22,6 +37,12 @@ export const useAuthStore = defineStore('auth', () => {
 
   // 设置 token
   function setToken(newToken) {
+    if (token.value !== newToken) {
+      identityRevision++
+      validationSequence++
+      loading.value = false
+      invalidatePermission()
+    }
     token.value = newToken
     if (newToken) {
       localStorage.setItem(STORAGE_KEYS.TOKEN, newToken)
@@ -37,6 +58,10 @@ export const useAuthStore = defineStore('auth', () => {
 
   // 设置用户信息
   function setUser(newUser) {
+    if (userIdentity() !== userIdentity(newUser)) {
+      identityRevision++
+      invalidatePermission()
+    }
     user.value = newUser
     if (newUser) {
       localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(newUser))
@@ -69,8 +94,7 @@ export const useAuthStore = defineStore('auth', () => {
       setUser(userData)
 
       return true
-    } catch (error) {
-      console.error('OAuth callback failed:', error)
+    } catch {
       return false
     } finally {
       loading.value = false
@@ -81,65 +105,77 @@ export const useAuthStore = defineStore('auth', () => {
   async function validateToken() {
     if (!token.value) return false
 
+    const checkedToken = token.value
+    const revision = identityRevision
+    const sequence = ++validationSequence
+    const isCurrent = () =>
+      sequence === validationSequence &&
+      revision === identityRevision &&
+      checkedToken === token.value
     loading.value = true
     try {
-      githubService.setToken(token.value)
+      githubService.setToken(checkedToken)
       const userData = await githubService.getCurrentUser()
+      if (!isCurrent()) return false
       setUser(userData)
       return true
     } catch (error) {
-      // Token 无效，清除
-      if (error.type === 'TOKEN_EXPIRED' || error.status === 401) {
-        logout()
-      }
+      if (isCurrent() && (error.type === 'TOKEN_EXPIRED' || error.status === 401)) logout()
       return false
     } finally {
-      loading.value = false
+      if (sequence === validationSequence) loading.value = false
     }
   }
 
-  // 检查仓库权限
+  // 权限缓存只存在内存中，并绑定当前账号、Token 和仓库。
   async function checkPermission(owner, repo) {
-    // 如果已经检查过且不超过 5 分钟，直接返回缓存结果
-    const cacheKey = `permission_${owner}_${repo}`
-    const cached = sessionStorage.getItem(cacheKey)
-    if (cached && permissionChecked.value) {
-      const { level, timestamp } = JSON.parse(cached)
-      const now = Date.now()
-      // 缓存 5 分钟
-      if (now - timestamp < 5 * 60 * 1000) {
-        console.log('[Auth] 使用缓存的权限:', level)
-        permissionLevel.value = level
-        return level
-      }
+    const snapshot = {
+      owner,
+      repo,
+      token: token.value,
+      user: userIdentity(),
+      revision: identityRevision
     }
-
+    const sequence = ++permissionSequence
+    const isCurrent = () =>
+      sequence === permissionSequence &&
+      snapshot.revision === identityRevision &&
+      snapshot.token === token.value &&
+      snapshot.user === userIdentity()
+    permissionLevel.value = 'none'
     permissionChecked.value = false
 
-    if (!token.value) {
-      console.log('[Auth] 未登录，权限为 none')
-      permissionLevel.value = 'none'
+    if (!snapshot.token || !owner || !repo) {
       permissionChecked.value = true
       return 'none'
+    }
+
+    if (
+      permissionCache &&
+      permissionCache.owner === owner &&
+      permissionCache.repo === repo &&
+      permissionCache.token === snapshot.token &&
+      permissionCache.user === snapshot.user &&
+      Date.now() - permissionCache.timestamp < 5 * 60 * 1000
+    ) {
+      permissionLevel.value = permissionCache.level
+      permissionChecked.value = true
+      return permissionCache.level
     }
 
     try {
-      const level = await githubService.checkRepoAccess(owner, repo)
-      console.log('[Auth] 权限检查结果:', level)
+      githubService.setToken(snapshot.token)
+      const response = await githubService.checkRepoAccess(owner, repo)
+      if (!isCurrent()) return 'none'
+      const level = ['admin', 'write', 'read'].includes(response) ? response : 'none'
       permissionLevel.value = level
-      // 缓存结果
-      sessionStorage.setItem(cacheKey, JSON.stringify({ level, timestamp: Date.now() }))
+      permissionCache = { ...snapshot, level, timestamp: Date.now() }
       return level
-    } catch (error) {
-      console.error('[Auth] 权限检查失败:', error)
-      permissionLevel.value = 'none'
+    } catch {
+      if (isCurrent()) permissionLevel.value = 'none'
       return 'none'
     } finally {
-      permissionChecked.value = true
-      console.log(
-        '[Auth] permissionChecked 设置为 true, canUpload:',
-        ['admin', 'write'].includes(permissionLevel.value)
-      )
+      if (isCurrent()) permissionChecked.value = true
     }
   }
 
@@ -175,6 +211,7 @@ export const useAuthStore = defineStore('auth', () => {
     handleCallback,
     validateToken,
     checkPermission,
+    invalidatePermission,
     logout
   }
 })

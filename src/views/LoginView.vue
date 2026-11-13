@@ -1,999 +1,806 @@
 <template>
-  <GradientBackground>
-    <div class="login">
-      <!-- 装饰元素 -->
-      <div class="login__decor">
-        <div class="login__decor-circle login__decor-circle--1"></div>
-        <div class="login__decor-circle login__decor-circle--2"></div>
-        <div class="login__decor-circle login__decor-circle--3"></div>
-      </div>
-
-      <div ref="cardRef" class="login__container">
-        <!-- 左侧品牌区 -->
-        <div class="login__brand">
-          <div class="login__brand-content">
-            <div class="login__brand-badge">
-              <svg class="login__brand-badge-icon" viewBox="0 0 24 24" fill="currentColor">
-                <path
-                  d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"
-                />
-              </svg>
-              <span>Powered by GitHub</span>
-            </div>
-            <h1 class="login__brand-title">
-              <span class="login__brand-title-main">Wallpaper</span>
-              <span class="login__brand-title-main">Gallery</span>
-              <span class="login__brand-title-sub">· Studio</span>
-            </h1>
-            <p class="login__brand-desc">
-              壁纸管理工作台<br />
-              <span class="login__brand-desc-en">Upload · Organize · Automate</span>
-            </p>
-            <div class="login__brand-features">
-              <div class="login__brand-feature">
-                <span class="login__brand-feature-icon">🖼️</span>
-                <span>高清壁纸上传</span>
-              </div>
-              <div class="login__brand-feature">
-                <span class="login__brand-feature-icon">📁</span>
-                <span>智能分类管理</span>
-              </div>
-              <div class="login__brand-feature">
-                <span class="login__brand-feature-icon">⚡</span>
-                <span>自动化工作流</span>
-              </div>
-            </div>
-          </div>
-          <div class="login__brand-footer">
-            <a :href="repoUrl" target="_blank" class="login__brand-repo">
-              <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
-                <path
-                  d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"
-                />
-              </svg>
-              <span>View on GitHub</span>
-            </a>
-          </div>
+  <main class="studio-login">
+    <section class="studio-login__window" aria-labelledby="login-title">
+      <header class="studio-login__header">
+        <span class="studio-login__brand">Wallpaper Gallery <span>Studio</span></span>
+        <div class="studio-login__steps" aria-label="登录步骤">
+          <span :class="{ 'is-current': !sessionReady }">1 登录 GitHub</span
+          ><el-icon><ArrowRight /></el-icon
+          ><span :class="{ 'is-current': sessionReady }">2 选择仓库</span>
         </div>
-
-        <!-- 右侧登录区 -->
-        <div class="login__main">
-          <!-- 已登录状态 -->
-          <div v-if="authStore.isAuthenticated" class="login__user">
-            <div class="login__user-welcome">
-              <span class="login__user-welcome-text">Welcome back</span>
-              <h2 class="login__user-name">{{ authStore.user?.name || authStore.user?.login }}</h2>
+      </header>
+      <div
+        class="studio-login__body"
+        data-scroll-region
+        tabindex="0"
+        aria-label="登录与仓库选择，可滚动"
+      >
+        <Transition name="studio-feedback"
+          ><el-alert
+            v-if="loginError"
+            :title="loginError"
+            type="error"
+            :closable="false"
+            show-icon
+            class="studio-login__error"
+        /></Transition>
+        <Transition name="studio-panel" mode="out-in">
+          <div v-if="restoring" key="restoring" class="studio-login__checking" role="status">
+            <el-icon class="is-loading"><Loading /></el-icon><span>正在验证 GitHub 登录…</span>
+          </div>
+          <div
+            v-else-if="sessionReady && authStore.isAuthenticated"
+            key="repositories"
+            class="studio-login__panel"
+          >
+            <div class="studio-login__intro">
+              <h1 id="login-title">选择你的仓库</h1>
+              <p>
+                已登录
+                {{
+                  authStore.user?.name || authStore.user?.login
+                }}。从可访问的仓库中选择内容保存位置。
+              </p>
             </div>
-
-            <el-avatar :size="64" :src="authStore.user?.avatar_url" class="login__user-avatar" />
-
-            <!-- 权限信息卡片 -->
-            <div
-              class="login__permission-card"
-              :class="
-                authStore.permissionChecked
-                  ? `login__permission-card--${authStore.permissionLevel}`
-                  : 'login__permission-card--loading'
-              "
-            >
-              <div v-if="!authStore.permissionChecked" class="login__permission-loading">
-                <el-icon class="is-loading"><Loading /></el-icon>
-                <span>正在检查权限...</span>
+            <Transition name="studio-panel" mode="out-in">
+              <div v-if="editingConfig" key="advanced">
+                <RepositoryConfigForm
+                  v-model="configDraft"
+                  :busy="busy"
+                  submit-label="验证仓库并保存"
+                  @submit="useManualRepository"
+                  ><template #actions
+                    ><el-button :disabled="busy" @click="editingConfig = false"
+                      >返回仓库列表</el-button
+                    ></template
+                  ></RepositoryConfigForm
+                >
               </div>
-              <template v-else>
-                <div class="login__permission-header">
-                  <span class="login__permission-icon">{{ permissionIcon }}</span>
-                  <div class="login__permission-info">
-                    <span class="login__permission-level">{{ permissionLabel }}</span>
-                    <span class="login__permission-desc">{{ permissionDesc }}</span>
+              <div v-else key="picker">
+                <div
+                  v-if="configStore.isConfigured && !selectedRepository"
+                  class="studio-login__repository"
+                >
+                  <el-icon><FolderOpened /></el-icon>
+                  <div>
+                    <span>上次使用</span
+                    ><strong>{{ configStore.config.owner }}/{{ configStore.config.repo }}</strong
+                    ><small>分支 {{ configStore.config.branch }}</small>
                   </div>
+                  <el-button text :disabled="busy" @click="continuePrevious"
+                    >继续上次仓库</el-button
+                  >
                 </div>
-                <div class="login__permission-repo">
-                  <span class="login__permission-repo-label">目标仓库</span>
-                  <a :href="repoUrl" target="_blank" class="login__permission-repo-link">
-                    {{ configStore.config.owner }}/{{ configStore.config.repo }}
-                  </a>
+                <RepositoryPicker
+                  :token="authStore.token"
+                  :selected-id="selectedRepository?.id || ''"
+                  @select="chooseRepository"
+                />
+                <el-collapse-transition
+                  ><form
+                    v-if="selectedRepository"
+                    class="studio-login__selection"
+                    data-testid="use-repository"
+                    @submit.prevent="useSelectedRepository"
+                  >
+                    <strong>{{ selectedRepository.fullName }}</strong>
+                    <label for="repository-branch">使用分支</label
+                    ><el-input
+                      id="repository-branch"
+                      v-model="selectedBranch"
+                      aria-label="使用分支"
+                      :disabled="busy"
+                      placeholder="仓库默认分支"
+                    />
+                    <p>
+                      {{
+                        selectedRepository.archived
+                          ? '此仓库已归档，将以只读模式打开。'
+                          : '已自动填入此仓库的默认分支，可按需修改。'
+                      }}
+                    </p>
+                    <el-button
+                      type="primary"
+                      native-type="submit"
+                      :loading="busy"
+                      :disabled="busy || !selectedBranch.trim()"
+                      >{{
+                        selectedRepository.archived ? '以只读方式选择' : '使用此仓库'
+                      }}</el-button
+                    >
+                  </form></el-collapse-transition
+                >
+                <el-collapse-transition
+                  ><div v-if="readOnlyReady" class="studio-login__readonly" role="status">
+                    <p>此账号仅有读取权限，可以浏览内容，不能上传或发布。</p>
+                    <el-button type="primary" data-testid="enter-readonly" @click="enterWorkspace"
+                      >以只读模式进入</el-button
+                    >
+                  </div></el-collapse-transition
+                >
+                <div class="studio-login__picker-actions">
+                  <el-button link :disabled="busy" @click="openAdvanced">高级手动配置</el-button
+                  ><el-button text :disabled="busy" @click="logout">更换账号</el-button>
                 </div>
-              </template>
-            </div>
-
-            <!-- 权限不足警告 -->
-            <Transition name="warning-fade">
-              <div
-                v-if="authStore.permissionChecked && !authStore.canUpload"
-                class="login__permission-warning"
-              >
-                <p>⚠️ 您没有写入权限，无法上传文件</p>
-                <p class="login__permission-warning-hint">请联系仓库管理员将您添加为协作者</p>
               </div>
             </Transition>
-
-            <div class="login__actions">
-              <button
-                class="login__btn login__btn--primary"
-                :disabled="!authStore.permissionChecked"
-                @click="goToUpload"
+          </div>
+          <div v-else key="identity" class="studio-login__panel">
+            <div class="studio-login__intro">
+              <h1 id="login-title">登录 GitHub</h1>
+              <p>登录后自动读取你可以访问的仓库，无需手动填写仓库地址。</p>
+            </div>
+            <el-button
+              v-if="configStore.isOAuthConfigured"
+              class="studio-login__oauth"
+              type="primary"
+              :loading="oauthLoading"
+              :disabled="busy"
+              @click="startOAuth"
+              >使用 GitHub 登录</el-button
+            >
+            <div v-else class="studio-login__oauth-hint">
+              <span>此部署尚未配置 GitHub OAuth，可先使用 Token 登录。</span
+              ><el-button
+                link
+                :disabled="busy"
+                @click="showConnectionConfig = !showConnectionConfig"
+                >{{ showConnectionConfig ? '收起 OAuth 配置' : '配置 GitHub OAuth' }}</el-button
               >
-                <span v-if="!authStore.permissionChecked" class="login__btn-text"
-                  >检查权限中...</span
-                >
-                <span v-else class="login__btn-text">进入工作台</span>
-                <span v-if="authStore.permissionChecked" class="login__btn-icon">→</span>
-              </button>
-              <button class="login__btn login__btn--ghost" @click="handleLogout">退出登录</button>
             </div>
+            <el-collapse-transition
+              ><form
+                v-if="showConnectionConfig"
+                class="studio-login__connection"
+                data-testid="oauth-config"
+                @submit.prevent="saveConnection"
+              >
+                <p>填写属于此部署的 OAuth App，仓库将在登录后选择。</p>
+                <label for="oauth-client">OAuth Client ID</label
+                ><el-input
+                  id="oauth-client"
+                  v-model="connection.clientId"
+                  aria-label="OAuth Client ID"
+                  :disabled="busy"
+                /><label for="oauth-worker">OAuth Worker 地址</label
+                ><el-input
+                  id="oauth-worker"
+                  v-model="connection.oauthWorkerUrl"
+                  aria-label="OAuth Worker 地址"
+                  :disabled="busy"
+                  placeholder="https://oauth.example.com"
+                /><el-button native-type="submit" :disabled="busy">保存 OAuth 配置</el-button>
+              </form></el-collapse-transition
+            >
+            <form
+              data-testid="token-login"
+              class="studio-login__token"
+              @submit.prevent="loginWithToken"
+            >
+              <label for="github-token">Personal Access Token</label
+              ><el-input
+                id="github-token"
+                v-model="tokenInput"
+                aria-label="GitHub Token"
+                type="password"
+                autocomplete="off"
+                placeholder="粘贴 GitHub Token"
+                :disabled="busy"
+              />
+              <p>Token 的访问范围决定可显示的仓库。选择仓库后会再次验证权限。</p>
+              <el-button
+                :type="configStore.isOAuthConfigured ? 'default' : 'primary'"
+                native-type="submit"
+                :loading="busy"
+                :disabled="!tokenInput.trim() || busy"
+                >使用 Token 登录</el-button
+              >
+            </form>
+            <a
+              class="studio-login__token-help"
+              href="https://github.com/settings/tokens"
+              target="_blank"
+              rel="noopener noreferrer"
+              >在 GitHub 管理 Token <el-icon><TopRight /></el-icon
+            ></a>
           </div>
-
-          <!-- 未登录状态 -->
-          <div v-else class="login__form">
-            <div class="login__form-header">
-              <h2 class="login__form-title">欢迎使用</h2>
-              <p class="login__form-subtitle">登录以开始管理您的壁纸库</p>
-            </div>
-
-            <!-- GitHub OAuth 登录按钮 -->
-            <button class="login__github-btn" :disabled="loading" @click="handleGitHubLogin">
-              <svg class="login__github-icon" viewBox="0 0 24 24" fill="currentColor">
-                <path
-                  d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"
-                />
-              </svg>
-              <span>{{ loading ? '连接中...' : '使用 GitHub 登录' }}</span>
-            </button>
-
-            <div class="login__divider">
-              <span>或使用 Token</span>
-            </div>
-
-            <!-- Token 登录 -->
-            <div class="login__token-section">
-              <button class="login__token-toggle" @click="showTokenInput = !showTokenInput">
-                <span>{{ showTokenInput ? '收起' : '展开 Token 登录' }}</span>
-                <span
-                  class="login__token-toggle-icon"
-                  :class="{ 'login__token-toggle-icon--open': showTokenInput }"
-                  >▼</span
-                >
-              </button>
-
-              <Transition name="collapse">
-                <div v-if="showTokenInput" class="login__token-form">
-                  <div class="login__input-wrapper">
-                    <el-input
-                      v-model="tokenInput"
-                      type="password"
-                      placeholder="粘贴您的 Personal Access Token"
-                      size="large"
-                      show-password
-                      class="login__input"
-                    />
-                  </div>
-
-                  <button
-                    class="login__btn login__btn--primary"
-                    :disabled="!tokenInput.trim() || tokenLoading"
-                    @click="handleTokenLogin"
-                  >
-                    <span class="login__btn-text">{{
-                      tokenLoading ? '验证中...' : '验证并登录'
-                    }}</span>
-                  </button>
-
-                  <a
-                    class="login__create-token"
-                    href="https://github.com/settings/tokens/new?scopes=repo&description=NuanXin%20Gallery"
-                    target="_blank"
-                  >
-                    还没有 Token？点击创建 →
-                  </a>
-                </div>
-              </Transition>
-            </div>
-
-            <p class="login__hint">
-              <span class="login__hint-icon">🔒</span>
-              需要仓库协作者权限才能上传
-            </p>
-          </div>
-        </div>
+        </Transition>
       </div>
-    </div>
-  </GradientBackground>
+      <footer class="studio-login__footer">
+        <el-icon><Lock /></el-icon><span>仓库列表仅在当前页面读取。Token 不会写入仓库配置。</span>
+      </footer>
+    </section>
+  </main>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
-import { ElMessageBox, ElMessage } from 'element-plus'
-import { Loading } from '@element-plus/icons-vue'
-import GradientBackground from '@/components/GradientBackground.vue'
+import { onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { ArrowRight, FolderOpened, Loading, Lock, TopRight } from '@element-plus/icons-vue'
+import RepositoryConfigForm from '@/components/settings/RepositoryConfigForm.vue'
+import RepositoryPicker from '@/components/settings/RepositoryPicker.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useConfigStore } from '@/stores/config'
-import { useAnimation } from '@/composables/useAnimation'
+import { useUploadSessionStore } from '@/stores/upload-session'
+import { changesRepository, hasPendingRepositoryWrites } from '@/utils/repository-switch'
 import { githubService } from '@/services/github'
 import { getAuthUrl } from '@/config/oauth'
 
 const router = useRouter()
+const route = useRoute()
 const authStore = useAuthStore()
 const configStore = useConfigStore()
-const { fadeInScale } = useAnimation()
-
-const cardRef = ref(null)
-const loading = ref(false)
-const tokenLoading = ref(false)
+const uploadSession = useUploadSessionStore()
+const editingConfig = ref(false)
+const configDraft = ref({ ...configStore.config })
+const showConnectionConfig = ref(false)
+const connection = ref({
+  clientId: configStore.config.clientId || '',
+  oauthWorkerUrl: configStore.config.oauthWorkerUrl || ''
+})
+const loginError = ref('')
+const busy = ref(false)
+const restoring = ref(false)
+const oauthLoading = ref(false)
 const tokenInput = ref('')
-const showTokenInput = ref(false)
+const sessionReady = ref(false)
+const selectedRepository = ref(null)
+const selectedBranch = ref('')
+const readOnlyReady = ref(false)
 
-// 权限标签
-const permissionLabel = computed(() => {
-  const labels = {
-    admin: '管理员',
-    write: '协作者',
-    read: '只读',
-    none: '无权限'
-  }
-  return labels[authStore.permissionLevel] || '未知'
-})
-
-const permissionIcon = computed(() => {
-  const icons = {
-    admin: '👑',
-    write: '✏️',
-    read: '👁️',
-    none: '🚫'
-  }
-  return icons[authStore.permissionLevel] || '❓'
-})
-
-const permissionDesc = computed(() => {
-  const descs = {
-    admin: '拥有完全管理权限',
-    write: '可以上传和修改文件',
-    read: '仅可查看，无法上传',
-    none: '无法访问此仓库'
-  }
-  return descs[authStore.permissionLevel] || '权限未知'
-})
-
-// 仓库链接
-const repoUrl = computed(() => {
-  const { owner, repo } = configStore.config
-  return `https://github.com/${owner}/${repo}`
-})
-
-// GitHub OAuth 登录
-function handleGitHubLogin() {
+function loginDestination() {
+  const requested = route.query.redirect
+  if (
+    typeof requested !== 'string' ||
+    !requested.startsWith('/') ||
+    requested.startsWith('//') ||
+    requested.includes('\\') ||
+    [...requested].some(
+      character => character.charCodeAt(0) <= 32 || character.charCodeAt(0) === 127
+    )
+  )
+    return '/upload'
   try {
-    loading.value = true
-    window.location.href = getAuthUrl()
-  } catch (error) {
-    loading.value = false
-    ElMessage.error(error.message || 'OAuth 配置不完整，请先在设置页完成配置')
+    const url = new URL(requested, window.location.origin)
+    if (
+      url.origin !== window.location.origin ||
+      /^\/(login|callback)(\/|$)/i.test(decodeURIComponent(url.pathname))
+    )
+      return '/upload'
+    return `${url.pathname}${url.search}${url.hash}`
+  } catch {
+    return '/upload'
   }
 }
-
-// Token 登录
-async function handleTokenLogin() {
+function enterWorkspace() {
+  return router.replace(loginDestination())
+}
+function clearAuthentication() {
+  sessionReady.value = false
+  readOnlyReady.value = false
+  selectedRepository.value = null
+  authStore.logout()
+  githubService.setToken(null)
+}
+function logout() {
+  clearAuthentication()
+  loginError.value = ''
+  tokenInput.value = ''
+  editingConfig.value = false
+}
+async function loginWithToken() {
   const token = tokenInput.value.trim()
-  if (!token) return
-
-  tokenLoading.value = true
+  if (busy.value || !token) return
+  busy.value = true
+  loginError.value = ''
   try {
     githubService.setToken(token)
-    const userData = await githubService.getCurrentUser()
-
+    const user = await githubService.getCurrentUser()
     authStore.setToken(token)
-    authStore.setUser(userData)
-
-    const { owner, repo } = configStore.config
-    await authStore.checkPermission(owner, repo)
-
-    ElMessage.success(`欢迎回来，${userData.name || userData.login}！`)
+    authStore.setUser(user)
+    authStore.permissionLevel = 'none'
+    authStore.permissionChecked = false
     tokenInput.value = ''
-  } catch (error) {
-    console.error('Token login failed:', error)
-    ElMessage.error('Token 无效或已过期，请检查后重试')
-    githubService.setToken(null)
-  } finally {
-    tokenLoading.value = false
-  }
-}
-
-// 退出登录
-async function handleLogout() {
-  try {
-    await ElMessageBox.confirm('确定要退出登录吗？', '退出确认', {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
-      type: 'warning'
-    })
-    authStore.logout()
-    ElMessage.success('已退出登录')
+    sessionReady.value = true
   } catch {
-    // 取消
+    clearAuthentication()
+    tokenInput.value = ''
+    loginError.value = '无法验证 GitHub 身份，请检查 Token 和网络后重试。'
+  } finally {
+    busy.value = false
   }
 }
-
-// 进入系统
-function goToUpload() {
-  router.push('/upload')
+async function restoreSession() {
+  if (!authStore.token) return
+  restoring.value = true
+  try {
+    if (!(await authStore.validateToken())) throw new Error('INVALID_SESSION')
+    sessionReady.value = true
+  } catch {
+    clearAuthentication()
+    loginError.value = '当前 GitHub 登录已失效，请重新登录。'
+  } finally {
+    restoring.value = false
+  }
 }
-
-// 入场动画
-onMounted(async () => {
-  if (cardRef.value) {
-    fadeInScale(cardRef.value, { duration: 0.8, scale: 0.95 })
+function chooseRepository(repository) {
+  if (busy.value) return
+  selectedRepository.value = repository
+  selectedBranch.value = repository.defaultBranch || 'main'
+  readOnlyReady.value = false
+  loginError.value = ''
+}
+function connectionForTarget(owner, repo) {
+  const current = configStore.config
+  const sameTarget =
+    current.owner?.toLowerCase() === owner.toLowerCase() &&
+    current.repo?.toLowerCase() === repo.toLowerCase()
+  return {
+    ...current,
+    ...(sameTarget
+      ? {}
+      : {
+          workflowOwner: '',
+          workflowRepo: '',
+          frontendOwner: '',
+          frontendRepo: '',
+          videoApiUrl: ''
+        }),
+    owner,
+    repo
   }
-
-  if (authStore.token) {
-    const valid = await authStore.validateToken()
-    if (valid) {
-      const { owner, repo } = configStore.config
-      await authStore.checkPermission(owner, repo)
-    }
+}
+async function verifyAndUse(config, archived = false) {
+  if (busy.value || !sessionReady.value) return
+  if (changesRepository(configStore.config, config) && hasPendingRepositoryWrites(uploadSession)) {
+    loginError.value = '请先回到原仓库完成或移除当前图片任务，再切换仓库'
+    return
   }
+  const validationError = configStore.validateConfigInput(config)
+  if (validationError) {
+    loginError.value = validationError
+    return
+  }
+  busy.value = true
+  loginError.value = ''
+  readOnlyReady.value = false
+  const token = authStore.token
+  const revision = configStore.configRevision
+  try {
+    githubService.setToken(token)
+    let level = await githubService.checkRepoAccess(config.owner, config.repo)
+    if (!['admin', 'write', 'read'].includes(level)) throw new Error('REPOSITORY_ACCESS_DENIED')
+    if (archived) level = 'read'
+    if (!(await configStore.validateConfig(config))) throw new Error('BRANCH_UNAVAILABLE')
+    if (token !== authStore.token || revision !== configStore.configRevision)
+      throw new Error('CONFIG_CHANGED')
+    configStore.setConfig(config)
+    authStore.permissionLevel = level
+    authStore.permissionChecked = true
+    editingConfig.value = false
+    if (level === 'read') readOnlyReady.value = true
+    else await enterWorkspace()
+  } catch (error) {
+    authStore.permissionLevel = 'none'
+    authStore.permissionChecked = false
+    if (error.status === 401 || error.type === 'TOKEN_EXPIRED') clearAuthentication()
+    loginError.value =
+      error.message === 'REPOSITORY_ACCESS_DENIED'
+        ? '当前账号无法访问此仓库，请选择其他仓库或调整访问权限。'
+        : error.message === 'BRANCH_UNAVAILABLE'
+          ? '所选分支不存在或无法读取，请检查后重试'
+          : '无法验证或保存目标仓库，请检查分支、网络与权限后重试。'
+  } finally {
+    busy.value = false
+  }
+}
+function useSelectedRepository() {
+  if (!selectedRepository.value) return
+  const repository = selectedRepository.value
+  return verifyAndUse(
+    {
+      ...connectionForTarget(repository.owner, repository.name),
+      branch: selectedBranch.value.trim()
+    },
+    repository.archived
+  )
+}
+function continuePrevious() {
+  const { owner, repo, branch } = configStore.config
+  chooseRepository({
+    id: `previous:${owner}/${repo}`,
+    owner,
+    name: repo,
+    fullName: `${owner}/${repo}`,
+    defaultBranch: branch
+  })
+  return useSelectedRepository()
+}
+function openAdvanced() {
+  const repository = selectedRepository.value
+  configDraft.value = repository
+    ? {
+        ...connectionForTarget(repository.owner, repository.name),
+        branch: selectedBranch.value || repository.defaultBranch
+      }
+    : { ...configStore.config }
+  editingConfig.value = true
+  loginError.value = ''
+}
+function useManualRepository(config) {
+  return verifyAndUse(config)
+}
+function saveConnection() {
+  try {
+    configStore.setConnectionConfig({
+      clientId: connection.value.clientId.trim(),
+      oauthWorkerUrl: connection.value.oauthWorkerUrl.trim()
+    })
+    showConnectionConfig.value = false
+    loginError.value = ''
+  } catch {
+    loginError.value = 'OAuth 配置无效，请同时填写 Client ID 和正确的 Worker 地址。'
+  }
+}
+function startOAuth() {
+  if (busy.value || !configStore.isOAuthConfigured) return
+  try {
+    oauthLoading.value = true
+    window.location.assign(getAuthUrl())
+  } catch {
+    oauthLoading.value = false
+    loginError.value = 'GitHub OAuth 配置不完整，请检查 Client ID 和 Worker 地址。'
+  }
+}
+watch(
+  () => [route.query.setup, route.query.select_repo],
+  () => {
+    editingConfig.value = false
+    readOnlyReady.value = false
+    selectedRepository.value = null
+  }
+)
+watch(selectedBranch, () => {
+  readOnlyReady.value = false
 })
+onMounted(restoreSession)
 </script>
 
 <style scoped lang="scss">
-@use '@/styles/variables' as *;
-
-.login {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 100vh;
-  padding: $spacing-6;
-  position: relative;
+.studio-login {
+  height: 100dvh;
+  min-height: 0;
   overflow: hidden;
-
-  // 装饰圆圈
-  &__decor {
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  padding: 32px;
+  color: var(--studio-text, #f4f6fb);
+  background:
+    radial-gradient(ellipse at 12% 5%, rgba(63, 101, 159, 0.18), transparent 50%),
+    radial-gradient(ellipse at 95% 95%, rgba(87, 80, 130, 0.14), transparent 50%), #11151d;
+  &__window {
+    display: flex;
+    flex-direction: column;
+    width: min(100%, 630px);
+    max-height: calc(100dvh - 64px);
+    min-height: 0;
     overflow: hidden;
-
-    &-circle {
-      position: absolute;
-      border-radius: 50%;
-      opacity: 0.1;
-      animation: float 20s ease-in-out infinite;
-
-      &--1 {
-        width: 600px;
-        height: 600px;
-        background: $primary-gradient;
-        top: -200px;
-        right: -100px;
-        animation-delay: 0s;
-      }
-
-      &--2 {
-        width: 400px;
-        height: 400px;
-        background: linear-gradient(135deg, #06b6d4, #8b5cf6);
-        bottom: -100px;
-        left: -100px;
-        animation-delay: -5s;
-      }
-
-      &--3 {
-        width: 300px;
-        height: 300px;
-        background: linear-gradient(135deg, #f59e0b, #ef4444);
-        top: 50%;
-        left: 50%;
-        animation-delay: -10s;
-      }
-    }
-  }
-
-  &__container {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    width: 100%;
-    max-width: 900px;
-    min-height: 560px;
-    background: $glass-bg;
-    backdrop-filter: blur(24px);
-    border: 1px solid $glass-border;
-    border-radius: $radius-2xl;
+    background: rgba(28, 33, 44, 0.88);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 26px;
     box-shadow:
-      0 25px 50px -12px rgba(0, 0, 0, 0.5),
-      0 0 0 1px rgba(255, 255, 255, 0.05) inset;
-    overflow: hidden;
-    position: relative;
-    z-index: 1;
+      inset 0 1px rgba(255, 255, 255, 0.1),
+      0 26px 80px rgba(0, 0, 0, 0.35);
   }
-
-  // 左侧品牌区
+  &__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex: none;
+    gap: 18px;
+    padding: 22px 28px;
+    background: rgba(108, 126, 157, 0.08);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(24px) saturate(1.3);
+  }
   &__brand {
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-    padding: $spacing-8;
-    background: linear-gradient(135deg, rgba($primary-start, 0.15), rgba($primary-end, 0.1));
-    border-right: 1px solid rgba(255, 255, 255, 0.05);
-
-    &-content {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-    }
-
-    &-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: $spacing-2;
-      padding: $spacing-2 $spacing-4;
-      background: rgba(255, 255, 255, 0.08);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      border-radius: 100px;
-      font-size: $font-size-xs;
-      color: $gray-400;
-      width: fit-content;
-      margin-bottom: $spacing-6;
-
-      &-icon {
-        width: 14px;
-        height: 14px;
-        opacity: 0.8;
-      }
-    }
-
-    &-title {
-      margin: 0 0 $spacing-4;
-
-      &-main {
-        display: block;
-        font-size: 38px;
-        font-weight: 700;
-        background: linear-gradient(135deg, #fff 0%, rgba(255, 255, 255, 0.7) 100%);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
-        letter-spacing: -1px;
-        line-height: 1.1;
-      }
-
-      &-sub {
-        display: inline-block;
-        font-size: 24px;
-        font-weight: 400;
-        color: $primary-start;
-        margin-top: $spacing-2;
-      }
-    }
-
-    &-desc {
-      font-size: $font-size-base;
-      color: $gray-300;
-      line-height: 1.6;
-      margin: 0 0 $spacing-8;
-
-      &-en {
-        font-size: $font-size-sm;
-        color: $gray-500;
-      }
-    }
-
-    &-features {
-      display: flex;
-      flex-direction: column;
-      gap: $spacing-3;
-    }
-
-    &-feature {
-      display: flex;
-      align-items: center;
-      gap: $spacing-3;
-      font-size: $font-size-sm;
-      color: $gray-400;
-
-      &-icon {
-        font-size: 20px;
-      }
-    }
-
-    &-footer {
-      font-size: $font-size-xs;
-      color: $gray-600;
-    }
-
-    &-repo {
-      display: inline-flex;
-      align-items: center;
-      gap: $spacing-2;
-      color: $gray-500;
-      text-decoration: none;
-      transition: color 0.3s;
-
-      &:hover {
-        color: $white;
-      }
-
-      svg {
-        opacity: 0.7;
-      }
-    }
-  }
-
-  // 右侧主区域
-  &__main {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: $spacing-8;
-  }
-
-  // 已登录用户
-  &__user {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: $spacing-4;
-    width: 100%;
-
-    &-welcome {
-      text-align: center;
-
-      &-text {
-        font-size: $font-size-xs;
-        color: $gray-500;
-        text-transform: uppercase;
-        letter-spacing: 2px;
-      }
-    }
-
-    &-name {
-      font-size: $font-size-xl;
-      font-weight: 600;
-      color: $white;
-      margin: $spacing-1 0 0;
-    }
-
-    &-avatar {
-      border: 3px solid rgba(255, 255, 255, 0.2);
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-    }
-  }
-
-  // 权限卡片
-  &__permission-card {
-    width: 100%;
-    padding: $spacing-3;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: $radius-lg;
-    transition: all 0.3s ease;
-
-    &--loading {
-      border-color: rgba(255, 255, 255, 0.15);
-      background: rgba(255, 255, 255, 0.03);
-    }
-    &--admin {
-      border-color: rgba($success, 0.3);
-      background: rgba($success, 0.08);
-    }
-    &--write {
-      border-color: rgba($primary-start, 0.3);
-      background: rgba($primary-start, 0.08);
-    }
-    &--read {
-      border-color: rgba($warning, 0.3);
-      background: rgba($warning, 0.08);
-    }
-    &--none {
-      border-color: rgba($danger, 0.3);
-      background: rgba($danger, 0.08);
-    }
-  }
-
-  &__permission-loading {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: $spacing-2;
-    padding: $spacing-1;
-    color: $gray-400;
-    font-size: $font-size-sm;
-
-    .is-loading {
-      animation: spin 1s linear infinite;
-    }
-  }
-
-  &__permission-header {
-    display: flex;
-    align-items: center;
-    gap: $spacing-3;
-    margin-bottom: $spacing-2;
-    padding-bottom: $spacing-2;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  }
-
-  &__permission-icon {
-    font-size: 20px;
-  }
-
-  &__permission-info {
-    display: flex;
-    flex-direction: column;
-    gap: 1px;
-  }
-
-  &__permission-level {
-    font-size: $font-size-sm;
+    font-size: 13px;
     font-weight: 600;
-    color: $white;
+    letter-spacing: -0.02em;
+    white-space: nowrap;
   }
-
-  &__permission-desc {
-    font-size: $font-size-xs;
-    color: $gray-400;
+  &__brand > span {
+    margin-left: 5px;
+    font-weight: 400;
+    color: #aab8ca;
   }
-
-  &__permission-repo {
+  &__steps {
     display: flex;
-    justify-content: space-between;
     align-items: center;
-
-    &-label {
-      font-size: $font-size-xs;
-      color: $gray-500;
-    }
-
-    &-link {
-      font-size: $font-size-xs;
-      color: $primary-start;
-      text-decoration: none;
-      font-family: monospace;
-
-      &:hover {
-        text-decoration: underline;
-      }
-    }
+    gap: 8px;
+    font-size: 10px;
+    color: #919eb2;
+    white-space: nowrap;
   }
-
-  &__permission-warning {
-    width: 100%;
-    padding: $spacing-2 $spacing-3;
-    background: rgba($danger, 0.1);
-    border: 1px solid rgba($danger, 0.3);
-    border-radius: $radius-lg;
-    text-align: center;
-
-    p {
-      margin: 0;
-      color: $danger;
-      font-size: $font-size-sm;
-    }
-
-    &-hint {
-      color: $gray-400 !important;
-      font-size: $font-size-xs !important;
-      margin-top: $spacing-1 !important;
-    }
+  &__steps .is-current {
+    color: #cce2ff;
   }
-
-  // 操作按钮
-  &__actions {
-    display: flex;
-    flex-direction: column;
-    gap: $spacing-2;
-    width: 100%;
+  &__steps .el-icon {
+    font-size: 10px;
   }
-
-  &__btn {
+  &__body {
+    min-height: 0;
+    overflow: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    padding: 30px 36px;
+  }
+  &__intro {
+    margin-bottom: 26px;
+  }
+  &__intro-icon {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: $spacing-2;
-    width: 100%;
-    height: 44px;
-    border: none;
-    border-radius: $radius-lg;
-    font-size: $font-size-sm;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.3s $ease-out;
-
-    &--primary {
-      background: $primary-gradient;
-      color: $white;
-      box-shadow: 0 4px 20px rgba($primary-start, 0.3);
-
-      &:hover:not(:disabled) {
-        transform: translateY(-2px);
-        box-shadow: 0 8px 30px rgba($primary-start, 0.4);
-      }
-
-      &:disabled {
-        opacity: 0.5;
-        cursor: not-allowed;
-      }
-
-      .login__btn-icon {
-        transition: transform 0.3s;
-      }
-
-      &:hover:not(:disabled) .login__btn-icon {
-        transform: translateX(4px);
-      }
-    }
-
-    &--ghost {
-      background: transparent;
-      color: $gray-400;
-      border: 1px solid rgba(255, 255, 255, 0.1);
-
-      &:hover {
-        background: rgba(255, 255, 255, 0.05);
-        color: $white;
-      }
-    }
+    width: 43px;
+    height: 43px;
+    border-radius: 14px;
+    background: rgba(125, 183, 255, 0.12);
+    color: #a8cfff;
+    font-size: 23px;
+    margin-bottom: 18px;
   }
-
-  // 登录表单
-  &__form {
-    display: flex;
-    flex-direction: column;
-    gap: $spacing-5;
-    width: 100%;
-
-    &-header {
-      text-align: center;
-      margin-bottom: $spacing-2;
-    }
-
-    &-title {
-      font-size: $font-size-2xl;
-      font-weight: 600;
-      color: $white;
-      margin: 0 0 $spacing-2;
-    }
-
-    &-subtitle {
-      font-size: $font-size-sm;
-      color: $gray-300;
-      margin: 0;
-    }
+  h1 {
+    margin: 0 0 9px;
+    font-size: 27px;
+    font-weight: 650;
+    letter-spacing: -0.03em;
+    line-height: 1.3;
   }
-
-  // GitHub 按钮
-  &__github-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: $spacing-3;
-    width: 100%;
-    height: 52px;
-    background: linear-gradient(135deg, #24292e 0%, #1a1e22 100%);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: $radius-lg;
-    color: $white;
-    font-size: $font-size-base;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.3s $ease-out;
-
-    &:hover:not(:disabled) {
-      background: linear-gradient(135deg, #2f363d 0%, #24292e 100%);
-      transform: translateY(-2px);
-      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
-    }
-
-    &:disabled {
-      opacity: 0.7;
-      cursor: not-allowed;
-    }
-  }
-
-  &__github-icon {
-    width: 22px;
-    height: 22px;
-  }
-
-  // 分隔线
-  &__divider {
-    display: flex;
-    align-items: center;
-    gap: $spacing-4;
-    color: $gray-400;
-    font-size: $font-size-xs;
-
-    &::before,
-    &::after {
-      content: '';
-      flex: 1;
-      height: 1px;
-      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.15), transparent);
-    }
-  }
-
-  // Token 区域
-  &__token-section {
-    display: flex;
-    flex-direction: column;
-    gap: $spacing-3;
-  }
-
-  &__token-toggle {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: $spacing-2;
-    background: none;
-    border: none;
-    color: $gray-300;
-    font-size: $font-size-sm;
-    cursor: pointer;
-    transition: color 0.3s;
-
-    &:hover {
-      color: $primary-start;
-    }
-
-    &-icon {
-      font-size: 10px;
-      transition: transform 0.3s;
-
-      &--open {
-        transform: rotate(180deg);
-      }
-    }
-  }
-
-  &__token-form {
-    display: flex;
-    flex-direction: column;
-    gap: $spacing-3;
-    max-height: 200px;
-  }
-
-  &__input-wrapper {
-    :deep(.el-input__wrapper) {
-      background: rgba(255, 255, 255, 0.08);
-      border: 1px solid rgba(255, 255, 255, 0.15);
-      border-radius: $radius-lg;
-      box-shadow: none;
-
-      &:hover {
-        border-color: rgba(255, 255, 255, 0.25);
-      }
-
-      &.is-focus {
-        border-color: $primary-start;
-        box-shadow: 0 0 0 3px rgba($primary-start, 0.1);
-      }
-    }
-
-    :deep(.el-input__inner) {
-      color: $white;
-
-      &::placeholder {
-        color: $gray-400;
-      }
-    }
-  }
-
-  &__create-token {
-    font-size: $font-size-xs;
-    color: $gray-300;
-    text-align: center;
-    text-decoration: none;
-    transition: color 0.3s;
-
-    &:hover {
-      color: $primary-start;
-    }
-  }
-
-  &__hint {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: $spacing-2;
-    color: $gray-300;
-    font-size: $font-size-xs;
+  &__intro p {
     margin: 0;
-
-    &-icon {
-      font-size: 14px;
+    color: #b1b9c9;
+    font-size: 13px;
+    line-height: 1.7;
+  }
+  &__repository {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px;
+    border-radius: 17px;
+    background: rgba(112, 137, 174, 0.1);
+    margin-bottom: 24px;
+  }
+  &__repository > .el-icon {
+    font-size: 22px;
+    color: #aecff6;
+    flex: none;
+  }
+  &__repository > div {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    flex: 1;
+    gap: 5px;
+  }
+  &__repository span,
+  &__repository small {
+    color: #a9b6c9;
+    font-size: 11px;
+  }
+  &__repository strong {
+    font-size: 14px;
+    font-weight: 550;
+    overflow-wrap: anywhere;
+  }
+  &__repository :deep(.el-button) {
+    color: #bcd9ff;
+    padding-inline: 8px;
+  }
+  &__selection,
+  &__connection {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 18px;
+    padding: 17px;
+    border-radius: 17px;
+    background: rgba(125, 183, 255, 0.07);
+  }
+  &__selection strong {
+    font-size: 13px;
+    font-weight: 550;
+    overflow-wrap: anywhere;
+  }
+  &__selection label,
+  &__connection label {
+    font-size: 12px;
+    color: #d4deeb;
+  }
+  &__selection p,
+  &__connection p,
+  &__readonly p {
+    font-size: 11px;
+    line-height: 1.6;
+    color: #a8b6ca;
+    margin: 0;
+  }
+  &__selection :deep(.el-input__wrapper),
+  &__connection :deep(.el-input__wrapper) {
+    background: rgba(9, 14, 24, 0.3);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.13);
+    border-radius: 10px;
+    min-height: 36px;
+  }
+  &__selection :deep(.el-input__inner),
+  &__connection :deep(.el-input__inner) {
+    color: #f4f6fb;
+  }
+  &__connection {
+    margin: 0 0 22px;
+  }
+  &__selection > .el-button,
+  &__connection > .el-button {
+    border-radius: 999px;
+    margin-top: 4px;
+  }
+  &__readonly {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 16px 0 4px;
+  }
+  &__picker-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 18px;
+  }
+  &__error {
+    margin-bottom: 20px;
+  }
+  &__checking {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 24px 0;
+    font-size: 13px;
+    color: #b1b9c9;
+  }
+  &__oauth {
+    width: 100%;
+    min-height: 40px;
+    border-radius: 999px;
+    margin-bottom: 22px;
+  }
+  &__oauth-hint {
+    display: flex;
+    align-items: start;
+    flex-direction: column;
+    gap: 7px;
+    margin: 0 0 24px;
+    color: #b1b9c9;
+    font-size: 12px;
+    line-height: 1.6;
+  }
+  &__token {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  &__token label {
+    font-size: 12px;
+    color: #d4deeb;
+  }
+  &__token p {
+    font-size: 11px;
+    color: #9eacbf;
+    line-height: 1.65;
+    margin: 0 0 8px;
+  }
+  &__token :deep(.el-input__wrapper) {
+    min-height: 42px;
+    border-radius: 12px;
+    background: rgba(9, 14, 24, 0.3);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14);
+  }
+  &__token :deep(.el-input__inner) {
+    color: #f4f6fb;
+  }
+  &__token :deep(.el-button) {
+    border-radius: 999px;
+    min-height: 40px;
+  }
+  &__token-help {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    margin-top: 20px;
+    font-size: 12px;
+    color: #bcd9ff;
+    text-decoration: none;
+  }
+  &__account {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  &__account > .el-button {
+    margin: 0;
+    border-radius: 999px;
+  }
+  &__identity {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 6px 0 12px;
+  }
+  &__identity > div {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+  }
+  &__identity strong {
+    font-size: 16px;
+  }
+  &__identity span {
+    font-size: 12px;
+    color: #b1b9c9;
+    line-height: 1.6;
+  }
+  &__footer {
+    flex: none;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 8px;
+    padding: 16px 24px;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    font-size: 10px;
+    line-height: 1.6;
+    color: #96a4b8;
+  }
+  &__footer .el-icon {
+    flex: none;
+    font-size: 12px;
+  }
+  button:focus-visible,
+  a:focus-visible,
+  &__body:focus-visible {
+    outline: 2px solid #7db7ff;
+    outline-offset: 3px;
+  }
+  @media (max-width: 600px) {
+    padding: 14px;
+    &__window {
+      max-height: calc(100dvh - 28px);
+      border-radius: 23px;
+    }
+    &__header {
+      padding: 20px;
+      flex-wrap: wrap;
+      gap: 11px;
+    }
+    &__body {
+      padding: 24px 22px;
+    }
+    &__footer {
+      padding: 14px 20px;
+      justify-content: flex-start;
+    }
+    h1 {
+      font-size: 25px;
     }
   }
-}
-
-// 动画
-@keyframes float {
-  0%,
-  100% {
-    transform: translate(0, 0) rotate(0deg);
-  }
-  25% {
-    transform: translate(20px, -20px) rotate(5deg);
-  }
-  50% {
-    transform: translate(-10px, 20px) rotate(-5deg);
-  }
-  75% {
-    transform: translate(-20px, -10px) rotate(3deg);
-  }
-}
-
-@keyframes spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-// 折叠动画
-.collapse-enter-active,
-.collapse-leave-active {
-  transition: all 0.3s ease;
-  overflow: hidden;
-}
-
-.collapse-enter-from,
-.collapse-leave-to {
-  opacity: 0;
-  max-height: 0;
-}
-
-.collapse-enter-to,
-.collapse-leave-from {
-  opacity: 1;
-  max-height: 200px;
-}
-
-// 警告淡入动画
-.warning-fade-enter-active {
-  transition: all 0.5s ease-out;
-  transition-delay: 0.3s;
-}
-
-.warning-fade-leave-active {
-  transition: all 0.3s ease-in;
-}
-
-.warning-fade-enter-from {
-  opacity: 0;
-  transform: translateY(-10px);
-}
-
-.warning-fade-leave-to {
-  opacity: 0;
-  transform: translateY(-10px);
-}
-
-.warning-fade-enter-to,
-.warning-fade-leave-from {
-  opacity: 1;
-  transform: translateY(0);
-}
-
-// 响应式
-@media (max-width: 640px) {
-  .login {
-    padding: $spacing-4;
-
-    &__container {
-      grid-template-columns: 1fr;
-      max-width: 400px;
-      min-height: auto;
-    }
-
-    &__brand {
-      display: none;
-    }
-
-    &__main {
-      padding: $spacing-6;
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
     }
   }
 }

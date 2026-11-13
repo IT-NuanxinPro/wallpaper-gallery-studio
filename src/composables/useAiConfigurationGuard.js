@@ -11,7 +11,7 @@ export function useAiConfigurationGuard() {
 
   function requireAiConfiguration() {
     credentials.loadCredentials()
-    if (credentials.hasCredentials) return true
+    if (credentials.hasModelReady) return true
     if (configurationNotice) return false
     configurationNotice = ElMessage({
       type: 'warning',
@@ -19,7 +19,10 @@ export function useAiConfigurationGuard() {
       duration: 5000,
       showClose: true,
       message: h('span', { class: 'studio-action-notice__content' }, [
-        h('span', '请先配置 API Key，再继续操作'),
+        h(
+          'span',
+          credentials.hasCredentials ? '请先获取模型列表并选择模型' : '请先配置 API Key，再继续操作'
+        ),
         h(
           'button',
           {

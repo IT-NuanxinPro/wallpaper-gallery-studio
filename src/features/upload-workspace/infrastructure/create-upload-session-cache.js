@@ -7,13 +7,49 @@ const DEFAULT_OPTIONS = {
   debounceMs: 1000
 }
 
-export function createUploadSessionCache({
+export function createUploadSessionCache({ getRepositoryContext = () => ({}), ...options } = {}) {
+  const scopes = new Map()
+  function forContext(context) {
+    const namespace = JSON.stringify([
+      context.owner || '',
+      context.repo || '',
+      context.branch || ''
+    ])
+    if (!scopes.has(namespace)) {
+      scopes.set(namespace, createScopedSessionCache({ ...options, namespace }))
+    }
+    return scopes.get(namespace)
+  }
+
+  const scoped = forContext(getRepositoryContext())
+  return {
+    ...Object.fromEntries(
+      Object.keys(scoped).map(method => [
+        method,
+        (...args) => forContext(getRepositoryContext())[method](...args)
+      ])
+    ),
+    forContext,
+    flush() {
+      scopes.forEach(cache => cache.flush())
+    },
+    cleanup() {
+      scopes.forEach(cache => cache.cleanup())
+    }
+  }
+}
+
+function createScopedSessionCache({
+  namespace,
   storage = localStorage,
   now = () => Date.now(),
   debounceMs = DEFAULT_OPTIONS.debounceMs,
   options = {}
 } = {}) {
   const config = { ...DEFAULT_OPTIONS, ...options, debounceMs }
+  for (const key of ['hashStorageKey', 'pendingStorageKey', 'aiMetadataStorageKey']) {
+    config[key] = `${config[key]}:repository:${namespace}`
+  }
   const expireMs = config.expireDays * 24 * 60 * 60 * 1000
 
   let uploadedHashes = null
@@ -157,9 +193,9 @@ export function createUploadSessionCache({
         )
       )
     },
-    addPendingUploadedHash(hash, filename, path) {
+    addPendingUploadedHash(hash, filename, path, recovery = {}) {
       const hashes = loadPendingHashes()
-      hashes[hash] = { filename, path, time: now() }
+      hashes[hash] = { ...recovery, filename, path, time: now() }
       pendingDirty = true
       schedule(
         flushPendingHashes,

@@ -21,7 +21,8 @@
       <section v-if="!configured" class="video-workspace__unconfigured">
         <el-icon :size="40"><VideoCamera /></el-icon>
         <h2>视频服务尚未配置</h2>
-        <p>部署工作台时设置 VITE_VIDEO_API_URL，即可启用视频上传、处理和发布。</p>
+        <p>在仓库与服务设置中填写视频服务地址，即可启用视频上传、处理和发布。</p>
+        <router-link to="/settings">配置视频服务</router-link>
         <router-link to="/upload">返回图片上传</router-link>
       </section>
 
@@ -279,6 +280,8 @@
                   :busy="reviewBusy"
                   :conflict="conflict"
                   :has-credentials="credentialsStore.hasCredentials"
+                  :has-model-ready="credentialsStore.hasModelReady"
+                  :model="credentialsStore.selectedModel"
                   :topic-suggestions="topics"
                   :topics-error="topicsError"
                   @save="saveReview()"
@@ -325,7 +328,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useConfigStore } from '@/stores/config'
 import { useCredentialsStore } from '@/stores/credentials'
 import { useAiConfigurationGuard } from '@/composables/useAiConfigurationGuard'
-import { analyzeImage, CLASSIFIER_CONFIG } from '@/services/ai/classifier'
+import { analyzeImage } from '@/services/ai/classifier'
 import VideoReviewPanel from '@/features/video-ingest/VideoReviewPanel.vue'
 import VideoJobQueue from '@/features/video-ingest/VideoJobQueue.vue'
 import { createVideoUploadManager } from '@/features/video-ingest/upload-manager'
@@ -339,7 +342,7 @@ const configStore = useConfigStore()
 const credentialsStore = useCredentialsStore()
 const { requireAiConfiguration } = useAiConfigurationGuard()
 const api = createVideoApi({
-  baseUrl: import.meta.env.VITE_VIDEO_API_URL,
+  baseUrl: configStore.config.videoApiUrl,
   getToken: () => authStore.token
 })
 const configured = api.configured
@@ -539,7 +542,6 @@ async function analyzeReview() {
   try {
     await workspace.analyzeReview({
       analyzeImage,
-      modelKey: CLASSIFIER_CONFIG.defaultModel,
       providerType: 'sub2api',
       credentials: credentialsStore.getCredentialsByProvider('sub2api')
     })

@@ -25,9 +25,56 @@ export function createGitHubUploadWorkspaceRepository({
     return githubClient.getContents(owner, repo, path, branch, options)
   }
 
+  function createWriteSession() {
+    const context = Object.freeze({ ...getContext() })
+    const token = githubClient.token
+    const assertCurrent = () => {
+      const current = getContext()
+      if (
+        token !== githubClient.token ||
+        ['owner', 'repo', 'branch', 'wallpaperRoot', 'metadataPendingDir'].some(
+          key => current[key] !== context[key]
+        )
+      ) {
+        throw Object.assign(new Error('仓库或登录身份已变更，请切回原仓库后重试未完成任务'), {
+          type: 'UPLOAD_CONTEXT_CHANGED'
+        })
+      }
+    }
+
+    // 上传中的编码、目录准备和自动重试都会再次请求，逐次校验身份与目标。
+    const client = Object.create(githubClient)
+    client.token = token
+    client.request = (...args) => {
+      assertCurrent()
+      return githubClient.request.apply(client, args)
+    }
+
+    return {
+      context,
+      assertCurrent,
+      uploadImage(path, file, message) {
+        assertCurrent()
+        return client.uploadImage(context.owner, context.repo, path, file, message, context.branch)
+      },
+      createFile(path, content, message) {
+        assertCurrent()
+        return client.createFile(
+          context.owner,
+          context.repo,
+          path,
+          content,
+          message,
+          context.branch
+        )
+      }
+    }
+  }
+
   return {
     githubClient,
     getContext,
+    createWriteSession,
     getRateLimit() {
       return githubClient.getRateLimit()
     },

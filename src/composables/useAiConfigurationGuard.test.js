@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const state = vi.hoisted(() => ({
-  credentials: { hasCredentials: false, loadCredentials: vi.fn() },
+  credentials: { hasCredentials: false, hasModelReady: false, loadCredentials: vi.fn() },
   push: vi.fn(),
   message: vi.fn()
 }))
@@ -13,6 +13,7 @@ beforeEach(() => {
   vi.resetModules()
   vi.clearAllMocks()
   state.credentials.hasCredentials = false
+  state.credentials.hasModelReady = false
   state.message.mockReturnValue({ close: vi.fn() })
 })
 
@@ -38,7 +39,14 @@ describe('AI配置操作反馈', () => {
     guard.requireAiConfiguration()
     expect(state.message).toHaveBeenCalledTimes(2)
     state.credentials.hasCredentials = true
+    state.credentials.hasModelReady = true
     expect(guard.requireAiConfiguration()).toBe(true)
     expect(state.message).toHaveBeenCalledTimes(2)
+  })
+  it('只有Key未选模型时提示选模型，不能放行请求', async () => {
+    state.credentials.hasCredentials = true
+    const { useAiConfigurationGuard } = await import('./useAiConfigurationGuard')
+    expect(useAiConfigurationGuard().requireAiConfiguration()).toBe(false)
+    expect(state.message.mock.calls[0][0].message.children[0].children).toContain('选择模型')
   })
 })

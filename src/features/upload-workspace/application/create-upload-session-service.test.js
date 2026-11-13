@@ -7,15 +7,24 @@ function makeService() {
     uploadImage: vi.fn(),
     createFile: vi.fn()
   }
+  repository.createWriteSession = () => ({
+    context: repository.getContext(),
+    assertCurrent: () => {},
+    uploadImage: repository.uploadImage,
+    createFile: repository.createFile
+  })
+  const cache = {
+    isHashUploaded: () => null,
+    getPendingUploadedHash: () => null,
+    addPendingUploadedHash: () => {},
+    markHashesMetadataCommitted: () => {},
+    flush: () => {}
+  }
   return {
     repository,
     service: createUploadSessionService({
       repository,
-      sessionCache: {
-        isHashUploaded: () => null,
-        getPendingUploadedHash: () => null,
-        addPendingUploadedHash: () => {}
-      },
+      sessionCache: { forContext: () => cache },
       historyStore: { addRecord: () => {} }
     })
   }
@@ -59,6 +68,7 @@ describe('图片上传必须携带真实AI结果', () => {
       description: '人工校正结果',
       keywords: ['雪山']
     }
+    file.uploadedRepository = { owner: 'owner', repo: 'gallery', branch: 'main' }
     expect(await service.generatePendingMetadata([file], options)).toMatchObject({ success: true })
     const saved = JSON.parse(repository.createFile.mock.calls[0][1])
     expect(saved.images[0]).toMatchObject({

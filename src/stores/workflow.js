@@ -2,340 +2,324 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { githubService } from '@/services/github'
 
-export const useWorkflowStore = defineStore('workflow', () => {
-  // 状态
-  const loading = ref(false)
-  const triggering = ref(false)
-  const polling = ref(false)
-
-  // 待处理图片信息
-  const pendingInfo = ref({
+function emptyPendingInfo() {
+  return {
     pendingCount: 0,
     pendingFiles: [],
     latestTag: null,
     latestTagInfo: null,
     message: null,
     error: null
-  })
-
-  // stats.json 统计数据
-  const statsData = ref(null)
-
-  // 工作流运行状态
-  const workflowStatus = ref({
+  }
+}
+function emptyWorkflowStatus() {
+  return {
     hasRunning: false,
     runningWorkflow: null,
     latestRun: null,
     justTriggered: false,
-    triggerTime: null // 触发时间
-  })
+    triggerTime: null
+  }
+}
+function repositoryKey(owner, repo, branch = '') {
+  return JSON.stringify([owner, repo, branch])
+}
 
-  // 本次会话上传成功的文件数
+export const useWorkflowStore = defineStore('workflow', () => {
+  const loading = ref(false)
+  const triggering = ref(false)
+  const polling = ref(false)
+  const pendingInfo = ref(emptyPendingInfo())
+  const statsData = ref(null)
+  const workflowStatus = ref(emptyWorkflowStatus())
   const sessionUploadCount = ref(0)
-
-  // 轮询定时器
+  let epoch = 0
+  let requestSequence = 0
+  const requests = new Map()
+  const activeLoads = new Set()
+  let imageContext = null
+  let workflowContext = ''
   let pollTimer = null
-  // 延迟定时器（用于触发后延迟开始轮询、完成后延迟刷新等）
-  let delayTimers = []
-  // 轮询配置
-  let pollConfig = { owner: '', repo: '', imageOwner: '', imageRepo: '', branch: '' }
-  // 轮询开始时间
-  let pollStartTime = null
-  // 最大轮询时间（30分钟）
+  let pollGeneration = 0
+  const delayTimers = new Set()
   const MAX_POLL_TIME = 30 * 60 * 1000
 
-  // 添加延迟定时器（便于统一清理）
-  function addDelayTimer(callback, delay) {
-    const timer = setTimeout(() => {
-      // 执行后从列表中移除
-      delayTimers = delayTimers.filter(t => t !== timer)
-      callback()
-    }, delay)
-    delayTimers.push(timer)
-    return timer
+  // 每类请求只接受当前会话、当前目标的最后一次响应。
+  function beginRequest(kind, key, workflow = false) {
+    const request = { epoch, key, sequence: ++requestSequence }
+    requests.set(kind, request)
+    return {
+      isCurrent: () =>
+        epoch === request.epoch &&
+        requests.get(kind) === request &&
+        (!workflow || workflowContext === key)
+    }
   }
-
-  // 清理所有延迟定时器
+  function beginLoading() {
+    const activity = {}
+    activeLoads.add(activity)
+    loading.value = true
+    return () => {
+      activeLoads.delete(activity)
+      loading.value = activeLoads.size > 0
+    }
+  }
   function clearDelayTimers() {
     delayTimers.forEach(timer => clearTimeout(timer))
-    delayTimers = []
+    delayTimers.clear()
+  }
+  function addDelayTimer(callback, delay, isCurrent) {
+    const timer = setTimeout(() => {
+      delayTimers.delete(timer)
+      if (isCurrent()) callback()
+    }, delay)
+    delayTimers.add(timer)
+  }
+  function bindWorkflow(owner, repo) {
+    const key = repositoryKey(owner, repo)
+    if (workflowContext && workflowContext !== key) {
+      stopPolling()
+      clearDelayTimers()
+      workflowStatus.value = emptyWorkflowStatus()
+      triggering.value = false
+    }
+    workflowContext = key
+    return key
+  }
+  function captureContext() {
+    const revision = epoch
+    const workflow = workflowContext
+    const image = imageContext
+    return {
+      image,
+      isCurrent: () => revision === epoch && workflow === workflowContext && image === imageContext
+    }
   }
 
-  // 计算属性：是否可以触发
-  const canTrigger = computed(() => {
-    // 正在加载或触发中
-    if (loading.value || triggering.value) return false
-    // 刚触发或正在运行
-    if (workflowStatus.value.justTriggered || workflowStatus.value.hasRunning) return false
-    // 没有待处理图片
-    if (pendingInfo.value.pendingCount === 0) return false
-    return true
-  })
-
-  // 计算属性：是否正在运行（包括刚触发）
-  const isRunning = computed(() => {
-    return workflowStatus.value.justTriggered || workflowStatus.value.hasRunning
-  })
-
-  // 计算属性：状态文本
+  const canTrigger = computed(
+    () =>
+      !loading.value &&
+      !triggering.value &&
+      !workflowStatus.value.justTriggered &&
+      !workflowStatus.value.hasRunning &&
+      pendingInfo.value.pendingCount > 0
+  )
+  const isRunning = computed(
+    () => workflowStatus.value.justTriggered || workflowStatus.value.hasRunning
+  )
   const statusText = computed(() => {
-    if (workflowStatus.value.justTriggered) {
-      return '已触发，等待启动...'
-    }
-    if (workflowStatus.value.hasRunning) {
-      const run = workflowStatus.value.runningWorkflow
-      if (run?.status === 'queued') return '排队中...'
-      if (run?.status === 'in_progress') return '运行中...'
-      return '处理中...'
-    }
-    return null
+    if (workflowStatus.value.justTriggered) return '已触发，等待启动...'
+    if (!workflowStatus.value.hasRunning) return null
+    const run = workflowStatus.value.runningWorkflow
+    if (run?.status === 'queued') return '排队中...'
+    if (run?.status === 'in_progress') return '运行中...'
+    return '处理中...'
   })
 
-  // 刷新待处理图片信息
   async function refreshPendingInfo(owner, repo, branch = 'main') {
-    loading.value = true
+    setImageRepoConfig(owner, repo, branch)
+    const request = beginRequest('pending', repositoryKey(owner, repo, branch))
+    const finishLoading = beginLoading()
     try {
       const info = await githubService.getPendingImages(owner, repo, branch)
+      if (!request.isCurrent()) return null
       pendingInfo.value = info
       return info
     } catch (error) {
+      if (!request.isCurrent()) return null
       pendingInfo.value.error = error.message
       throw error
     } finally {
-      loading.value = false
+      finishLoading()
     }
   }
 
-  // 刷新 stats.json 数据
   async function refreshStatsData(owner, repo, branch = 'main') {
+    setImageRepoConfig(owner, repo, branch)
+    const request = beginRequest('stats', repositoryKey(owner, repo, branch))
     try {
       const data = await githubService.getStats(owner, repo, branch)
+      if (!request.isCurrent()) return null
       statsData.value = data
       return data
     } catch (error) {
-      console.error('Failed to refresh stats data:', error)
+      if (request.isCurrent()) console.error('Failed to refresh stats data:', error)
       return null
     }
   }
 
-  // 刷新工作流状态
-  async function refreshWorkflowStatus(workflowOwner, workflowRepo) {
+  async function refreshWorkflowStatus(owner, repo) {
+    const key = bindWorkflow(owner, repo)
+    const request = beginRequest('workflow', key, true)
+    const context = captureContext()
     try {
-      const status = await githubService.hasRunningWorkflow(workflowOwner, workflowRepo)
-
-      // 如果检测到运行中的工作流
-      if (status.hasRunning) {
-        workflowStatus.value = {
-          ...status,
-          justTriggered: false, // 已经开始运行，清除刚触发标记
-          triggerTime: workflowStatus.value.triggerTime
-        }
-      } else {
-        // 没有运行中的工作流
-        const wasRunning = workflowStatus.value.hasRunning || workflowStatus.value.justTriggered
-
-        workflowStatus.value = {
-          ...status,
-          justTriggered: false,
-          triggerTime: null
-        }
-
-        // 如果之前在运行，现在完成了，刷新相关数据
-        if (wasRunning && pollConfig.imageOwner) {
-          console.log('[WorkflowStore] 工作流完成，刷新数据...')
-          // 延迟刷新，等待 GitHub API 同步
-          addDelayTimer(async () => {
+      const status = await githubService.hasRunningWorkflow(owner, repo)
+      if (!request.isCurrent()) return null
+      const wasRunning = workflowStatus.value.hasRunning || workflowStatus.value.justTriggered
+      workflowStatus.value = {
+        ...status,
+        justTriggered: false,
+        triggerTime: status.hasRunning ? workflowStatus.value.triggerTime : null
+      }
+      if (!status.hasRunning && wasRunning && context.image) {
+        const { owner: imageOwner, repo: imageRepo, branch } = context.image
+        addDelayTimer(
+          async () => {
             try {
               await Promise.all([
-                refreshPendingInfo(pollConfig.imageOwner, pollConfig.imageRepo, pollConfig.branch),
-                refreshStatsData(pollConfig.imageOwner, pollConfig.imageRepo, pollConfig.branch)
+                refreshPendingInfo(imageOwner, imageRepo, branch),
+                refreshStatsData(imageOwner, imageRepo, branch)
               ])
-              console.log('[WorkflowStore] 数据刷新完成')
-            } catch (e) {
-              console.error('[WorkflowStore] 数据刷新失败:', e)
+            } catch (error) {
+              if (context.isCurrent()) console.error('[WorkflowStore] 数据刷新失败:', error)
             }
-          }, 1500)
-        }
+          },
+          1500,
+          context.isCurrent
+        )
       }
-
       return status
     } catch (error) {
+      if (!request.isCurrent()) return null
       console.error('Failed to refresh workflow status:', error)
       return workflowStatus.value
     }
   }
 
-  // 触发工作流
-  async function triggerWorkflow(workflowOwner, workflowRepo, message = '', publisher = '') {
+  async function triggerWorkflow(owner, repo, message = '', publisher = '') {
     if (!canTrigger.value) return false
-
+    const request = beginRequest('trigger', bindWorkflow(owner, repo), true)
+    const context = captureContext()
     triggering.value = true
     try {
-      await githubService.triggerWorkflow(workflowOwner, workflowRepo, 'process-wallpapers', {
+      await githubService.triggerWorkflow(owner, repo, 'process-wallpapers', {
         message: message || `chore: 处理 ${pendingInfo.value.pendingCount} 张新图片`,
         publisher: publisher || ''
       })
-
-      // 立即标记为刚触发状态
+      if (!request.isCurrent()) return false
       workflowStatus.value.justTriggered = true
       workflowStatus.value.triggerTime = Date.now()
-
-      // 触发成功后开始轮询状态
-      addDelayTimer(() => {
-        startPolling(workflowOwner, workflowRepo)
-      }, 3000)
-
+      addDelayTimer(() => startPolling(owner, repo), 3000, context.isCurrent)
       return true
     } catch (error) {
-      console.error('Failed to trigger workflow:', error)
+      if (!request.isCurrent()) return false
       throw error
     } finally {
-      triggering.value = false
+      if (request.isCurrent()) triggering.value = false
     }
   }
 
-  // 回滚到上一个 tag（触发工作流进行完整回滚）
-  async function rollbackLastRelease(
-    imageOwner,
-    imageRepo,
-    workflowOwner,
-    workflowRepo,
-    tagName = ''
-  ) {
-    loading.value = true
+  async function rollbackLastRelease(imageOwner, imageRepo, owner, repo, tagName = '') {
+    const request = beginRequest('rollback', bindWorkflow(owner, repo), true)
+    const context = captureContext()
+    const finishLoading = beginLoading()
     try {
       const result = await githubService.rollbackToLastTag(
         imageOwner,
         imageRepo,
-        workflowOwner,
-        workflowRepo,
+        owner,
+        repo,
         tagName
       )
-
-      // 标记为刚触发状态，开始轮询
+      if (!request.isCurrent()) return null
       workflowStatus.value.justTriggered = true
       workflowStatus.value.triggerTime = Date.now()
-
-      addDelayTimer(() => {
-        startPolling(workflowOwner, workflowRepo)
-      }, 3000)
-
+      addDelayTimer(() => startPolling(owner, repo), 3000, context.isCurrent)
       return result
     } catch (error) {
-      console.error('Failed to rollback:', error)
+      if (!request.isCurrent()) return null
       throw error
     } finally {
-      loading.value = false
+      finishLoading()
     }
   }
 
-  // 触发前端部署
-  async function triggerFrontendDeploy(frontendOwner, frontendRepo) {
-    loading.value = true
+  async function triggerFrontendDeploy(owner, repo) {
+    const request = beginRequest('deploy', repositoryKey(owner, repo))
+    const finishLoading = beginLoading()
     try {
-      await githubService.dispatchWorkflowByName(frontendOwner, frontendRepo, 'deploy.yml')
-      return true
+      await githubService.dispatchWorkflowByName(owner, repo, 'deploy.yml')
+      return request.isCurrent()
     } catch (error) {
-      console.error('Failed to trigger frontend deploy:', error)
+      if (!request.isCurrent()) return false
       throw error
     } finally {
-      loading.value = false
+      finishLoading()
     }
   }
 
-  // 开始轮询工作流状态
-  function startPolling(workflowOwner, workflowRepo, interval = 5000) {
+  function startPolling(owner, repo, interval = 5000) {
+    bindWorkflow(owner, repo)
     stopPolling()
+    const generation = pollGeneration
+    const context = captureContext()
+    const startedAt = Date.now()
+    const isCurrent = () => generation === pollGeneration && context.isCurrent()
     polling.value = true
-    pollStartTime = Date.now()
-
-    // 保存配置用于完成后刷新
-    pollConfig.owner = workflowOwner
-    pollConfig.repo = workflowRepo
-
-    console.log('[WorkflowStore] 开始轮询工作流状态，间隔:', interval, 'ms')
-
-    // 立即检查一次
-    refreshWorkflowStatus(workflowOwner, workflowRepo)
-
+    refreshWorkflowStatus(owner, repo)
     pollTimer = setInterval(async () => {
-      // 检查是否超过最大轮询时间
-      const elapsed = Date.now() - pollStartTime
-      if (elapsed > MAX_POLL_TIME) {
-        console.warn('[WorkflowStore] 轮询超时（30分钟），自动停止')
+      if (!isCurrent()) return
+      if (Date.now() - startedAt > MAX_POLL_TIME) {
         workflowStatus.value.justTriggered = false
         workflowStatus.value.triggerTime = null
         stopPolling()
         return
       }
-
-      const status = await refreshWorkflowStatus(workflowOwner, workflowRepo)
-
-      // 如果没有运行中的工作流且不是刚触发状态，停止轮询
+      const status = await refreshWorkflowStatus(owner, repo)
+      if (!isCurrent() || !status) return
       if (!status.hasRunning && !workflowStatus.value.justTriggered) {
-        console.log('[WorkflowStore] 工作流已完成，停止轮询')
         stopPolling()
-      }
-
-      // 超时保护：如果触发超过 10 分钟还没检测到运行，停止轮询
-      if (workflowStatus.value.justTriggered && workflowStatus.value.triggerTime) {
-        const triggerElapsed = Date.now() - workflowStatus.value.triggerTime
-        if (triggerElapsed > 10 * 60 * 1000) {
-          console.warn('[WorkflowStore] 工作流触发超时（10分钟），停止轮询')
-          workflowStatus.value.justTriggered = false
-          workflowStatus.value.triggerTime = null
-          stopPolling()
-        }
+      } else if (
+        workflowStatus.value.justTriggered &&
+        workflowStatus.value.triggerTime &&
+        Date.now() - workflowStatus.value.triggerTime > 10 * 60 * 1000
+      ) {
+        workflowStatus.value.justTriggered = false
+        workflowStatus.value.triggerTime = null
+        stopPolling()
       }
     }, interval)
   }
 
-  // 停止轮询
   function stopPolling() {
-    if (pollTimer) {
-      clearInterval(pollTimer)
-      pollTimer = null
-      console.log('[WorkflowStore] 停止轮询')
-    }
+    pollGeneration++
+    requests.delete('workflow')
+    if (pollTimer !== null) clearInterval(pollTimer)
+    pollTimer = null
     polling.value = false
-    pollStartTime = null
   }
 
-  // 设置图床仓库配置（用于完成后刷新）
-  function setImageRepoConfig(owner, repo, branch) {
-    pollConfig.imageOwner = owner
-    pollConfig.imageRepo = repo
-    pollConfig.branch = branch
+  function setImageRepoConfig(owner, repo, branch = 'main') {
+    const key = repositoryKey(owner, repo, branch)
+    if (imageContext?.key === key) return
+    if (imageContext) cleanup()
+    imageContext = { owner, repo, branch, key }
   }
 
-  // 增加会话上传计数
   function addSessionUpload(count = 1) {
     sessionUploadCount.value += count
   }
-
-  // 重置会话上传计数
   function resetSessionUpload() {
     sessionUploadCount.value = 0
   }
 
-  // 清理所有资源
   function cleanup() {
-    console.log('[WorkflowStore] 清理资源')
+    epoch++
+    requests.clear()
     stopPolling()
     clearDelayTimers()
-    // 重置状态
-    workflowStatus.value = {
-      hasRunning: false,
-      runningWorkflow: null,
-      latestRun: null,
-      justTriggered: false,
-      triggerTime: null
-    }
-    pollStartTime = null
+    activeLoads.clear()
+    loading.value = false
+    triggering.value = false
+    pendingInfo.value = emptyPendingInfo()
+    statsData.value = null
+    workflowStatus.value = emptyWorkflowStatus()
+    sessionUploadCount.value = 0
+    imageContext = null
+    workflowContext = ''
   }
 
   return {
-    // 状态
     loading,
     triggering,
     polling,
@@ -343,11 +327,9 @@ export const useWorkflowStore = defineStore('workflow', () => {
     workflowStatus,
     sessionUploadCount,
     statsData,
-    // 计算属性
     canTrigger,
     isRunning,
     statusText,
-    // 方法
     refreshPendingInfo,
     refreshStatsData,
     refreshWorkflowStatus,

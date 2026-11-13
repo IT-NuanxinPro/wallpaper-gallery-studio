@@ -38,9 +38,15 @@
         <router-link to="/settings#ai-config" class="studio-shell__ai">
           <el-icon><Cpu /></el-icon>
           <span
-            ><strong>GPT-6.1 Sol</strong
+            ><strong :title="credentials.selectedModel">{{
+              credentials.selectedModel || '未选择模型'
+            }}</strong
             ><small>{{
-              credentials.hasCredentials ? '当前会话已配置' : '配置你的 API Key'
+              credentials.hasModelReady
+                ? '当前会话已配置'
+                : credentials.hasCredentials
+                  ? '请选择分析模型'
+                  : '配置你的 API Key'
             }}</small></span
           >
           <el-icon class="studio-shell__ai-arrow"><ArrowRight /></el-icon>
@@ -60,6 +66,9 @@
           </button>
           <template #dropdown
             ><el-dropdown-menu>
+              <el-dropdown-item command="repository" :icon="FolderOpened"
+                >切换仓库</el-dropdown-item
+              >
               <el-dropdown-item command="settings" :icon="Setting">设置与 AI 配置</el-dropdown-item>
               <el-dropdown-item command="logout" :icon="SwitchButton" divided
                 >退出登录</el-dropdown-item
@@ -78,10 +87,10 @@
         <router-link
           to="/settings#ai-config"
           class="studio-shell__session"
-          :class="{ 'is-connected': credentials.hasCredentials }"
+          :class="{ 'is-connected': credentials.hasModelReady }"
         >
           <el-icon><Key /></el-icon
-          ><span>{{ credentials.hasCredentials ? 'AI 会话已就绪' : '配置 AI' }}</span>
+          ><span>{{ credentials.hasModelReady ? 'AI 会话已就绪' : '配置 AI' }}</span>
         </router-link>
         <el-dropdown trigger="click" placement="bottom-end" @command="handleCommand">
           <button
@@ -94,6 +103,9 @@
           </button>
           <template #dropdown>
             <el-dropdown-menu>
+              <el-dropdown-item command="repository" :icon="FolderOpened"
+                >切换仓库</el-dropdown-item
+              >
               <el-dropdown-item command="settings" :icon="Setting">设置与 AI 配置</el-dropdown-item>
               <el-dropdown-item command="logout" :icon="SwitchButton" divided
                 >退出登录</el-dropdown-item
@@ -133,17 +145,21 @@ import {
   ArrowRight,
   SwitchButton,
   Picture,
+  FolderOpened,
   Cpu,
   Key
 } from '@element-plus/icons-vue'
 import { ElMessageBox, ElMessage } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
 import { useCredentialsStore } from '@/stores/credentials'
+import { useUploadSessionStore } from '@/stores/upload-session'
+import { hasPendingRepositoryWrites } from '@/utils/repository-switch'
 
 const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
 const credentials = useCredentialsStore()
+const uploadSession = useUploadSessionStore()
 const permissionLabel = computed(
   () =>
     ({ admin: '管理员', write: '协作者', read: '只读', none: '无权限' })[
@@ -163,6 +179,14 @@ function isActive(path) {
   return route.path === path
 }
 async function handleCommand(command) {
+  if (command === 'repository' && hasPendingRepositoryWrites(uploadSession)) {
+    ElMessage.warning('请先完成或移除当前图片任务，再切换仓库')
+    return
+  }
+  if (uploadSession.uploading || uploadSession.metadataStatus === 'uploading') {
+    ElMessage.warning('图片正在提交，请完成后再切换配置或账号')
+    return
+  }
   if (command === 'logout') {
     try {
       await ElMessageBox.confirm('确定要退出登录吗？', '退出确认', {
@@ -176,6 +200,7 @@ async function handleCommand(command) {
       return
     }
   } else if (command === 'settings') router.push('/settings')
+  else if (command === 'repository') router.push('/login?select_repo=1')
 }
 </script>
 
@@ -323,13 +348,18 @@ async function handleCommand(command) {
     color: #a9c9f0;
     > .el-icon {
       font-size: 18px;
+      flex-shrink: 0;
     }
     span {
+      min-width: 0;
       display: flex;
       flex-direction: column;
       gap: 5px;
     }
     strong {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
       font-size: 11px;
       color: #d7e2ef;
       font-weight: 550;

@@ -31,7 +31,7 @@
         <div class="ai-task-center__body">
           <div class="ai-task-center__name" :title="task.fileName">{{ task.fileName }}</div>
           <div class="ai-task-center__meta">
-            <span>{{ getProviderLabel(task.provider) }}</span>
+            <span>{{ task.modelKey || '未选择模型' }}</span>
             <span>{{ getStatusLabel(task.status) }}</span>
             <span v-if="task.attempts > 0">第 {{ task.attempts }} 次</span>
             <span v-if="task.status === 'queued' && queuePosition(task) > 0">
@@ -87,10 +87,6 @@ const visibleTasks = computed(() =>
     })
     .slice(0, 12)
 )
-
-function getProviderLabel(provider) {
-  return provider === 'sub2api' ? 'GPT-6.1 Sol' : '历史任务'
-}
 
 function getStatusLabel(status) {
   const labels = {

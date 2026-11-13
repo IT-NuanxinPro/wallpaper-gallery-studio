@@ -18,7 +18,9 @@ describe('标签页AI会话', () => {
     const reload = createSessionCredentialStorage({ navigationType: 'reload' })
     expect(reload.read()).toEqual({
       apiKey: 'private-test-key',
-      baseUrl: 'https://gateway.example/v1'
+      baseUrl: 'https://gateway.example/v1',
+      model: '',
+      models: []
     })
     const copied = createSessionCredentialStorage({ navigationType: 'navigate' })
     expect(copied.read()).toBe(null)
@@ -85,17 +87,20 @@ describe('标签页AI会话', () => {
   })
 })
 
-it('API地址只允许明确HTTPS或本机调试地址，不允许携带凭据与查询参数', () => {
+it('API地址支持HTTP、HTTPS与同源路径，不允许携带凭据与查询参数', () => {
   expect(normalizeAiBaseUrl(' https://gateway.example/v1/ ')).toBe('https://gateway.example/v1')
   expect(normalizeAiBaseUrl('/sub2api/v1/')).toBe('/sub2api/v1')
   expect(normalizeAiBaseUrl('http://127.0.0.1:8000/v1')).toBe('http://127.0.0.1:8000/v1')
+  expect(normalizeAiBaseUrl('http://gateway.example:8000/v1/')).toBe(
+    'http://gateway.example:8000/v1'
+  )
+  expect(normalizeAiBaseUrl('http://192.168.1.8:8080/v1')).toBe('http://192.168.1.8:8080/v1')
   expect(normalizeAiBaseUrl('HTTPS://Gateway.Example:443/v1/')).toBe('https://gateway.example/v1')
   for (const url of [
     'https:gateway.example/v1',
     'https:/gateway.example/v1',
     'https://gateway.example/v1?',
     'https://gateway.example/v1#',
-    'http://gateway.example/v1',
     '//evil.example/v1',
     'https://name:secret@gateway.example/v1',
     'https://gateway.example/v1?key=secret',
