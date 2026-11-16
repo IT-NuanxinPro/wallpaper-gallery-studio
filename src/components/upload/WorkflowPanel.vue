@@ -33,6 +33,30 @@
     <div class="workflow-panel__inner" :class="{ 'workflow-panel__inner--hidden': collapsed }">
       <div class="workflow-panel__body">
         <div class="workflow-panel__content">
+          <div class="workflow-panel__connection" role="status">
+            <template v-if="workflowOwner && workflowRepo">
+              <span>关联工作流</span>
+              <a
+                :href="`https://github.com/${workflowOwner}/${workflowRepo}/actions`"
+                target="_blank"
+                rel="noopener noreferrer"
+                >{{ workflowOwner }}/{{ workflowRepo }}</a
+              >
+            </template>
+            <template v-else>
+              <span>{{
+                configStore.connectingRepositories ? '正在识别关联工作流…' : '尚未识别发布工作流'
+              }}</span>
+              <el-button
+                link
+                :loading="configStore.connectingRepositories"
+                @click="connectRepositories"
+                >自动关联</el-button
+              >
+              <router-link to="/settings#repository-config">从仓库列表选择</router-link>
+            </template>
+            <p v-if="configStore.connectionError">{{ configStore.connectionError }}</p>
+          </div>
           <div v-if="workflowStore.sessionUploadCount > 0" class="workflow-panel__stat">
             <span class="workflow-panel__stat-label">本次上传</span>
             <span class="workflow-panel__stat-value workflow-panel__stat-value--success">
@@ -337,6 +361,11 @@ const workflowRepo = computed(() => configStore.config.workflowRepo)
 const frontendOwner = computed(() => configStore.config.frontendOwner)
 const frontendRepo = computed(() => configStore.config.frontendRepo)
 
+async function connectRepositories() {
+  await configStore.connectMissingRepositories()
+  if (workflowOwner.value && workflowRepo.value) await refresh()
+}
+
 async function refresh() {
   const { owner, repo, branch } = configStore.config
   try {
@@ -357,7 +386,10 @@ async function refresh() {
 
 async function handleTrigger() {
   if (!workflowOwner.value || !workflowRepo.value) {
-    ElMessage.warning('请先在设置中填写工作流仓库')
+    await connectRepositories()
+  }
+  if (!workflowOwner.value || !workflowRepo.value) {
+    ElMessage.warning('暂未找到唯一关联，请到设置中从仓库列表选择发布工作流')
     return
   }
   try {
@@ -393,7 +425,10 @@ async function handleTrigger() {
 
 async function handleRollback() {
   if (!workflowOwner.value || !workflowRepo.value) {
-    ElMessage.warning('请先在设置中填写工作流仓库')
+    await configStore.connectMissingRepositories()
+  }
+  if (!workflowOwner.value || !workflowRepo.value) {
+    ElMessage.warning('请到设置中从仓库列表选择发布工作流')
     return
   }
   const tagName = pendingInfo.value.latestTag
@@ -436,7 +471,10 @@ async function handleRollback() {
 
 async function handleDeployFrontend() {
   if (!frontendOwner.value || !frontendRepo.value) {
-    ElMessage.warning('请先在设置中填写网站仓库')
+    await configStore.connectMissingRepositories()
+  }
+  if (!frontendOwner.value || !frontendRepo.value) {
+    ElMessage.warning('请到设置中从仓库列表选择壁纸网站')
     return
   }
   try {
@@ -529,6 +567,10 @@ onMounted(() => {
   const { owner, repo, branch } = configStore.config
   workflowStore.setImageRepoConfig(owner, repo, branch)
   refresh()
+  configStore.connectMissingRepositories().then(() => {
+    if (workflowOwner.value && workflowRepo.value)
+      workflowStore.refreshWorkflowStatus(workflowOwner.value, workflowRepo.value)
+  })
 })
 
 onUnmounted(() => {
@@ -540,6 +582,23 @@ onUnmounted(() => {
 @use '@/styles/variables' as *;
 
 .workflow-panel {
+  &__connection {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 10px;
+    margin-bottom: 14px;
+    font-size: 11px;
+    color: $gray-400;
+    a {
+      color: $primary-start;
+      overflow-wrap: anywhere;
+      text-decoration: none;
+    }
+    p {
+      margin: 0;
+      width: 100%;
+    }
+  }
   display: flex;
   flex-direction: column;
   height: 100%;

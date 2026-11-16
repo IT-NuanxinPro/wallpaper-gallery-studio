@@ -1,8 +1,18 @@
 @use '@/styles/variables' as *;
 
 // AI 分析悬浮提示样式（全局样式，因为 el-tooltip 的 popper 在 body 下）
-.upload-panel__ai-tooltip {
+.el-popper.upload-panel__ai-tooltip {
   max-width: 320px;
+  background: linear-gradient(145deg, rgba(31, 41, 55, 0.98), rgba(17, 24, 39, 0.98));
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  backdrop-filter: blur(20px);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+
+  .el-popper__arrow::before {
+    background: #111827;
+    border-color: rgba(255, 255, 255, 0.1);
+  }
 
   .ai-tooltip-content {
     padding: $spacing-2;

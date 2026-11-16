@@ -74,14 +74,20 @@ export function createUploadSessionService({
         writeSession.assertCurrent()
 
         const existingUpload = cache.isHashUploaded(hash)
-        if (existingUpload) {
+        const sameLocalSource =
+          uploadFile.localSource &&
+          existingUpload?.localSource &&
+          ['collectorId', 'batchId', 'sourceItemId', 'sha256'].every(
+            key => uploadFile.localSource[key] === existingUpload.localSource[key]
+          )
+        if (existingUpload && !sameLocalSource) {
           uploadFile.reusedExisting = false
           uploadFile.status = 'error'
           uploadFile.error = `该图片已完整上传，请勿重复上传（${existingUpload.path}）`
           return { success: false, errorType: 'DUPLICATE', error: uploadFile.error }
         }
 
-        const pendingUpload = cache.getPendingUploadedHash(hash)
+        const pendingUpload = sameLocalSource ? existingUpload : cache.getPendingUploadedHash(hash)
         if (pendingUpload) {
           uploadFile.progress = 100
           uploadFile.status = 'success'
@@ -232,6 +238,7 @@ export function createUploadSessionService({
             createdAt: new Date(now()).toISOString(),
             size: file.size,
             format: getExtension(file.name),
+            ...(file.localSource ? { localSource: file.localSource } : {}),
             ai: file.aiMetadata
           }
         })
@@ -241,7 +248,7 @@ export function createUploadSessionService({
       const pendingPath = `${metadataPendingDir}/${pendingFilename}`
 
       try {
-        await writeSession.createFile(
+        const committed = await writeSession.createFile(
           pendingPath,
           JSON.stringify(pendingData, null, 2),
           `Add pending metadata: ${pendingFilename}`
@@ -252,7 +259,12 @@ export function createUploadSessionService({
         uploadedFiles.forEach(file => {
           file.metadataPending = false
         })
-        return { success: true, path: pendingPath, count: uploadedFiles.length }
+        return {
+          success: true,
+          path: pendingPath,
+          count: uploadedFiles.length,
+          ...(committed?.commit?.sha ? { commitSha: committed.commit.sha } : {})
+        }
       } catch (error) {
         return { success: false, errorType: error.type, error: error.message }
       }

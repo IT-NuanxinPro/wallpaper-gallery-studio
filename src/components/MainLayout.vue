@@ -154,6 +154,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useCredentialsStore } from '@/stores/credentials'
 import { useUploadSessionStore } from '@/stores/upload-session'
 import { hasPendingRepositoryWrites } from '@/utils/repository-switch'
+import { isLocalCollectionEnabled } from '@/features/local-collection/availability'
 
 const router = useRouter()
 const route = useRoute()
@@ -167,6 +168,9 @@ const permissionLabel = computed(
     ] || '未知'
 )
 const navItems = [
+  ...(import.meta.env.DEV && isLocalCollectionEnabled()
+    ? [{ path: '/local-collection', label: '素材采集', shortLabel: '采集', icon: FolderOpened }]
+    : []),
   { path: '/upload', label: '图片上传', shortLabel: '图片', icon: Picture },
   { path: '/video-upload', label: '视频工作台', shortLabel: '视频', icon: VideoCamera },
   { path: '/ai-assistant', label: 'AI 工坊', shortLabel: '工坊', icon: Cpu },

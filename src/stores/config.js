@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { githubService } from '@/services/github'
+import { discoverRepositoryConnections } from '@/services/repository-connections'
 
 const STORAGE_KEY = 'wallpaper_admin_config'
 const DEFAULT_CONFIG = {
@@ -111,6 +112,11 @@ export const useConfigStore = defineStore('config', () => {
   const configRevision = ref(0)
   const validating = ref(false)
   const validationError = ref(null)
+  const connectingRepositories = ref(false)
+  const connectionError = ref('')
+  let connectionRequest
+  let connectionKey
+  let connectionSequence = 0
   const isConfigured = computed(
     () =>
       isValidOwnerName(config.value.owner) &&
@@ -172,11 +178,62 @@ export const useConfigStore = defineStore('config', () => {
       validating.value = false
     }
   }
+  async function resolveConnections(input, token, isCurrent = () => true) {
+    try {
+      const result = await discoverRepositoryConnections({ config: input, token })
+      if (isCurrent()) connectionError.value = ''
+      return { ...input, ...result.connections }
+    } catch (error) {
+      if (isCurrent()) connectionError.value = error.message
+      return input
+    }
+  }
+  function connectMissingRepositories() {
+    const key = JSON.stringify([
+      config.value.owner,
+      config.value.repo,
+      config.value.branch,
+      configRevision.value
+    ])
+    if (connectionRequest && connectionKey === key) return connectionRequest
+    if (
+      !isConfigured.value ||
+      !githubService.token ||
+      (config.value.workflowRepo && config.value.frontendRepo)
+    )
+      return Promise.resolve()
+    const before = { ...config.value }
+    const revision = configRevision.value
+    const token = githubService.token
+    const sequence = ++connectionSequence
+    const isCurrent = () => revision === configRevision.value && token === githubService.token
+    connectionKey = key
+    connectingRepositories.value = true
+    connectionRequest = resolveConnections(before, token, isCurrent)
+      .then(next => {
+        if (revision !== configRevision.value || token !== githubService.token) return
+        if (JSON.stringify(before) !== JSON.stringify(next)) setConfig(next)
+      })
+      .catch(error => {
+        if (isCurrent()) connectionError.value = error.message
+      })
+      .finally(() => {
+        if (sequence === connectionSequence) {
+          connectingRepositories.value = false
+          connectionRequest = null
+        }
+      })
+    return connectionRequest
+  }
   return {
     config,
     configRevision,
     validating,
     validationError,
+    connectingRepositories,
+    connectionError,
+    resolveConnections,
+    connectMissingRepositories,
     isConfigured,
     isOAuthConfigured,
     repoFullName,

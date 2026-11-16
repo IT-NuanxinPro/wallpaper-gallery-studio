@@ -27,6 +27,34 @@ async function prepare(service, options = {}) {
 }
 
 describe('图片统一 AI 准备流程', () => {
+  it('保留本地原始身份，独立记录处理后文件哈希；状态改变不加入队列', async () => {
+    const source = {
+      collectorId: 'local',
+      batchId: 'batch',
+      sourceItemId: 'one',
+      sha256: 'original-hash'
+    }
+    const file = new globalThis.File(['source'], 'local.png', { type: 'image/png' })
+    file.localSource = source
+    const service = makeService()
+    const options = {
+      target: { series: 'desktop' },
+      validateFile: () => ({ valid: true }),
+      generateId: () => 'local'
+    }
+    const [prepared] = await service.prepareFiles([file], options)
+    expect(prepared.localSource).toEqual(source)
+    expect(prepared.fileHash).toBe('same-image-hash')
+    let checks = 0
+    await expect(
+      service.prepareFiles([file], {
+        ...options,
+        assertCurrent: () => {
+          if (++checks === 2) throw new Error('已切换仓库')
+        }
+      })
+    ).rejects.toThrow('已切换仓库')
+  })
   it('旧手动参数仍计算哈希并恢复已有 AI 元数据', async () => {
     const metadata = {
       series: 'desktop',

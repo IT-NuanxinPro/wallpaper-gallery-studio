@@ -17,11 +17,18 @@ export function createUploadFileLifecycleService({
   return {
     async prepareFiles(
       newFiles,
-      { target, validateFile, generateId, compressionThreshold = 20 * 1024 * 1024 }
+      {
+        target,
+        validateFile,
+        generateId,
+        compressionThreshold = 20 * 1024 * 1024,
+        assertCurrent = () => {}
+      }
     ) {
       const validFiles = []
 
       for (const file of newFiles) {
+        assertCurrent()
         const validation = validateFile(file)
         if (!validation.valid) {
           continue
@@ -48,6 +55,7 @@ export function createUploadFileLifecycleService({
         }
 
         const fileHash = await hashComputer(processedFile)
+        assertCurrent()
         let cachedAiMetadata = sessionCache.getCachedAiMetadata(fileHash) || null
         if (cachedAiMetadata?.error) {
           cachedAiMetadata = null
@@ -57,6 +65,7 @@ export function createUploadFileLifecycleService({
           id,
           file: processedFile,
           fileHash,
+          ...(file.localSource ? { localSource: { ...file.localSource } } : {}),
           name: file.name,
           size: processedFile.size,
           originalSize,
@@ -155,7 +164,11 @@ export function createUploadFileLifecycleService({
           task = await taskStore.createTask({
             fileId: uploadFile.id,
             file: uploadFile.file,
-            series
+            series,
+            localSource: uploadFile.localSource,
+            fileHash: uploadFile.fileHash,
+            originalSize: uploadFile.originalSize,
+            compressed: uploadFile.compressed
           })
         }
 

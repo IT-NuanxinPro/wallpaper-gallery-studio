@@ -8,7 +8,15 @@ import { previewManager } from '@/utils/previewManager'
 import { analyzeImage } from '@/services/ai/classifier'
 import { resumeAiTaskQueue } from '@/services/ai/task-runner'
 
-const state = vi.hoisted(() => ({ records: [] }))
+const state = vi.hoisted(() => ({ records: [], discard: vi.fn(), flush: vi.fn() }))
+vi.mock('@/features/local-collection/availability', () => ({
+  isLocalCollectionEnabled: () => true
+}))
+vi.mock('@/features/local-collection/receipts', () => ({
+  queueCollectorDiscards: (...args) => state.discard(...args),
+  hasPendingCollectorDiscards: () => false,
+  flushCollectorReceipts: (...args) => state.flush(...args)
+}))
 vi.mock('@/services/ai/task-storage', () => ({
   listAiTaskRecords: async () => state.records,
   putAiTaskRecord: async record => {
@@ -28,6 +36,8 @@ beforeEach(async () => {
   localStorage.clear()
   sessionStorage.clear()
   state.records = []
+  state.discard.mockReset().mockReturnValue(1)
+  state.flush.mockReset().mockResolvedValue({ pending: 0, errors: [] })
   vi.spyOn(hashWorker, 'computeHash').mockResolvedValue('image-hash')
   vi.spyOn(previewManager, 'createPreview').mockReturnValue('blob:preview')
   analyzeImage.mockResolvedValue({ secondary: '风景', third: '山川', description: 'AI 结果' })
@@ -37,6 +47,20 @@ beforeEach(async () => {
 afterEach(() => vi.restoreAllMocks())
 
 describe('图片 AI 入列与上传门槛', () => {
+  it('本地批次移除图片先持久化舍弃结果，存储失败时保留图片', async () => {
+    const store = useUploadStore()
+    const file = { id: 'local', status: 'pending', localSource: { batchId: 'batch' } }
+    store.files = [file]
+    state.discard.mockImplementationOnce(() => {
+      throw new Error('空间不足')
+    })
+    await store.removeFile(file.id)
+    expect(store.files).toHaveLength(1)
+    await store.removeFile(file.id)
+    expect(state.discard).toHaveBeenLastCalledWith([file])
+    expect(store.files).toHaveLength(0)
+    expect(state.flush).toHaveBeenCalledTimes(1)
+  })
   it('未配置时持久入列，保存Key和所选远程模型后恢复同一任务', async () => {
     const store = useUploadStore()
     await store.addFiles([new globalThis.File(['image'], 'wallpaper.png', { type: 'image/png' })])

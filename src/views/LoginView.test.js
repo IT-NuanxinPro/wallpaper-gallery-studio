@@ -56,6 +56,7 @@ beforeEach(() => {
     configRevision: 0,
     validateConfigInput: vi.fn(() => null),
     validateConfig: vi.fn().mockResolvedValue(true),
+    resolveConnections: vi.fn(async value => value),
     setConfig: vi.fn(value => {
       state.config.config = value
       state.config.isConfigured = true

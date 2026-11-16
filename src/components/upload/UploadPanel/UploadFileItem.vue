@@ -74,6 +74,7 @@
       <button
         v-if="file.status === 'pending' || file.status === 'error'"
         class="upload-file-item__remove"
+        :title="file.localSource ? '删除此图片及本地源文件' : '移出上传列表'"
         @click.stop="$emit('remove', file.id)"
       >
         ×

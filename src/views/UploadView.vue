@@ -39,6 +39,7 @@
         </div>
       </div>
 
+      <component :is="LocalCollectionStatus" v-if="LocalCollectionStatus" @series="selectSeries" />
       <div class="upload-view__content" data-scroll-region>
         <CategorySidebar
           :key="treeKey"
@@ -214,11 +215,26 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
+import {
+  ref,
+  reactive,
+  computed,
+  watch,
+  onMounted,
+  onUnmounted,
+  nextTick,
+  defineAsyncComponent
+} from 'vue'
 import { ElMessage } from 'element-plus'
 import { onBeforeRouteLeave } from 'vue-router'
 import { gsap } from 'gsap'
 import MainLayout from '@/components/MainLayout.vue'
+import { isLocalCollectionEnabled } from '@/features/local-collection/availability'
+const LocalCollectionStatus =
+  import.meta.env.DEV && isLocalCollectionEnabled()
+    ? defineAsyncComponent(() => import('@/features/local-collection/LocalCollectionStatus.vue'))
+    : null
+
 import CategorySidebar from '@/components/upload/CategorySidebar.vue'
 import UploadPanel from '@/components/upload/UploadPanel.vue'
 import ImagePreview from '@/components/upload/ImagePreview.vue'

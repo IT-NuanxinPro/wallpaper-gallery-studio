@@ -1,4 +1,6 @@
 import { defineStore, storeToRefs } from 'pinia'
+import { ref } from 'vue'
+import { ElMessage } from 'element-plus'
 import { githubService } from '@/services/github'
 import { resolveAppConfig } from '@/app/config/app-config'
 import { createUploadFileLifecycleService } from '@/features/upload-workspace/application/create-upload-file-lifecycle-service'
@@ -16,6 +18,7 @@ import { hashWorker } from '@/utils/hashWorker'
 import { sha256Hex } from '@/utils/file-hash'
 import { imageCompressor } from '@/utils/imageCompressor'
 import { getModelByKey } from '@/services/ai/classifier'
+import { isLocalCollectionEnabled } from '@/features/local-collection/availability'
 
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp']
 const ALLOWED_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp']
@@ -24,6 +27,8 @@ const UPLOAD_DELAY = 500
 const BATCH_WARNING_THRESHOLD = 50
 
 export const useUploadStore = defineStore('upload', () => {
+  const localReceiptStatus = ref('')
+  const localReceiptError = ref('')
   const historyStore = useHistoryStore()
   const workspaceStore = useUploadWorkspaceStore()
   const sessionStore = useUploadSessionStore()
@@ -98,13 +103,14 @@ export const useUploadStore = defineStore('upload', () => {
     return { valid: true }
   }
 
-  async function addFiles(newFiles) {
+  async function addFiles(newFiles, { assertCurrent = () => {} } = {}) {
     const validFiles = await uploadFileLifecycleService.prepareFiles(newFiles, {
       target: {
         series: series.value
       },
       validateFile,
-      generateId
+      generateId,
+      assertCurrent
     })
 
     sessionStore.appendFiles(validFiles)
@@ -166,7 +172,34 @@ export const useUploadStore = defineStore('upload', () => {
     }
   }
 
-  function removeFile(id) {
+  async function recordLocalDiscards(removed) {
+    if (
+      !import.meta.env.DEV ||
+      !isLocalCollectionEnabled() ||
+      !removed.some(file => file.localSource)
+    )
+      return true
+    try {
+      const { queueCollectorDiscards, flushCollectorReceipts, hasPendingCollectorDiscards } =
+        await import('@/features/local-collection/receipts')
+      if (!queueCollectorDiscards(removed)) return true
+      localReceiptStatus.value = 'pending'
+      const result = await flushCollectorReceipts({ token: githubService.token })
+      localReceiptStatus.value = result.pending ? 'pending' : 'verified'
+      localReceiptError.value = result.errors.join('；')
+      if (result.errors.length) throw new Error(result.errors[0])
+      if (hasPendingCollectorDiscards(removed))
+        throw new Error('删除请求尚未送达，请确认登录及本地采集目录后重试')
+      return true
+    } catch (error) {
+      ElMessage.error('本地图片删除未完成，请重试：' + error.message)
+      return false
+    }
+  }
+
+  async function removeFile(id) {
+    const file = files.value.find(item => item.id === id)
+    if (file && !(await recordLocalDiscards([file]))) return
     const index = files.value.findIndex(f => f.id === id)
     if (index > -1) {
       previewManager.revokePreview(id)
@@ -175,13 +208,15 @@ export const useUploadStore = defineStore('upload', () => {
     }
   }
 
-  function removeFiles(ids) {
+  async function removeFiles(ids) {
+    if (!(await recordLocalDiscards(files.value.filter(file => ids.includes(file.id))))) return
     previewManager.revokePreviews(ids)
 
     sessionStore.removeFiles(ids)
   }
 
-  function clearFiles() {
+  async function clearFiles() {
+    if (!(await recordLocalDiscards([...files.value]))) return
     previewManager.revokeAll()
 
     sessionStore.clearFiles()
@@ -351,12 +386,37 @@ export const useUploadStore = defineStore('upload', () => {
   }
 
   async function generatePendingMetadata(uploadedFiles, writeSession) {
-    return uploadSessionService.generatePendingMetadata(uploadedFiles, {
+    const result = await uploadSessionService.generatePendingMetadata(uploadedFiles, {
       targetPath: targetPath.value,
       series: series.value,
       getExtension,
       writeSession
     })
+    if (
+      import.meta.env.DEV &&
+      isLocalCollectionEnabled() &&
+      result?.success &&
+      uploadedFiles.some(file => file.localSource)
+    ) {
+      localReceiptStatus.value = 'pending'
+      localReceiptError.value = ''
+      try {
+        const { queueCollectorReceipts, flushCollectorReceipts } =
+          await import('@/features/local-collection/receipts')
+        queueCollectorReceipts(uploadedFiles, result)
+        void flushCollectorReceipts({ token: githubService.token })
+          .then(synced => {
+            localReceiptStatus.value = synced.pending ? 'pending' : 'verified'
+            localReceiptError.value = synced.errors.join('；')
+          })
+          .catch(error => {
+            localReceiptError.value = error.message
+          })
+      } catch (error) {
+        localReceiptError.value = error.message
+      }
+    }
+    return result
   }
 
   function setTarget(newSeries, l1, l2 = '') {
@@ -411,6 +471,8 @@ export const useUploadStore = defineStore('upload', () => {
   }
 
   return {
+    localReceiptStatus,
+    localReceiptError,
     files,
     uploading,
     currentFileIndex,

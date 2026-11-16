@@ -18,9 +18,9 @@ function restoreFileFromTask(task) {
   if (!task.blob) return null
 
   const restoredFile =
-    task.blob instanceof File
+    task.blob instanceof globalThis.File
       ? task.blob
-      : new File([task.blob], task.fileName, {
+      : new globalThis.File([task.blob], task.fileName, {
           type: task.fileType || task.blob.type || 'image/jpeg',
           lastModified: task.fileLastModified || Date.now()
         })
@@ -30,11 +30,12 @@ function restoreFileFromTask(task) {
   return {
     id: task.fileId,
     file: restoredFile,
-    fileHash: null,
+    fileHash: task.fileHash || null,
+    ...(task.localSource ? { localSource: { ...task.localSource } } : {}),
     name: task.fileName,
     size: restoredFile.size,
-    originalSize: restoredFile.size,
-    compressed: false,
+    originalSize: task.originalSize ?? restoredFile.size,
+    compressed: Boolean(task.compressed),
     preview: previewManager.createPreview(task.fileId, restoredFile),
     status: 'pending',
     progress: 0,

@@ -46,6 +46,7 @@
               <div v-if="editingConfig" key="advanced">
                 <RepositoryConfigForm
                   v-model="configDraft"
+                  :token="authStore.token"
                   :busy="busy"
                   submit-label="验证仓库并保存"
                   @submit="useManualRepository"
@@ -372,6 +373,7 @@ async function verifyAndUse(config, archived = false) {
     if (!['admin', 'write', 'read'].includes(level)) throw new Error('REPOSITORY_ACCESS_DENIED')
     if (archived) level = 'read'
     if (!(await configStore.validateConfig(config))) throw new Error('BRANCH_UNAVAILABLE')
+    config = await configStore.resolveConnections(config, token)
     if (token !== authStore.token || revision !== configStore.configRevision)
       throw new Error('CONFIG_CHANGED')
     configStore.setConfig(config)

@@ -4,12 +4,17 @@ import { fileURLToPath, URL } from 'node:url'
 import AutoImport from 'unplugin-auto-import/vite'
 import Components from 'unplugin-vue-components/vite'
 import { ElementPlusResolver } from 'unplugin-vue-components/resolvers'
+import { localCollectorPlugin } from './server/local-collector/plugin.mjs'
 
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, fileURLToPath(new URL('.', import.meta.url)), '')
   return {
     plugins: [
+      localCollectorPlugin({
+        project: env.WALLPAPER_COLLECTOR_DIR,
+        python: env.WALLPAPER_COLLECTOR_PYTHON
+      }),
       vue(),
       AutoImport({
         imports: ['vue', 'vue-router', 'pinia', '@vueuse/core'],

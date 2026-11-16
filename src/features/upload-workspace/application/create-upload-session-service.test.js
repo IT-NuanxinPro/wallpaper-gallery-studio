@@ -31,6 +31,33 @@ function makeService() {
 }
 
 describe('图片上传必须携带真实AI结果', () => {
+  it('本地批次来源随元数据提交，返回确定提交SHA供独立核验', async () => {
+    const { service, repository } = makeService()
+    repository.createFile.mockResolvedValue({ commit: { sha: 'a'.repeat(40) } })
+    const localSource = {
+      collectorId: 'local',
+      batchId: 'batch',
+      sourceItemId: 'one',
+      sha256: 'b'.repeat(64)
+    }
+    const result = await service.generatePendingMetadata(
+      [
+        {
+          name: 'renamed.jpg',
+          targetSeries: 'desktop',
+          uploadedPath: 'wallpaper/desktop/风景/renamed.jpg',
+          uploadedRepository: { owner: 'owner', repo: 'gallery', branch: 'main' },
+          aiMetadata: { description: '已审核' },
+          localSource
+        }
+      ],
+      { getExtension: () => 'jpg' }
+    )
+    expect(result.commitSha).toBe('a'.repeat(40))
+    expect(JSON.parse(repository.createFile.mock.calls[0][1]).images[0].localSource).toEqual(
+      localSource
+    )
+  })
   it('只设置目录不能直接调用上传服务绕过AI分析', async () => {
     const { service, repository } = makeService()
     const file = {

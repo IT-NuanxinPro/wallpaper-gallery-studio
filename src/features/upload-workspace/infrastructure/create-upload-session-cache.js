@@ -179,9 +179,15 @@ function createScopedSessionCache({
     getPendingUploadedHash(hash) {
       return loadPendingHashes()[hash] || null
     },
-    addUploadedHash(hash, filename, path) {
+    addUploadedHash(hash, filename, path, localSource) {
       const hashes = loadUploadedHashes()
-      hashes[hash] = { filename, path, time: now(), metadataCommitted: true }
+      hashes[hash] = {
+        filename,
+        path,
+        time: now(),
+        metadataCommitted: true,
+        ...(localSource ? { localSource } : {})
+      }
       uploadedDirty = true
       schedule(
         flushUploadedHashes,
@@ -214,7 +220,12 @@ function createScopedSessionCache({
 
       uploadedFiles.forEach(file => {
         if (file.fileHash && pending[file.fileHash]) {
-          this.addUploadedHash(file.fileHash, file.name, pending[file.fileHash].path)
+          this.addUploadedHash(
+            file.fileHash,
+            file.name,
+            pending[file.fileHash].path,
+            file.localSource
+          )
           delete pending[file.fileHash]
           changed = true
         }

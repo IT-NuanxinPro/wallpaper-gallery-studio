@@ -2,7 +2,6 @@
   <section class="ai-task-center">
     <div class="ai-task-center__header">
       <div>
-        <div class="ai-task-center__eyebrow">AI Task Center</div>
         <div class="ai-task-center__title-row">
           <strong>任务中心</strong>
           <span v-if="taskStore.pendingCount > 0" class="ai-task-center__badge">
@@ -19,55 +18,74 @@
           失败 {{ taskStore.failedTasks.length }}
         </span>
       </div>
+      <button
+        class="ai-task-center__toggle"
+        type="button"
+        :aria-expanded="expanded"
+        :aria-controls="detailsId"
+        @click="expanded = !expanded"
+      >
+        {{ expanded ? '收起任务' : '展开任务' }}
+        <el-icon :class="{ 'is-expanded': expanded }"><ArrowDown /></el-icon>
+      </button>
     </div>
 
     <div v-if="taskStore.persistenceWarning" class="ai-task-center__warning">
       {{ taskStore.persistenceWarning }}
     </div>
 
-    <div v-if="visibleTasks.length > 0" class="ai-task-center__list">
-      <article v-for="(task, index) in visibleTasks" :key="task.id" class="ai-task-center__item">
-        <div class="ai-task-center__index">{{ index + 1 }}</div>
-        <div class="ai-task-center__body">
-          <div class="ai-task-center__name" :title="task.fileName">{{ task.fileName }}</div>
-          <div class="ai-task-center__meta">
-            <span>{{ task.modelKey || '未选择模型' }}</span>
-            <span>{{ getStatusLabel(task.status) }}</span>
-            <span v-if="task.attempts > 0">第 {{ task.attempts }} 次</span>
-            <span v-if="task.status === 'queued' && queuePosition(task) > 0">
-              队列第 {{ queuePosition(task) }} 位
-            </span>
-          </div>
-          <div v-if="task.error" class="ai-task-center__error" :title="task.error">
-            {{ task.error }}
-          </div>
+    <el-collapse-transition>
+      <div v-show="expanded" :id="detailsId">
+        <div v-if="visibleTasks.length > 0" class="ai-task-center__list" data-scroll-region>
+          <article
+            v-for="(task, index) in visibleTasks"
+            :key="task.id"
+            class="ai-task-center__item"
+          >
+            <div class="ai-task-center__index">{{ index + 1 }}</div>
+            <div class="ai-task-center__body">
+              <div class="ai-task-center__name" :title="task.fileName">{{ task.fileName }}</div>
+              <div class="ai-task-center__meta">
+                <span>{{ task.modelKey || '未选择模型' }}</span>
+                <span>{{ getStatusLabel(task.status) }}</span>
+                <span v-if="task.attempts > 0">第 {{ task.attempts }} 次</span>
+                <span v-if="task.status === 'queued' && queuePosition(task) > 0">
+                  队列第 {{ queuePosition(task) }} 位
+                </span>
+              </div>
+              <div v-if="task.error" class="ai-task-center__error" :title="task.error">
+                {{ task.error }}
+              </div>
+            </div>
+
+            <div class="ai-task-center__status" :class="`ai-task-center__status--${task.status}`">
+              <span v-if="task.status === 'analyzing'" class="ai-task-center__spinner"></span>
+              <span v-else-if="task.status === 'retrying'">⏱</span>
+              <span v-else-if="task.status === 'completed'">✓</span>
+              <span v-else-if="task.status === 'failed'">!</span>
+              <span v-else>…</span>
+            </div>
+
+            <button
+              v-if="task.status === 'failed'"
+              class="ai-task-center__retry"
+              :disabled="retryingTaskIds.includes(task.id)"
+              @click="handleRetry(task.id)"
+            >
+              重试
+            </button>
+          </article>
         </div>
 
-        <div class="ai-task-center__status" :class="`ai-task-center__status--${task.status}`">
-          <span v-if="task.status === 'analyzing'" class="ai-task-center__spinner"></span>
-          <span v-else-if="task.status === 'retrying'">⏱</span>
-          <span v-else-if="task.status === 'completed'">✓</span>
-          <span v-else-if="task.status === 'failed'">!</span>
-          <span v-else>…</span>
-        </div>
-
-        <button
-          v-if="task.status === 'failed'"
-          class="ai-task-center__retry"
-          :disabled="retryingTaskIds.includes(task.id)"
-          @click="handleRetry(task.id)"
-        >
-          重试
-        </button>
-      </article>
-    </div>
-
-    <div v-else class="ai-task-center__empty">暂无 AI 分析任务</div>
+        <div v-else class="ai-task-center__empty">暂无 AI 分析任务</div>
+      </div>
+    </el-collapse-transition>
   </section>
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, useId } from 'vue'
+import { ArrowDown } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { useAiTasksStore } from '@/stores/ai-tasks'
 import { useAiConfigurationGuard } from '@/composables/useAiConfigurationGuard'
@@ -76,6 +94,8 @@ import { resumeAiTaskQueue, retryAiTask } from '@/services/ai/task-runner'
 const taskStore = useAiTasksStore()
 const { requireAiConfiguration } = useAiConfigurationGuard()
 const retryingTaskIds = ref([])
+const expanded = ref(false)
+const detailsId = useId()
 
 const visibleTasks = computed(() =>
   [...taskStore.tasks]
@@ -139,14 +159,30 @@ onMounted(async () => {
     align-items: center;
     justify-content: space-between;
     gap: $spacing-3;
-    margin-bottom: $spacing-2;
   }
 
-  &__eyebrow {
-    color: $gray-500;
-    font-size: 10px;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
+  &__toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex: none;
+    border: 0;
+    border-radius: 8px;
+    padding: 6px 8px;
+    background: rgba(255, 255, 255, 0.05);
+    color: $gray-200;
+    font-size: 11px;
+    cursor: pointer;
+    .el-icon {
+      transition: transform 180ms ease;
+    }
+    .is-expanded {
+      transform: rotate(180deg);
+    }
+    &:focus-visible {
+      outline: 2px solid $primary-start;
+      outline-offset: 2px;
+    }
   }
 
   &__title-row {
@@ -165,6 +201,7 @@ onMounted(async () => {
   }
 
   &__stats {
+    margin-left: auto;
     display: flex;
     flex-wrap: wrap;
     justify-content: flex-end;
@@ -178,7 +215,7 @@ onMounted(async () => {
   }
 
   &__warning {
-    margin-bottom: $spacing-2;
+    margin-top: $spacing-2;
     padding: $spacing-2;
     border-radius: $radius-md;
     background: rgba($warning, 0.12);
@@ -190,7 +227,10 @@ onMounted(async () => {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
     gap: $spacing-2;
-    max-height: 154px;
+    margin-top: 10px;
+    max-height: min(154px, 20vh);
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
     overflow-y: auto;
   }
 
@@ -308,6 +348,31 @@ onMounted(async () => {
 @keyframes task-spin {
   to {
     transform: rotate(360deg);
+  }
+}
+</style>
+
+<style scoped>
+@media (max-width: 520px) {
+  .ai-task-center__header {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .ai-task-center__stats {
+    order: 3;
+    width: 100%;
+    justify-content: flex-start;
+  }
+  .ai-task-center__toggle {
+    margin-left: auto;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ai-task-center__toggle .el-icon {
+    transition: none;
+  }
+  .ai-task-center__spinner {
+    animation: none;
   }
 }
 </style>

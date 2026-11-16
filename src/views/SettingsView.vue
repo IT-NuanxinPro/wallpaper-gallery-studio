@@ -9,13 +9,14 @@
         <div class="settings-view__container">
           <CredentialsConfig class="settings-view__ai-config" />
 
-          <GlassCard :hoverable="false" class="settings-view__card">
+          <GlassCard id="repository-config" :hoverable="false" class="settings-view__card">
             <div class="settings-view__header">
               <h2 class="settings-view__title">仓库连接</h2>
             </div>
 
             <RepositoryConfigForm
               v-model="formData"
+              :token="authStore.token"
               :busy="validating"
               submit-label="验证并保存"
               @submit="handleSave"

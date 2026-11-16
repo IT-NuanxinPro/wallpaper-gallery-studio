@@ -1,9 +1,20 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useConfigStore } from '@/stores/config'
+import { isLocalCollectionEnabled } from '@/features/local-collection/availability'
 
 // 路由配置
 const routes = [
+  ...(import.meta.env.DEV && isLocalCollectionEnabled()
+    ? [
+        {
+          path: '/local-collection',
+          name: 'LocalCollection',
+          component: () => import('@/features/local-collection/LocalCollectionView.vue'),
+          meta: { requiresAuth: true }
+        }
+      ]
+    : []),
   {
     path: '/',
     redirect: '/login'

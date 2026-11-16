@@ -115,7 +115,13 @@ function handleAddFiles(files) {
 
 async function handleBatchDelete(ids) {
   try {
-    await ElMessageBox.confirm(`确定要删除选中的 ${ids.length} 个文件吗？`, '确认删除', {
+    const localCount = props.files.filter(
+      file => ids.includes(file.id) && file.localSource && !file.uploadedPath
+    ).length
+    const detail = localCount
+      ? `其中 ${localCount} 张来自本地采集，将同时删除本地原图和批次链接。`
+      : ''
+    await ElMessageBox.confirm(`确定要删除选中的 ${ids.length} 个文件吗？${detail}`, '确认删除', {
       confirmButtonText: '确定删除',
       cancelButtonText: '取消',
       type: 'warning'
@@ -129,11 +135,19 @@ async function handleBatchDelete(ids) {
 
 async function handleClear() {
   try {
-    await ElMessageBox.confirm(`确定要删除全部 ${props.files.length} 个文件吗？`, '确认删除', {
-      confirmButtonText: '确定删除',
-      cancelButtonText: '取消',
-      type: 'warning'
-    })
+    const localCount = props.files.filter(file => file.localSource && !file.uploadedPath).length
+    const detail = localCount
+      ? `其中 ${localCount} 张来自本地采集，将同时删除本地原图和批次链接。`
+      : ''
+    await ElMessageBox.confirm(
+      `确定要删除全部 ${props.files.length} 个文件吗？${detail}`,
+      '确认删除',
+      {
+        confirmButtonText: '确定删除',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    )
     emit('clear')
     fileGridRef.value?.clearSelection()
   } catch {
@@ -150,13 +164,13 @@ async function handleClear() {
   flex-direction: column;
   height: 100%;
   overflow: hidden;
-  min-height: 540px;
+  min-height: 0;
 
   &__files {
     display: flex;
     position: relative;
     flex: 1;
-    min-height: 0;
+    min-height: 200px;
     overflow: hidden;
   }
   &__files > :deep(.studio-panel-leave-active) {
@@ -172,9 +186,10 @@ async function handleClear() {
     border: 1px solid var(--studio-border);
     border-radius: 16px;
     padding: $spacing-4;
-    overflow: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
     min-height: 0;
-    height: 100%;
   }
 }
 </style>

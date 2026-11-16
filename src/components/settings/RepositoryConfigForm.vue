@@ -30,38 +30,13 @@
       </el-form-item>
     </div>
     <el-collapse v-model="expanded" class="repository-config__advanced">
-      <el-collapse-item name="workflow" title="工作流与网站 · 选填">
-        <p class="repository-config__hint">按需连接工作流仓库和网站仓库。未配置的功能保持关闭。</p>
-        <div class="repository-config__pair">
-          <el-form-item label="工作流仓库所有者"
-            ><el-input
-              :model-value="modelValue.workflowOwner || ''"
-              aria-label="工作流仓库所有者"
-              placeholder="用户名或组织名"
-              @update:model-value="update('workflowOwner', $event)"
-          /></el-form-item>
-          <el-form-item label="工作流仓库名称"
-            ><el-input
-              :model-value="modelValue.workflowRepo || ''"
-              aria-label="工作流仓库名称"
-              placeholder="工作流仓库"
-              @update:model-value="update('workflowRepo', $event)"
-          /></el-form-item>
-          <el-form-item label="网站仓库所有者"
-            ><el-input
-              :model-value="modelValue.frontendOwner || ''"
-              aria-label="网站仓库所有者"
-              placeholder="用户名或组织名"
-              @update:model-value="update('frontendOwner', $event)"
-          /></el-form-item>
-          <el-form-item label="网站仓库名称"
-            ><el-input
-              :model-value="modelValue.frontendRepo || ''"
-              aria-label="网站仓库名称"
-              placeholder="网站仓库"
-              @update:model-value="update('frontendRepo', $event)"
-          /></el-form-item>
-        </div>
+      <el-collapse-item name="workflow" title="工作流与网站 · 自动关联">
+        <RepositoryConnections
+          :model-value="modelValue"
+          :token="token"
+          :busy="busy"
+          @update:model-value="$emit('update:modelValue', $event)"
+        />
         <el-form-item label="视频服务地址"
           ><el-input
             :model-value="modelValue.videoApiUrl || ''"
@@ -111,10 +86,12 @@
 <script setup>
 import { ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
+import RepositoryConnections from './RepositoryConnections.vue'
 
 const props = defineProps({
   modelValue: { type: Object, required: true },
   busy: Boolean,
+  token: { type: String, default: '' },
   submitLabel: { type: String, default: '保存配置并继续' },
   initialSection: { type: String, default: '' }
 })
@@ -156,7 +133,7 @@ function update(field, value) {
     connections.forEach(key => {
       next[key] = ''
     })
-    ElMessage.info('已清除原仓库的工作流、网站和视频服务连接，请按新仓库重新配置。')
+    ElMessage.info('已清除原仓库的工作流、网站和视频服务连接，将按新仓库重新识别关联。')
   }
   emit('update:modelValue', next)
 }

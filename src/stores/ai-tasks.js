@@ -29,6 +29,10 @@ const TASK_FIELDS = [
   'fileType',
   'fileLastModified',
   'blob',
+  'localSource',
+  'fileHash',
+  'originalSize',
+  'compressed',
   'series',
   'provider',
   'modelKey',
@@ -49,6 +53,13 @@ function taskRecord(record) {
   const task = Object.fromEntries(
     TASK_FIELDS.filter(key => key in source).map(key => [key, toRaw(source[key])])
   )
+  if (task.localSource) {
+    const source = toRaw(task.localSource)
+    const fields = ['collectorId', 'batchId', 'sourceItemId', 'sha256']
+    if (fields.every(key => typeof source[key] === 'string' && source[key]))
+      task.localSource = Object.fromEntries(fields.map(key => [key, source[key]]))
+    else delete task.localSource
+  }
   return task
 }
 
@@ -120,15 +131,27 @@ export const useAiTasksStore = defineStore('ai-tasks', () => {
     return tasks.value
   }
 
-  async function createTask({ fileId, file, series }) {
+  async function createTask({
+    fileId,
+    file,
+    series,
+    localSource,
+    fileHash,
+    originalSize,
+    compressed
+  }) {
     const now = Date.now()
-    const task = {
+    const task = taskRecord({
       id: generateTaskId(),
       fileId,
       fileName: file.name,
       fileType: file.type,
       fileLastModified: file.lastModified || now,
       blob: file,
+      ...(localSource ? { localSource } : {}),
+      ...(fileHash ? { fileHash } : {}),
+      originalSize: originalSize ?? file.size,
+      compressed: Boolean(compressed),
       series,
       provider: AI_PROVIDER,
       modelKey: '',
@@ -142,7 +165,7 @@ export const useAiTasksStore = defineStore('ai-tasks', () => {
       updatedAt: now,
       startedAt: null,
       finishedAt: null
-    }
+    })
 
     tasks.value.push(task)
     sortTasks()
