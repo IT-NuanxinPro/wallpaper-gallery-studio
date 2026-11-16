@@ -162,7 +162,7 @@ export class OpenAICompatibleProvider extends BaseAIProvider {
     }
 
     return {
-      secondary: parsed.secondary || '通用',
+      secondary: typeof parsed.secondary === 'string' ? parsed.secondary.trim() : '',
       third: cleanThird,
       keywords: parsed.keywords || [],
       filenameSuggestions,

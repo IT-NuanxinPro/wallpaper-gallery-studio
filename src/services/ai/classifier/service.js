@@ -4,7 +4,8 @@
  */
 
 import { AIProviderFactory, compressImage, IMAGE_CONFIG } from '../core'
-import { buildPromptWithLatestCategories, validatePrompt } from './prompts'
+import { buildPrompt, buildPromptWithLatestCategories, validatePrompt } from './prompts'
+import { getUploadCategoryTree } from '@/services/upload/category-directory'
 import { normalizeModelId, AI_PROVIDER } from '../model'
 /**
  * 分析图片并生成分类和文件名建议
@@ -28,12 +29,13 @@ export async function analyzeImage({
     throw new Error('No image provided')
   }
 
-  const prompt = await buildPromptWithLatestCategories(
-    promptTemplate,
-    series,
-    customPrompt,
-    AI_PROVIDER
-  )
+  const categories =
+    promptTemplate === 'default' ? await getUploadCategoryTree({ strict: true }) : null
+  if (categories && !categories[series]?.secondary?.length)
+    throw new Error('当前系列没有可用分类，请先创建分类目录')
+  const prompt = categories
+    ? buildPrompt(promptTemplate, series, customPrompt, AI_PROVIDER, categories)
+    : await buildPromptWithLatestCategories(promptTemplate, series, customPrompt, AI_PROVIDER)
   if (!validatePrompt(prompt)) {
     throw new Error('Invalid prompt')
   }
@@ -48,6 +50,19 @@ export async function analyzeImage({
       model
     }
   })
+
+  if (categories) {
+    const secondary = typeof analysis.secondary === 'string' ? analysis.secondary.trim() : ''
+    const third = typeof analysis.third === 'string' ? analysis.third.trim() : ''
+    const allowed = categories[series]
+    if (!allowed.secondary.includes(secondary))
+      throw new Error('AI 未返回有效的当前分类，请重试分析或手动编辑，不会自动归入通用')
+    const children = allowed.third?.[secondary] || []
+    if ((children.length && !children.includes(third)) || (!children.length && third))
+      throw new Error('AI 返回的子分类不属于当前目录，请重试分析或手动编辑')
+    analysis.secondary = secondary
+    analysis.third = third
+  }
 
   return {
     secondary: analysis.secondary,

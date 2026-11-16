@@ -27,13 +27,14 @@ function buildTargetPath(series, metadata) {
 }
 
 function buildAiMetadata(series, result, model) {
+  if (!result.secondary?.trim()) throw new Error('AI 未返回分类，请重试分析或手动编辑')
   return {
     model,
     series,
-    category: result.secondary || '通用',
+    category: result.secondary,
     subcategory: result.third || '',
     primary: series,
-    secondary: result.secondary || '通用',
+    secondary: result.secondary,
     third: result.third || '',
     keywords: result.keywords || [],
     description: result.description || '',

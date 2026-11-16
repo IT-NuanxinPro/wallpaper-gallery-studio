@@ -14,6 +14,35 @@ beforeEach(() => {
 })
 
 describe('上传分析的实际 Provider 请求', () => {
+  it('目录读取失败不会调用模型，缺失分类和非法父子关系不会变成通用', async () => {
+    const analyze = vi.fn()
+    vi.spyOn(AIProviderFactory, 'create').mockReturnValue({ analyze })
+    const input = {
+      imageBase64: 'test',
+      series: 'desktop',
+      credentials: { apiKey: 'test', model: 'vision' }
+    }
+    getUploadCategoryTree.mockRejectedValueOnce(new Error('最新分类读取失败'))
+    await expect(analyzeImage(input)).rejects.toThrow('最新分类')
+    expect(analyze).not.toHaveBeenCalled()
+    for (const result of [
+      { secondary: '' },
+      { secondary: '通用' },
+      { secondary: '科技', third: '不存在' }
+    ]) {
+      analyze.mockResolvedValueOnce(result)
+      await expect(analyzeImage(input)).rejects.toThrow(/分类/)
+    }
+    expect(getUploadCategoryTree).toHaveBeenLastCalledWith({ strict: true })
+  })
+
+  it('模型省略secondary时不静默补通用', () => {
+    expect(
+      new OpenAICompatibleProvider().parseResponse({
+        choices: [{ message: { content: '{"description":"画面"}' } }]
+      }).secondary
+    ).toBe('')
+  })
   it('缺少模型时不调用分类Provider', async () => {
     const analyze = vi.fn()
     vi.spyOn(AIProviderFactory, 'create').mockReturnValue({ analyze })

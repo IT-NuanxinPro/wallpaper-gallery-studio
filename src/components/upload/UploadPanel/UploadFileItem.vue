@@ -508,8 +508,10 @@ const aiKeywords = computed(() => {
       border-top: 2px solid $warning;
     }
 
-    &--ai {
-      background: rgba($primary-start, 0.6);
+    &--ai,
+    &--ai:hover {
+      background: linear-gradient(145deg, rgba(31, 41, 55, 0.98), rgba(17, 24, 39, 0.98));
+      color: $white;
     }
 
     &--waiting {

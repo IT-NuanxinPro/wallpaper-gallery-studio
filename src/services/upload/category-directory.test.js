@@ -29,6 +29,18 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks())
 
 describe('远程分类同步', () => {
+  it('严格分析读取失败不会沿用界面兜底缓存，强制读取包含新增目录', async () => {
+    githubService.getTree.mockRejectedValue(new Error('offline'))
+    githubService.getContents.mockRejectedValue(new Error('offline'))
+    await getUploadCategoryTree()
+    await expect(getUploadCategoryTree({ strict: true })).rejects.toThrow('最新分类')
+    githubService.getTree.mockResolvedValue(gitTree('desktop/动漫/仙逆', 'desktop/动漫/剑来'))
+    githubService.getContents.mockRejectedValue(notFound)
+    const tree = await getUploadCategoryTree({ strict: true })
+    await getUploadCategoryTree({ strict: true })
+    expect(githubService.getTree).toHaveBeenCalledTimes(3)
+    expect(tree.desktop.third['动漫']).toEqual(expect.arrayContaining(['仙逆', '剑来']))
+  })
   it('合并 UTF-8 清单和实际新目录，树和提示词包含相同候选', async () => {
     const manifest = {
       categories: {

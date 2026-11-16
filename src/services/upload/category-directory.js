@@ -8,6 +8,7 @@ import { useConfigStore } from '@/stores/config'
 
 const SERIES_KEYS = ['desktop', 'mobile', 'avatar']
 const CACHE_TTL = 5 * 60 * 1000
+const STRICT_CACHE_TTL = 60 * 1000
 
 const categoryDirectoryCache = new Map()
 
@@ -121,11 +122,12 @@ async function fetchDirectoryTree({ owner, repo, branch, wallpaperRoot }, force)
   return result
 }
 
-async function fetchUploadCategoryTree(config, force = false) {
+async function fetchUploadCategoryTree(config, force = false, strict = false) {
   const appConfig = resolveAppConfig({ repository: config })
   const { owner, repo, branch } = appConfig.repository
 
   if (!owner || !repo || !branch) {
+    if (strict) throw new Error('请先配置壁纸仓库，再读取最新分类')
     return { tree: getFallbackUploadCategoryTree(), cacheable: false }
   }
 
@@ -147,6 +149,7 @@ async function fetchUploadCategoryTree(config, force = false) {
     console.warn('[CategoryDirectory] Failed to load manifest:', manifestResult.reason)
   }
   if (directoryResult.status === 'rejected') {
+    if (strict) throw new Error('无法读取最新分类目录，请检查网络或仓库权限后重试')
     console.warn('[CategoryDirectory] Using fallback categories:', directoryResult.reason)
     return { tree: manifestTree || getFallbackUploadCategoryTree(), cacheable: false }
   }
@@ -156,11 +159,15 @@ async function fetchUploadCategoryTree(config, force = false) {
   }
 }
 
-export async function getUploadCategoryTree({ force = false } = {}) {
+export async function getUploadCategoryTree({ force = false, strict = false } = {}) {
   const config = { ...useConfigStore().config }
-  const key = JSON.stringify(resolveAppConfig({ repository: config }).repository)
+  const key = JSON.stringify([resolveAppConfig({ repository: config }).repository, strict])
   const cached = categoryDirectoryCache.get(key)
-  if (!force && cached?.tree && Date.now() - cached.timestamp < CACHE_TTL) {
+  if (
+    !force &&
+    cached?.tree &&
+    Date.now() - cached.timestamp < (strict ? STRICT_CACHE_TTL : CACHE_TTL)
+  ) {
     return cloneCategoryTree(cached.tree)
   }
   if (cached?.pending && (!force || cached.force)) {
@@ -169,7 +176,7 @@ export async function getUploadCategoryTree({ force = false } = {}) {
 
   const entry = { force }
   categoryDirectoryCache.set(key, entry)
-  entry.pending = fetchUploadCategoryTree(config, force)
+  entry.pending = fetchUploadCategoryTree(config, force, strict)
     .then(({ tree, cacheable }) => {
       // 清缓存或强制刷新后，旧请求不能覆盖新结果。
       if (categoryDirectoryCache.get(key) === entry) {
