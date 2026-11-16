@@ -1,4 +1,4 @@
-export const UPSTREAM_ORIGIN = 'http://studio-ai-origin.061129.xyz:8052'
+export const UPSTREAM_ORIGIN = 'https://api.061129.xyz'
 
 const routes = new Map([
   ['/v1/models', 'GET'],
@@ -81,6 +81,10 @@ export function createOpenAIRelay({ upstreamFetch = fetch } = {}) {
         if (upstream.status >= 300 && upstream.status < 400) {
           await upstream.body?.cancel()
           return error(502, '上游返回了重定向，请检查接口配置', responseHeaders)
+        }
+        if (/\b(?:text\/html|application\/xhtml\+xml)\b/i.test(upstream.headers.get('Content-Type') || '')) {
+          await upstream.body?.cancel()
+          return error(502, '上游网关返回了网页，请检查代理路由和服务地址', responseHeaders)
         }
         for (const name of allowedResponseHeaders) {
           const value = upstream.headers.get(name)

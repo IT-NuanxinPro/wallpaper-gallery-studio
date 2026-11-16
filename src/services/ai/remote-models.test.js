@@ -8,6 +8,26 @@ afterEach(() => {
 })
 
 describe('远程模型列表', () => {
+  it.each([
+    [401, 'application/json', '认证失败'],
+    [403, 'application/json', '访问被拒绝'],
+    [403, 'text/html', '网页'],
+    [502, 'application/json', '上游']
+  ])('区分HTTP %s的认证、权限与网关错误', async (status, contentType, expected) => {
+    const body = vi.fn()
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status,
+        headers: new globalThis.Headers({ 'Content-Type': contentType }),
+        json: body,
+        text: body
+      })
+    )
+    await expect(fetchRemoteModels(config)).rejects.toThrow(expected)
+    expect(body).not.toHaveBeenCalled()
+  })
   it('普通HTTP网关直接请求models，不再强制HTTPS', async () => {
     const fetch = vi.fn().mockResolvedValue({
       ok: true,

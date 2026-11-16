@@ -37,8 +37,9 @@ test('GET models targets only the fixed origin and forwards the supplied Bearer'
     }
   })
   const response = await relay.fetch(request(), env)
-  assert.equal(received.url, 'http://studio-ai-origin.061129.xyz:8052/v1/models')
+  assert.equal(received.url, 'https://api.061129.xyz/v1/models')
   assert.equal(received.method, 'GET')
+  assert.equal(received.headers.get('Host'), null)
   assert.equal(received.headers.get('Authorization'), `Bearer ${key}`)
   assert.equal(response.status, 200)
   assert.deepEqual(await response.json(), { data: [{ id: 'vision-test' }] })
@@ -67,6 +68,7 @@ test('POST preserves JSON bytes and model while dropping unrelated request heade
         'Content-Type': 'application/json',
         Accept: 'text/event-stream',
         Cookie: 'private=session',
+        Host: 'attacker.example',
         'X-Forwarded-Host': 'attacker.example',
         'X-Target-URL': 'http://attacker.example',
         'X-Custom-Secret': 'do-not-forward'
@@ -75,16 +77,16 @@ test('POST preserves JSON bytes and model while dropping unrelated request heade
     env
   )
   assert.equal(response.status, 200)
-  assert.equal(received.url, 'http://studio-ai-origin.061129.xyz:8052/v1/chat/completions')
+  assert.equal(received.url, 'https://api.061129.xyz/v1/chat/completions')
   assert.equal(received.method, 'POST')
   assert.equal(receivedBody, body)
   assert.equal(received.headers.get('Authorization'), `Bearer ${key}`)
   assert.equal(received.headers.get('Content-Type'), 'application/json')
   assert.equal(received.headers.get('Accept'), 'text/event-stream')
+  assert.equal(received.headers.get('Host'), null)
   for (const name of [
     'Cookie',
     'Origin',
-    'Host',
     'X-Forwarded-Host',
     'X-Target-URL',
     'X-Custom-Secret'
@@ -218,7 +220,7 @@ test('unapproved paths, query targets, methods and missing Bearer never reach up
 })
 
 test('upstream authentication and throttling statuses survive with safe response headers', async () => {
-  for (const status of [401, 429]) {
+  for (const status of [401, 403, 429]) {
     const body = JSON.stringify({ error: { message: 'upstream error', code: 'test' } })
     const relay = createOpenAIRelay({
       upstreamFetch: async () =>
@@ -238,6 +240,23 @@ test('upstream authentication and throttling statuses survive with safe response
     assert.equal(response.headers.get('Retry-After'), '12')
     assert.equal(response.headers.get('Set-Cookie'), null)
     assert.match(response.headers.get('Cache-Control') || '', /no-store/i)
+    assertCors(response)
+  }
+})
+
+test('upstream HTML rejection is a gateway failure, not an invalid API key', async () => {
+  for (const status of [200, 403, 503]) {
+    const relay = createOpenAIRelay({
+      upstreamFetch: async () => new Response(`<html><title>Non-compliance ICP Filing</title>${key}</html>`, {
+        status, headers: { 'Content-Type': 'text/html; charset=utf-8' }
+      })
+    })
+    const response = await relay.fetch(request(), env)
+    assert.equal(response.status, 502)
+    const text = await response.text()
+    assert.ok(!text.includes(key))
+    assert.match(text, /网关/)
+    assert.match(response.headers.get('Content-Type'), /application\/json/)
     assertCors(response)
   }
 })
